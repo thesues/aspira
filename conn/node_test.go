@@ -19,18 +19,20 @@ package conn
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/dgraph-io/badger/v2"
-	"github.com/dgraph-io/dgraph/protos/pb"
-	"github.com/dgraph-io/dgraph/raftwal"
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
+
+	"github.com/thesues/aspira/protos/aspirapb"
+	"github.com/thesues/aspira/raftwal"
+
+	cannyls "github.com/thesues/cannyls-go/storage"
 	"golang.org/x/net/context"
 )
 
@@ -51,6 +53,7 @@ func (n *Node) run(wg *sync.WaitGroup) {
 					n.Raft().ApplyConfChange(cc)
 				} else if entry.Type == raftpb.EntryNormal {
 					if bytes.HasPrefix(entry.Data, []byte("hey")) {
+						fmt.Printf("got %s\n", entry.Data)
 						wg.Done()
 					}
 				}
@@ -61,15 +64,21 @@ func (n *Node) run(wg *sync.WaitGroup) {
 }
 
 func TestProposal(t *testing.T) {
-	dir, err := ioutil.TempDir("", "badger")
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	/*
+		dir, err := ioutil.TempDir("", "badger")
+		require.NoError(t, err)
+		defer os.RemoveAll(dir)
 
-	db, err := badger.Open(badger.DefaultOptions(dir))
-	require.NoError(t, err)
-	store := raftwal.Init(db, 0, 0)
+		db, err := badger.Open(badger.DefaultOptions(dir))
+		require.NoError(t, err)
+	*/
 
-	rc := &pb.RaftContext{Id: 1}
+	db, err := cannyls.CreateCannylsStorage("wal.lusf", 10<<20, 0.1)
+	defer os.Remove("wal.lusf")
+	assert.Nil(t, err)
+	store := raftwal.Init(db)
+
+	rc := &aspirapb.RaftContext{Id: 1}
 	n := NewNode(rc, store)
 
 	peers := []raft.Peer{{ID: n.Id}}

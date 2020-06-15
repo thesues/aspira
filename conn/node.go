@@ -26,13 +26,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/golang/glog"
-
 	"github.com/pkg/errors"
-	"github.com/thesues/aspira/protos/pb"
+	pb "github.com/thesues/aspira/protos/aspirapb"
+	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
+
+	otrace "go.opencensus.io/trace"
 	"golang.org/x/net/context"
 )
 
@@ -44,7 +46,7 @@ var (
 // Node represents a node participating in the RAFT protocol.
 type Node struct {
 	//x.SafeMutex
-
+	sync.RWMutex
 	joinLock sync.Mutex
 
 	// Used to keep track of lin read requests.
@@ -62,7 +64,7 @@ type Node struct {
 	confChanges map[uint64]chan error
 	messages    chan sendmsg
 	RaftContext *pb.RaftContext
-	Store       *raftwal.DiskStorage
+	Store       *raftwal.WAL
 	Rand        *rand.Rand
 
 	Proposals proposals
@@ -76,21 +78,21 @@ type Node struct {
 }
 
 // NewNode returns a new Node instance.
-func NewNode(rc *pb.RaftContext, store *raftwal.DiskStorage) *Node {
-	snap, err := store.Snapshot()
+func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
+	snap, _ := store.Snapshot()
 
 	n := &Node{
 		Id:     rc.Id,
 		MyAddr: rc.Addr,
 		Store:  store,
 		Cfg: &raft.Config{
-			ID:                       rc.Id,
-			ElectionTick:             20, // 2s if we call Tick() every 100 ms.
-			HeartbeatTick:            1,  // 100ms if we call Tick() every 100 ms.
-			Storage:                  store,
-			MaxInflightMsgs:          256,
-			MaxSizePerMsg:            256 << 10, // 256 KB should allow more batching.
-			MaxCommittedSizePerReady: 64 << 20,  // Avoid loading entire Raft log into memory.
+			ID:              rc.Id,
+			ElectionTick:    20, // 2s if we call Tick() every 100 ms.
+			HeartbeatTick:   1,  // 100ms if we call Tick() every 100 ms.
+			Storage:         store,
+			MaxInflightMsgs: 32,
+			MaxSizePerMsg:   256 << 20, // 256 MB should allow more batching.
+			//MaxCommittedSizePerReady: 64 << 20,  // Avoid loading entire Raft log into memory.
 			// We don't need lease based reads. They cause issues because they
 			// require CheckQuorum to be true, and that causes a lot of issues
 			// for us during cluster bootstrapping and later. A seemingly
@@ -133,7 +135,7 @@ func NewNode(rc *pb.RaftContext, store *raftwal.DiskStorage) *Node {
 		peers:       make(map[uint64]string),
 		requestCh:   make(chan linReadReq, 100),
 	}
-	n.Applied.Init(nil)
+	n.Applied.Init(utils.NewStopper())
 	// This should match up to the Applied index set above.
 	n.Applied.SetDoneUntil(n.Cfg.Applied)
 	glog.Infof("Setting raft.Config to: %+v\n", n.Cfg)
@@ -232,6 +234,9 @@ func (n *Node) SetPeer(pid uint64, addr string) {
 func (n *Node) Send(msg *raftpb.Message) {
 	//x.AssertTruef(n.Id != msg.To, "Sending message to itself")
 	data, err := msg.Marshal()
+	if err != nil {
+		panic("")
+	}
 	//x.Check(err)
 
 	if glog.V(2) {
@@ -271,17 +276,17 @@ func (n *Node) Snapshot() (raftpb.Snapshot, error) {
 
 // SaveToStorage saves the hard state, entries, and snapshot to persistent storage, in that order.
 func (n *Node) SaveToStorage(h raftpb.HardState, es []raftpb.Entry, s raftpb.Snapshot) {
-	for {
-		if err := n.Store.Save(h, es, s); err != nil {
-			glog.Errorf("While trying to save Raft update: %v. Retrying...", err)
-		} else {
-			return
-		}
+
+	if err := n.Store.Save(h, es); err != nil {
+		glog.Errorf("While trying to save Raft update: %v. Retrying...", err)
+	} else {
+		return
 	}
 }
 
 // PastLife returns the index of the snapshot before the restart (if any) and whether there was
 // a previous state that should be recovered after a restart.
+/*
 func (n *Node) PastLife() (uint64, bool, error) {
 	var (
 		sp      raftpb.Snapshot
@@ -321,6 +326,7 @@ func (n *Node) PastLife() (uint64, bool, error) {
 	}
 	return idx, restart, nil
 }
+*/
 
 const (
 	messageBatchSoftLimit = 10e6
@@ -349,8 +355,12 @@ func (n *Node) BatchAndSendMessages() {
 				buf = b
 			}
 			totalSize += 4 + len(sm.data)
-			//x.Check(binary.Write(buf, binary.LittleEndian, uint32(len(sm.data))))
-			//x.Check2(buf.Write(sm.data))
+			if err := binary.Write(buf, binary.LittleEndian, uint32(len(sm.data))); err != nil {
+				panic("bina")
+			}
+			if _, err := buf.Write(sm.data); err != nil {
+				panic("hehe")
+			}
 
 			if totalSize > messageBatchSoftLimit {
 				// We limit the batch size, but we aren't pushing back on
@@ -429,6 +439,9 @@ func (n *Node) doSendMessage(to uint64, msgCh chan []byte) error {
 	}
 
 	c := pb.NewRaftClient(pool.Get())
+	ctx, span := otrace.StartSpan(context.Background(),
+		fmt.Sprintf("RaftMessage-%d-to-%d", n.Id, to))
+	defer span.End()
 
 	mc, err := c.RaftMessage(ctx)
 	if err != nil {
@@ -460,14 +473,11 @@ func (n *Node) doSendMessage(to uint64, msgCh chan []byte) error {
 		case data := <-msgCh:
 			batch := &pb.RaftBatch{
 				Context: n.RaftContext,
-				Payload: &api.Payload{Data: data},
+				Payload: &pb.Payload{Data: data},
 			}
 			packets++
 			slurp(batch) // Pick up more entries from msgCh, if present.
-			span.Annotatef(nil, "[Packets: %d] Sending data of length: %d.",
-				packets, len(batch.Payload.Data))
 			if err := mc.Send(batch); err != nil {
-				span.Annotatef(nil, "Error while mc.Send: %v", err)
 				switch {
 				case strings.Contains(err.Error(), "TransientFailure"):
 					glog.Warningf("Reporting node: %d addr: %s as unreachable.", to, pool.Addr)
@@ -481,8 +491,6 @@ func (n *Node) doSendMessage(to uint64, msgCh chan []byte) error {
 			}
 		case <-ticker.C:
 			if lastPackets == packets {
-				span.Annotatef(nil,
-					"No activity for a while [Packets == %d]. Closing connection.", packets)
 				return mc.CloseSend()
 			}
 			lastPackets = packets
@@ -553,16 +561,35 @@ func (n *Node) proposeConfChange(ctx context.Context, conf raftpb.ConfChange) er
 	}
 }
 
+func (n *Node) GetStore() *raftwal.WAL {
+	n.Lock()
+	defer n.Unlock()
+	return n.Store
+}
+
+func (n *Node) SetStore(db *raftwal.WAL) {
+	n.Lock()
+	defer n.Unlock()
+	n.Store = db
+}
+
 func (n *Node) addToCluster(ctx context.Context, pid uint64) error {
 	addr, ok := n.Peer(pid)
-	x.AssertTruef(ok, "Unable to find conn pool for peer: %#x", pid)
-	rc := &pb.RaftContext{
-		Addr:  addr,
-		Group: n.RaftContext.Group,
-		Id:    pid,
+	if ok == false {
+		panic("Unable to find conn pool for peer:")
 	}
+	//x.AssertTruef(ok, "Unable to find conn pool for peer: %#x", pid)
+	rc := &pb.RaftContext{
+		Addr: addr,
+		//Group: n.RaftContext.Group,
+		Id: pid,
+	}
+
 	rcBytes, err := rc.Marshal()
-	x.Check(err)
+	if err != nil {
+		panic("Marshal")
+	}
+	//x.Check(err)
 
 	cc := raftpb.ConfChange{
 		Type:    raftpb.ConfChangeAddNode,
@@ -611,30 +638,29 @@ func (n *Node) WaitLinearizableRead(ctx context.Context) error {
 	indexCh := make(chan uint64, 1)
 	select {
 	case n.requestCh <- linReadReq{indexCh: indexCh}:
-		span.Annotate(nil, "Pushed to requestCh")
+		//span.Annotate(nil, "Pushed to requestCh")
 	case <-ctx.Done():
-		span.Annotate(nil, "Context expired")
+		//span.Annotate(nil, "Context expired")
 		return ctx.Err()
 	}
 
 	select {
 	case index := <-indexCh:
-		span.Annotatef(nil, "Received index: %d", index)
+		//span.Annotatef(nil, "Received index: %d", index)
 		if index == 0 {
 			return errReadIndex
 		}
 		err := n.Applied.WaitForMark(ctx, index)
-		span.Annotatef(nil, "Error from Applied.WaitForMark: %v", err)
+		//span.Annotatef(nil, "Error from Applied.WaitForMark: %v", err)
 		return err
 	case <-ctx.Done():
-		span.Annotate(nil, "Context expired")
+		//span.Annotate(nil, "Context expired")
 		return ctx.Err()
 	}
 }
 
 // RunReadIndexLoop runs the RAFT index in a loop.
-func (n *Node) RunReadIndexLoop(closer *y.Closer, readStateCh <-chan raft.ReadState) {
-	defer closer.Done()
+func (n *Node) RunReadIndexLoop(stopper *utils.Stopper, readStateCh <-chan raft.ReadState) {
 	readIndex := func(activeRctx []byte) (uint64, error) {
 		// Read Request can get rejected then we would wait indefinitely on the channel
 		// so have a timeout.
@@ -648,7 +674,7 @@ func (n *Node) RunReadIndexLoop(closer *y.Closer, readStateCh <-chan raft.ReadSt
 
 	again:
 		select {
-		case <-closer.HasBeenClosed():
+		case <-stopper.ShouldStop():
 			return 0, errors.New("Closer has been called")
 		case rs := <-readStateCh:
 			if !bytes.Equal(activeRctx, rs.RequestCtx) {
@@ -667,7 +693,7 @@ func (n *Node) RunReadIndexLoop(closer *y.Closer, readStateCh <-chan raft.ReadSt
 	requests := []linReadReq{}
 	for {
 		select {
-		case <-closer.HasBeenClosed():
+		case <-stopper.ShouldStop():
 			return
 		case <-readStateCh:
 			// Do nothing, discard ReadState as we don't have any pending ReadIndex requests.
@@ -686,7 +712,9 @@ func (n *Node) RunReadIndexLoop(closer *y.Closer, readStateCh <-chan raft.ReadSt
 			// activeRctx. This is better than flooding readIndex with a new activeRctx on each
 			// call, causing more unique traffic and further delays in request processing.
 			activeRctx := make([]byte, 8)
-			x.Check2(n.Rand.Read(activeRctx))
+			if _, err := n.Rand.Read(activeRctx); err != nil {
+				panic(("panic"))
+			}
 			glog.V(3).Infof("Request readctx: %#x", activeRctx)
 			for {
 				index, err := readIndex(activeRctx)

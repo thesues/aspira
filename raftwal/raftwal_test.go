@@ -21,13 +21,13 @@ import (
 	"testing"
 
 	raft "github.com/coreos/etcd/raft"
-	pb "github.com/coreos/etcd/raft/raftpb"
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/stretchr/testify/assert"
 	cannyls "github.com/thesues/cannyls-go/storage"
 )
 
 func TestStorageTerm(t *testing.T) {
-	ents := []pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
+	ents := []raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
 	tests := []struct {
 		i uint64
 
@@ -71,27 +71,27 @@ func TestStorageTerm(t *testing.T) {
 }
 
 func TestStorageEntries(t *testing.T) {
-	ents := []pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}
+	ents := []raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}
 	tests := []struct {
 		lo, hi, maxsize uint64
 
 		werr     error
-		wentries []pb.Entry
+		wentries []raftpb.Entry
 	}{
 		{2, 6, math.MaxUint64, raft.ErrCompacted, nil},
 		{3, 4, math.MaxUint64, raft.ErrCompacted, nil},
-		{4, 5, math.MaxUint64, nil, []pb.Entry{{Index: 4, Term: 4}}},
-		{4, 6, math.MaxUint64, nil, []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
-		{4, 7, math.MaxUint64, nil, []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}},
+		{4, 5, math.MaxUint64, nil, []raftpb.Entry{{Index: 4, Term: 4}}},
+		{4, 6, math.MaxUint64, nil, []raftpb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
+		{4, 7, math.MaxUint64, nil, []raftpb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}},
 		// even if maxsize is zero, the first entry should be returned
-		{4, 7, 0, nil, []pb.Entry{{Index: 4, Term: 4}}},
+		{4, 7, 0, nil, []raftpb.Entry{{Index: 4, Term: 4}}},
 		// limit to 2
-		{4, 7, uint64(ents[1].Size() + ents[2].Size()), nil, []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
+		{4, 7, uint64(ents[1].Size() + ents[2].Size()), nil, []raftpb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
 		// limit to 2
-		{4, 7, uint64(ents[1].Size() + ents[2].Size() + ents[3].Size()/2), nil, []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
-		{4, 7, uint64(ents[1].Size() + ents[2].Size() + ents[3].Size() - 1), nil, []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
+		{4, 7, uint64(ents[1].Size() + ents[2].Size() + ents[3].Size()/2), nil, []raftpb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
+		{4, 7, uint64(ents[1].Size() + ents[2].Size() + ents[3].Size() - 1), nil, []raftpb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
 		// all
-		{4, 7, uint64(ents[1].Size() + ents[2].Size() + ents[3].Size()), nil, []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}},
+		{4, 7, uint64(ents[1].Size() + ents[2].Size() + ents[3].Size()), nil, []raftpb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}},
 	}
 	db, err := cannyls.CreateCannylsStorage("wal.lusf", 10<<20, 0.1)
 	defer os.Remove("wal.lusf")
@@ -112,7 +112,7 @@ func TestStorageEntries(t *testing.T) {
 }
 
 func TestStorageLastIndex(t *testing.T) {
-	ents := []pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
+	ents := []raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
 	db, err := cannyls.CreateCannylsStorage("wal.lusf", 10<<20, 0.1)
 	defer os.Remove("wal.lusf")
 	assert.Nil(t, err)
@@ -126,7 +126,7 @@ func TestStorageLastIndex(t *testing.T) {
 		t.Errorf("last = %d, want %d", last, 5)
 	}
 
-	wal.addEntries([]pb.Entry{{Index: 6, Term: 5}})
+	wal.addEntries([]raftpb.Entry{{Index: 6, Term: 5}})
 	last, err = wal.LastIndex()
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
@@ -137,7 +137,7 @@ func TestStorageLastIndex(t *testing.T) {
 }
 
 func TestStorageFirstIndex(t *testing.T) {
-	ents := []pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
+	ents := []raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
 	db, err := cannyls.CreateCannylsStorage("wal.lusf", 10<<20, 0.1)
 	defer os.Remove("wal.lusf")
 	assert.Nil(t, err)
@@ -152,7 +152,7 @@ func TestStorageFirstIndex(t *testing.T) {
 		t.Errorf("first = %d, want %d", first, 4)
 	}
 
-	var conf pb.ConfState
+	var conf raftpb.ConfState
 	wal.CreateSnapshot(4, &conf, nil)
 	first, err = wal.FirstIndex()
 	if err != nil {
@@ -164,8 +164,8 @@ func TestStorageFirstIndex(t *testing.T) {
 }
 
 func TestStorageCreateSnapshot(t *testing.T) {
-	ents := []pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
-	cs := &pb.ConfState{Nodes: []uint64{1, 2, 3}}
+	ents := []raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
+	cs := &raftpb.ConfState{Nodes: []uint64{1, 2, 3}}
 	data := []byte("data")
 
 	db, err := cannyls.CreateCannylsStorage("wal.lusf", 10<<20, 0.1)
@@ -178,10 +178,10 @@ func TestStorageCreateSnapshot(t *testing.T) {
 		i uint64
 
 		werr  error
-		wsnap pb.Snapshot
+		wsnap raftpb.Snapshot
 	}{
-		{4, nil, pb.Snapshot{Data: data, Metadata: pb.SnapshotMetadata{Index: 4, Term: 4, ConfState: *cs}}},
-		{5, nil, pb.Snapshot{Data: data, Metadata: pb.SnapshotMetadata{Index: 5, Term: 5, ConfState: *cs}}},
+		{4, nil, raftpb.Snapshot{Data: data, Metadata: raftpb.SnapshotMetadata{Index: 4, Term: 4, ConfState: *cs}}},
+		{5, nil, raftpb.Snapshot{Data: data, Metadata: raftpb.SnapshotMetadata{Index: 5, Term: 5, ConfState: *cs}}},
 	}
 
 	for i, tt := range tests {
@@ -202,50 +202,50 @@ func TestStorageAppend(t *testing.T) {
 	assert.Nil(t, err)
 	wal := Init(db)
 
-	ents := []pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
+	ents := []raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
 	tests := []struct {
-		entries []pb.Entry
+		entries []raftpb.Entry
 
 		werr     error
-		wentries []pb.Entry
+		wentries []raftpb.Entry
 	}{
 		{
-			[]pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}},
+			[]raftpb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}},
 			nil,
-			[]pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}},
+			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}},
 		},
 		{
-			[]pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}},
+			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}},
 			nil,
-			[]pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}},
+			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}},
 		},
 		{
-			[]pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 6}, {Index: 5, Term: 6}},
+			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 6}, {Index: 5, Term: 6}},
 			nil,
-			[]pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 6}, {Index: 5, Term: 6}},
+			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 6}, {Index: 5, Term: 6}},
 		},
 		{
-			[]pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 5}},
+			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 5}},
 			nil,
-			[]pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 5}},
+			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 5}},
 		},
 		// truncate incoming entries, truncate the existing entries and append
 		{
-			[]pb.Entry{{Index: 2, Term: 3}, {Index: 3, Term: 3}, {Index: 4, Term: 5}},
+			[]raftpb.Entry{{Index: 2, Term: 3}, {Index: 3, Term: 3}, {Index: 4, Term: 5}},
 			nil,
-			[]pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 5}},
+			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 5}},
 		},
 		// truncate the existing entries and append
 		{
-			[]pb.Entry{{Index: 4, Term: 5}},
+			[]raftpb.Entry{{Index: 4, Term: 5}},
 			nil,
-			[]pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 5}},
+			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 5}},
 		},
 		// direct append
 		{
-			[]pb.Entry{{Index: 6, Term: 5}},
+			[]raftpb.Entry{{Index: 6, Term: 5}},
 			nil,
-			[]pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 5}},
+			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 5}},
 		},
 	}
 

@@ -23,7 +23,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	"github.com/thesues/aspira/protos/pb"
+	pb "github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/utils"
 	"google.golang.org/grpc"
 )
@@ -129,16 +129,18 @@ func (p *Pools) Connect(addr string) *Pool {
 func newPool(addr string) (*Pool, error) {
 	conn, err := grpc.Dial(addr,
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(x.GrpcMaxSize),
-			grpc.MaxCallSendMsgSize(x.GrpcMaxSize),
+			grpc.MaxCallRecvMsgSize(1<<25),
+			grpc.MaxCallSendMsgSize(1<<25),
 			grpc.UseCompressor((snappyCompressor{}).Name())),
 		grpc.WithBackoffMaxDelay(time.Second),
 		grpc.WithInsecure())
 	if err != nil {
 		return nil, err
 	}
-	pl := &Pool{conn: conn, Addr: addr, lastEcho: time.Now(), utils.NewStopper()}
-	go pl.MonitorHealth()
+	pl := &Pool{conn: conn, Addr: addr, lastEcho: time.Now(), stopper: utils.NewStopper()}
+	pl.stopper.RunWorker(func() {
+		pl.MonitorHealth()
+	})
 	return pl, nil
 }
 
@@ -171,18 +173,18 @@ func (p *Pool) listenToHeartbeat() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s, err := c.Heartbeat(ctx, &api.Payload{})
+	s, err := c.Heartbeat(ctx, &pb.Payload{})
 	if err != nil {
 		return err
 	}
 
-	go func() {
+	p.stopper.RunWorker(func() {
 		select {
 		case <-ctx.Done():
 		case <-p.stopper.ShouldStop():
 			cancel()
 		}
-	}()
+	})
 
 	// This loop can block indefinitely as long as it keeps on receiving pings back.
 	for {
@@ -199,8 +201,6 @@ func (p *Pool) listenToHeartbeat() error {
 
 // MonitorHealth monitors the health of the connection via Echo. This function blocks forever.
 func (p *Pool) MonitorHealth() {
-	defer p.stopper.Wait()
-
 	var lastErr error
 	for {
 		select {

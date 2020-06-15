@@ -19,8 +19,10 @@ package conn
 import (
 	"container/heap"
 	"context"
-	"github.com/thesues/aspira/utils"
+	"fmt"
 	"sync/atomic"
+
+	"github.com/thesues/aspira/utils"
 )
 
 type uint64Heap []uint64
@@ -68,7 +70,9 @@ type WaterMark struct {
 // Init initializes a WaterMark struct. MUST be called before using it.
 func (w *WaterMark) Init(stopper *utils.Stopper) {
 	w.markCh = make(chan mark, 100)
-	go w.process(stopper)
+	stopper.RunWorker(func() {
+		w.process(stopper)
+	})
 }
 
 // Begin sets the last index to the given value.
@@ -135,8 +139,6 @@ func (w *WaterMark) WaitForMark(ctx context.Context, index uint64) error {
 // can't decide whether the task at 101 has decided not to emit watermark or it didn't get
 // scheduled yet.
 func (w *WaterMark) process(stopper *utils.Stopper) {
-	defer stopper.Wait()
-
 	var indices uint64Heap
 	// pending maps raft proposal index to the number of pending mutations for this proposal.
 	pending := make(map[uint64]int)
@@ -161,7 +163,7 @@ func (w *WaterMark) process(stopper *utils.Stopper) {
 		// been done. Stop at the first index, which isn't done.
 		doneUntil := w.DoneUntil()
 		if doneUntil > index {
-			AssertTruef(false, "Name: %s doneUntil: %d. Index: %d", w.Name, doneUntil, index)
+			panic(fmt.Sprintf("Name: %s doneUntil: %d. Index: %d", w.Name, doneUntil, index))
 		}
 
 		until := doneUntil
@@ -181,7 +183,8 @@ func (w *WaterMark) process(stopper *utils.Stopper) {
 		}
 
 		if until != doneUntil {
-			AssertTrue(atomic.CompareAndSwapUint64(&w.doneUntil, doneUntil, until))
+			atomic.CompareAndSwapUint64(&w.doneUntil, doneUntil, until)
+			//AssertTrue(atomic.CompareAndSwapUint64(&w.doneUntil, doneUntil, until))
 		}
 
 		notifyAndRemove := func(idx uint64, toNotify []chan struct{}) {

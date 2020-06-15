@@ -22,7 +22,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
-	"github.com/thesues/aspira/protos/pb"
+	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	cannyls "github.com/thesues/cannyls-go/storage"
@@ -62,10 +62,10 @@ func Init(db *cannyls.Storage) *WAL {
 	_, err = wal.FirstIndex()
 	if err == errNotFound {
 		ents := make([]raftpb.Entry, 1)
+		ents[0].Type = raftpb.EntryConfChange
 		wal.reset(ents)
-	} else {
-		panic("failed")
 	}
+
 	//if has snapshot, run DeleteUntil()
 	//optional
 	if err = wal.deleteUntil(snap.Metadata.Index); err != nil {
@@ -98,6 +98,20 @@ func (wal *WAL) hardStateKey() (ret lump.LumpId) {
 		panic("snapshotKey failed")
 	}
 	return
+}
+
+func (wal *WAL) Save(hd raftpb.HardState, entries []raftpb.Entry) (err error) {
+	if err = wal.setHardState(hd); err != nil {
+		return
+	}
+	if err = wal.addEntries(entries); err != nil {
+		return
+	}
+	return
+}
+
+func (wal *WAL) Sync() {
+	wal.db.JournalSync()
 }
 
 func (wal *WAL) HardState() (hd raftpb.HardState, err error) {
@@ -195,6 +209,7 @@ func (wal *WAL) FirstIndex() (uint64, error) {
 	}
 	//mask
 	firstIndex := firstIdx.U64() & keyMask
+
 	return firstIndex + 1, nil
 }
 
@@ -240,20 +255,26 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 		return err
 	}
 
-	var entryMeta pb.EntryMeta
+	var entryMeta aspirapb.EntryMeta
 	ab := block.NewAlignedBytes(512, block.Min())
 	for _, e := range entries {
-
 		entryMeta.Term = e.Term
 		entryMeta.Index = e.Index
-		if e.Type == raftpb.EntryNormal {
-			//parse data, get
-			entryMeta.EntryType = pb.EntryMeta_Put
-			ab.Resize(uint32(len(e.Data)))
-			copy(ab.AsBytes(), e.Data)
-			wal.db.Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(ab))
-		} else {
-			entryMeta.EntryType = pb.EntryMeta_EntryConfChange
+
+		switch e.Type {
+		case raftpb.EntryNormal:
+			if len(e.Data) != 0 {
+				entryMeta.EntryType = aspirapb.EntryMeta_Put
+				ab.Resize(uint32(len(e.Data)))
+				copy(ab.AsBytes(), e.Data)
+				wal.db.Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(ab))
+			} else {
+				entryMeta.EntryType = aspirapb.EntryMeta_LeaderCommit
+			}
+		case raftpb.EntryConfChange:
+			entryMeta.EntryType = aspirapb.EntryMeta_ConfChange
+		default:
+			panic("meet new type")
 		}
 
 		data, err := entryMeta.Marshal()
@@ -309,7 +330,7 @@ func (wal *WAL) InitialState() (hs raftpb.HardState, cs raftpb.ConfState, err er
 
 //max range of [lo, hi) is [0, keyMask)
 func (wal *WAL) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
-	var meta pb.EntryMeta
+	var meta aspirapb.EntryMeta
 	var e raftpb.Entry
 	size := 0
 	err = wal.db.RangeIter(wal.EntryKey(lo), wal.EntryKey(hi), func(id lump.LumpId, data []byte) error {
@@ -317,23 +338,23 @@ func (wal *WAL) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 			return err
 		}
 		switch meta.EntryType {
-		case pb.EntryMeta_Put:
+
+		case aspirapb.EntryMeta_Put:
 			//build data
 			e.Type = raftpb.EntryNormal
 			extData, err := wal.db.Get(wal.ExtKey(id.U64() & keyMask))
 			if err != nil {
 				return err
 			}
-			if len(extData) > 0 {
-				e.Data = extData
-			}
-
+			e.Data = extData
+		case aspirapb.EntryMeta_LeaderCommit:
+			e.Type = raftpb.EntryNormal
+			e.Data = nil
 		default:
 			e.Type = raftpb.EntryConfChange
 			if len(meta.Data) > 0 {
 				e.Data = meta.Data
 			}
-
 		}
 		e.Term = meta.Term
 		e.Index = meta.Index
@@ -380,19 +401,19 @@ func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 
 func (wal *WAL) reset(es []raftpb.Entry) error {
 	wal.deleteFrom(0)
-	var entryMeta pb.EntryMeta
+	var entryMeta aspirapb.EntryMeta
 	ab := block.NewAlignedBytes(512, block.Min())
 	for _, e := range es {
 		entryMeta.Term = e.Term
 		entryMeta.Index = e.Index
 		if e.Type == raftpb.EntryNormal {
 			//parse data, get
-			entryMeta.EntryType = pb.EntryMeta_Put
+			entryMeta.EntryType = aspirapb.EntryMeta_Put
 			ab.Resize(uint32(len(e.Data)))
 			copy(ab.AsBytes(), e.Data)
 			wal.db.Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(ab))
 		} else {
-			entryMeta.EntryType = pb.EntryMeta_EntryConfChange
+			entryMeta.EntryType = aspirapb.EntryMeta_ConfChange
 		}
 
 		data, err := entryMeta.Marshal()
@@ -433,7 +454,7 @@ func (wal *WAL) Term(idx uint64) (uint64, error) {
 		return 0, raft.ErrCompacted
 	}
 
-	var e pb.EntryMeta
+	var e aspirapb.EntryMeta
 	data, err := wal.db.Get(wal.EntryKey(idx))
 	if err != nil {
 		return 0, raft.ErrUnavailable
@@ -458,7 +479,7 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 		return
 	}
 
-	var em pb.EntryMeta
+	var em aspirapb.EntryMeta
 	data, err := wal.db.Get(wal.EntryKey(i))
 	if err != nil {
 		return

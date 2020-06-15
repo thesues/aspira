@@ -24,9 +24,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft/raftpb"
+	pb "github.com/thesues/aspira/protos/aspirapb"
+
 	otrace "go.opencensus.io/trace"
 )
 
@@ -126,6 +128,7 @@ type RaftServer struct {
 }
 
 // UpdateNode safely updates the node.
+/*
 func (w *RaftServer) UpdateNode(n *Node) {
 	w.m.Lock()
 	defer w.m.Unlock()
@@ -138,6 +141,7 @@ func (w *RaftServer) GetNode() *Node {
 	defer w.m.RUnlock()
 	return w.node
 }
+*/
 
 // NewRaftServer returns a pointer to a new RaftServer instance.
 func NewRaftServer(n *Node) *RaftServer {
@@ -145,6 +149,7 @@ func NewRaftServer(n *Node) *RaftServer {
 }
 
 // IsPeer checks whether this node is a peer of the node sending the request.
+/*
 func (w *RaftServer) IsPeer(ctx context.Context, rc *pb.RaftContext) (
 	*pb.PeerResponse, error) {
 	node := w.GetNode()
@@ -165,15 +170,16 @@ func (w *RaftServer) IsPeer(ctx context.Context, rc *pb.RaftContext) (
 	}
 	return &pb.PeerResponse{}, nil
 }
+*/
 
 // JoinCluster handles requests to join the cluster.
 func (w *RaftServer) JoinCluster(ctx context.Context,
-	rc *pb.RaftContext) (*api.Payload, error) {
+	rc *pb.RaftContext) (*pb.Payload, error) {
 	if ctx.Err() != nil {
-		return &api.Payload{}, ctx.Err()
+		return &pb.Payload{}, ctx.Err()
 	}
 
-	node := w.GetNode()
+	node := w.node
 	if node == nil || node.Raft() == nil {
 		return nil, ErrNoNode
 	}
@@ -189,7 +195,7 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 	}
 	span := otrace.FromContext(ctx)
 
-	node := w.GetNode()
+	node := w.node
 	if node == nil || node.Raft() == nil {
 		return ErrNoNode
 	}
@@ -202,8 +208,10 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 		defer cancel()
 
 		for idx := 0; idx < len(data); {
-			x.AssertTruef(len(data[idx:]) >= 4,
-				"Slice left of size: %v. Expected at least 4.", len(data[idx:]))
+			/*
+				x.AssertTruef(len(data[idx:]) >= 4,
+					"Slice left of size: %v. Expected at least 4.", len(data[idx:]))
+			*/
 
 			sz := int(binary.LittleEndian.Uint32(data[idx : idx+4]))
 			idx += 4
@@ -214,7 +222,7 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 					sz, idx, len(data))
 			}
 			if err := msg.Unmarshal(data[idx : idx+sz]); err != nil {
-				x.Check(err)
+				panic("unmarshal")
 			}
 			// This should be done in order, and not via a goroutine.
 			// Step can block forever. See: https://github.com/etcd-io/etcd/issues/10585
@@ -268,12 +276,12 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 
 // Heartbeat rpc call is used to check connection with other workers after worker
 // tcp server for this instance starts.
-func (w *RaftServer) Heartbeat(in *api.Payload, stream pb.Raft_HeartbeatServer) error {
+func (w *RaftServer) Heartbeat(in *pb.Payload, stream pb.Raft_HeartbeatServer) error {
 	ticker := time.NewTicker(echoDuration)
 	defer ticker.Stop()
 
 	ctx := stream.Context()
-	out := &api.Payload{Data: []byte("beat")}
+	out := &pb.Payload{Data: []byte("beat")}
 	for {
 		select {
 		case <-ctx.Done():
