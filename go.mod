@@ -17,7 +17,6 @@ require (
 	github.com/thesues/cannyls-go v0.2.1-0.20200615004651-8e78490e8f64
 	github.com/uber/jaeger-lib v2.2.0+incompatible
 	github.com/urfave/cli v1.20.0
-	go.etcd.io/etcd v3.3.22+incompatible
 	go.opencensus.io v0.22.3
 	golang.org/x/net v0.0.0-20200528225125-3c3fba18258b
 	google.golang.org/grpc v1.29.1

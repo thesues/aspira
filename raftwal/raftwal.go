@@ -334,11 +334,11 @@ func (wal *WAL) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 	var e raftpb.Entry
 	size := 0
 	err = wal.db.RangeIter(wal.EntryKey(lo), wal.EntryKey(hi), func(id lump.LumpId, data []byte) error {
+
 		if err = meta.Unmarshal(data); err != nil {
 			return err
 		}
 		switch meta.EntryType {
-
 		case aspirapb.EntryMeta_Put:
 			//build data
 			e.Type = raftpb.EntryNormal
@@ -346,7 +346,9 @@ func (wal *WAL) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 			if err != nil {
 				return err
 			}
-			e.Data = extData
+			if len(extData) > 0 {
+				e.Data = extData
+			}
 		case aspirapb.EntryMeta_LeaderCommit:
 			e.Type = raftpb.EntryNormal
 			e.Data = nil

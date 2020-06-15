@@ -25,6 +25,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+
 	"github.com/golang/glog"
 	"github.com/thesues/aspira/conn"
 	"github.com/thesues/aspira/protos/aspirapb"
@@ -144,13 +145,16 @@ func (as *AspiraServer) Run() {
 		case <-ticker.C:
 			n.Raft().Tick()
 		case rd := <-n.Raft().Ready():
+			/*
+				if rd.SoftState != nil {
+					leader := rd.RaftState == raft.StateLeader
+					if leader {
+						fmt.Printf("I am leader...\n")
+					} else {
+						fmt.Printf("I am not leader...\n")
+					}
+				}*/
 
-			if rd.SoftState != nil {
-				leader := rd.RaftState == raft.StateLeader
-				if leader {
-					fmt.Printf("I am leader...\n")
-				}
-			}
 			n.SaveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
 			if rd.MustSync {
 				n.Store.Sync()
@@ -170,6 +174,7 @@ func (as *AspiraServer) Run() {
 					n.SetConfState(newConf)
 					glog.Infof("Done applying conf change at %#x", n.Id)
 				case entry.Type == raftpb.EntryNormal:
+
 					fmt.Printf("%+v COMMITED\n", entry)
 					/*
 						key, err := n.applyProposal(entry)
@@ -178,11 +183,13 @@ func (as *AspiraServer) Run() {
 						}
 						n.Proposals.Done(key, err)
 					*/
+
 				default:
 					glog.Warningf("Unhandled entry: %+v\n", entry)
 				}
 
 			}
+
 			n.Raft().Advance()
 		}
 	}
