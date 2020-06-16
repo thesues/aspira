@@ -30,6 +30,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
+	"github.com/thesues/aspira/protos/aspirapb"
 	pb "github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
@@ -60,7 +61,7 @@ type Node struct {
 	Cfg         *raft.Config
 	MyAddr      string
 	Id          uint64
-	peers       map[uint64]string
+	peers       aspirapb.MemberShip
 	confChanges map[uint64]chan error
 	messages    chan sendmsg
 	RaftContext *pb.RaftContext
@@ -132,9 +133,10 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 		Rand:        rand.New(&lockedSource{src: rand.NewSource(time.Now().UnixNano())}),
 		confChanges: make(map[uint64]chan error),
 		messages:    make(chan sendmsg, 100),
-		peers:       make(map[uint64]string),
+		peers:       store.MemberShip(),
 		requestCh:   make(chan linReadReq, 100),
 	}
+
 	n.Applied.Init(utils.NewStopper())
 	// This should match up to the Applied index set above.
 	n.Applied.SetDoneUntil(n.Cfg.Applied)
@@ -218,7 +220,8 @@ func (n *Node) ConfState() *raftpb.ConfState {
 func (n *Node) Peer(pid uint64) (string, bool) {
 	n.RLock()
 	defer n.RUnlock()
-	addr, ok := n.peers[pid]
+	//addr, ok := n.peers[pid]
+	addr, ok := n.peers.Nodes[pid]
 	return addr, ok
 }
 
@@ -227,7 +230,14 @@ func (n *Node) SetPeer(pid uint64, addr string) {
 	//x.AssertTruef(addr != "", "SetPeer for peer %d has empty addr.", pid)
 	n.Lock()
 	defer n.Unlock()
-	n.peers[pid] = addr
+	//n.peers[pid] = addr
+	n.peers.Nodes[pid] = addr
+}
+
+func (n *Node) SavePeers() {
+	n.Lock()
+	defer n.Unlock()
+	n.Store.SetMemberShip(n.peers)
 }
 
 // Send sends the given RAFT message from this node.
@@ -531,7 +541,8 @@ func (n *Node) DeletePeer(pid uint64) {
 	}
 	n.Lock()
 	defer n.Unlock()
-	delete(n.peers, pid)
+	//delete(n.peers, pid)
+	delete(n.peers.Nodes, pid)
 }
 
 var errInternalRetry = errors.New("Retry proposal again")

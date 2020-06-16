@@ -27,7 +27,6 @@ syntax = "proto3";
 package aspirapb;
 
 
-
 // Worker services.
 message Payload {
 	bytes Data = 1;
@@ -38,7 +37,9 @@ message RaftContext {
 	string addr = 2;
 }
 
-
+message MemberShip {
+	map<uint64, string> nodes = 1;
+}
 
 message Snapshot {
 	RaftContext context = 1;
@@ -55,7 +56,6 @@ message RaftBatch {
 	RaftContext context = 1;
 	Payload payload = 2;
 }
-
 
 message EntryMeta {
         uint64     Term  = 1;

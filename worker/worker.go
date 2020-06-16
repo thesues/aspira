@@ -39,6 +39,7 @@ type AspiraServer struct {
 	node       *conn.Node
 	raftServer *conn.RaftServer //internal comms
 	grpcServer *grpc.Server     //internal comms, raftServer is registered on grpcServer
+	store      *raftwal.WAL
 	addr       string
 	stopper    *utils.Stopper
 	//applyCh
@@ -62,8 +63,8 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 			return
 		}
 	}
-	store := raftwal.Init(db)
 
+	store := raftwal.Init(db)
 	node := conn.NewNode(&raftCxt, store)
 	raftServer := conn.NewRaftServer(node)
 
@@ -72,6 +73,7 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 		raftServer: raftServer,
 		addr:       addr,
 		stopper:    utils.NewStopper(),
+		store:      store,
 	}
 	return as, nil
 }
@@ -96,20 +98,27 @@ func (as *AspiraServer) InitAndStart(id uint64) (err error) {
 		}
 	*/
 	//static peers
-	rpeers := make([]raft.Peer, 3)
-	//1,2,3
-	//0,1,2
-
-	var i uint64
-	for i = 1; i <= 3; i++ {
-		rpeers[i-1] = raft.Peer{ID: i}
+	peers := as.store.MemberShip()
+	if len(peers.Nodes) > 0 {
+		for id, addr := range peers.Nodes {
+			fmt.Printf("%d => %s\n", id, addr)
+			as.node.Connect(id, addr)
+		}
+		as.node.SetRaft(raft.RestartNode(as.node.Cfg))
+		fmt.Printf("RESTART")
+	} else {
+		fmt.Printf("START")
+		rpeers := make([]raft.Peer, 3)
+		var i uint64
+		for i = 1; i <= 3; i++ {
+			rpeers[i-1] = raft.Peer{ID: i}
+		}
+		for i = 1; i <= 3; i++ {
+			as.node.Connect(i, "127.0.0.1:330"+fmt.Sprintf("%d", i))
+		}
+		as.node.SetRaft(raft.StartNode(as.node.Cfg, rpeers))
 	}
-	for i = 1; i <= 3; i++ {
-		as.node.Connect(i, "127.0.0.1:330"+fmt.Sprintf("%d", i))
-	}
 
-	//as.node.SetRaft(raft.StartNode(as.node.Cfg, nil))
-	as.node.SetRaft(raft.StartNode(as.node.Cfg, rpeers))
 	as.stopper.RunWorker(func() {
 		as.node.BatchAndSendMessages()
 	})
@@ -156,6 +165,7 @@ func (as *AspiraServer) Run() {
 				}*/
 
 			n.SaveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
+
 			if rd.MustSync {
 				n.Store.Sync()
 			}
@@ -168,11 +178,16 @@ func (as *AspiraServer) Run() {
 			for _, entry := range rd.CommittedEntries {
 				switch {
 				case entry.Type == raftpb.EntryConfChange:
-					var cc raftpb.ConfChange
-					cc.Unmarshal(entry.Data)
-					newConf := n.Raft().ApplyConfChange(cc)
-					n.SetConfState(newConf)
-					glog.Infof("Done applying conf change at %#x", n.Id)
+					as.applyConfChange(entry)
+					/*
+						var cc raftpb.ConfChange
+						cc.Unmarshal(entry.Data)
+						newConf := n.Raft().ApplyConfChange(cc)
+						fmt.Printf("%+v\n", newConf)
+						n.SetConfState(newConf)
+					*/
+					//set membership
+					//glog.Infof("Done applying conf change at %#x", n.Id)
 				case entry.Type == raftpb.EntryNormal:
 
 					fmt.Printf("%+v COMMITED\n", entry)
@@ -193,6 +208,20 @@ func (as *AspiraServer) Run() {
 			n.Raft().Advance()
 		}
 	}
+}
+
+func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
+	var cc raftpb.ConfChange
+	utils.Check(cc.Unmarshal(e.Data))
+	fmt.Printf("applyConfChange: %+v\n", cc)
+	switch cc.Type {
+	case raftpb.ConfChangeAddNode:
+	case raftpb.ConfChangeRemoveNode:
+	case raftpb.ConfChangeUpdateNode:
+	}
+	as.node.SavePeers()
+	as.node.Raft().ApplyConfChange(cc)
+
 }
 
 var (

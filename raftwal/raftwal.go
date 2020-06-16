@@ -17,37 +17,38 @@
 package raftwal
 
 import (
-	"sync"
+	"fmt"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
+	"github.com/thesues/aspira/utils"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	cannyls "github.com/thesues/cannyls-go/storage"
 )
 
 type WAL struct {
-	db    *cannyls.Storage
-	cache *sync.Map
+	db   *cannyls.Storage
+	conf raftpb.ConfState
 }
 
 var (
-	snapshotKey = "snapshot"
-	firstKey    = "first"
-	lastKey     = "last"
-	keyMask     = (^uint64(0) >> 2) //0x3FFFFFFFFFFFFFFF
-	MinimalKey  = ^keyMask
-	MaxKey      = keyMask
-	endOfList   = errors.Errorf("end of list of keys")
-	errNotFound = errors.New("Unable to find raft entry")
+	snapshotKey  = "snapshot"
+	confStateKey = "confStat"
+	firstKey     = "first"
+	lastKey      = "last"
+	keyMask      = (^uint64(0) >> 2) //0x3FFFFFFFFFFFFFFF
+	MinimalKey   = ^keyMask
+	MaxKey       = keyMask
+	endOfList    = errors.Errorf("end of list of keys")
+	errNotFound  = errors.New("Unable to find raft entry")
 )
 
 func Init(db *cannyls.Storage) *WAL {
 	wal := &WAL{
-		db:    db,
-		cache: new(sync.Map),
+		db: db,
 	}
 
 	snap, err := wal.Snapshot()
@@ -72,6 +73,17 @@ func Init(db *cannyls.Storage) *WAL {
 		panic("raftwal: Init failed")
 	}
 	return wal
+}
+
+func (wal *WAL) memberShipKey() (ret lump.LumpId) {
+	var buf [8]byte
+	buf[0] = 0x80
+	copy(buf[1:], []byte("confKey"))
+	ret, err := lump.FromBytes(buf[:])
+	if err != nil {
+		panic("memberShipKey failed")
+	}
+	return
 }
 
 func (wal *WAL) snapshotKey() (ret lump.LumpId) {
@@ -130,6 +142,35 @@ func (wal *WAL) setHardState(st raftpb.HardState) (err error) {
 	}
 	_, err = wal.db.PutEmbed(wal.hardStateKey(), data)
 	return
+}
+
+func (wal *WAL) SetMemberShip(peers aspirapb.MemberShip) {
+	//update cached confState
+	wal.conf.Nodes = nil
+	for k := range peers.Nodes {
+		wal.conf.Nodes = append(wal.conf.Nodes, k)
+	}
+	data, err := peers.Marshal()
+	utils.Check(err)
+
+	_, err = wal.db.PutEmbed(wal.memberShipKey(), data)
+	utils.Check(err)
+}
+
+func (wal *WAL) MemberShip() aspirapb.MemberShip {
+	var peers aspirapb.MemberShip
+	data, err := wal.db.Get(wal.memberShipKey())
+	if err != nil {
+		peers.Nodes = make(map[uint64]string)
+		return peers
+	}
+	utils.Check(peers.Unmarshal(data))
+	//update cached confState
+	wal.conf.Nodes = nil
+	for k := range peers.Nodes {
+		wal.conf.Nodes = append(wal.conf.Nodes, k)
+	}
+	return peers
 }
 
 func (wal *WAL) Snapshot() (snap raftpb.Snapshot, err error) {
@@ -260,7 +301,6 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 	for _, e := range entries {
 		entryMeta.Term = e.Term
 		entryMeta.Index = e.Index
-
 		switch e.Type {
 		case raftpb.EntryNormal:
 			if len(e.Data) != 0 {
@@ -270,9 +310,11 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 				wal.db.Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(ab))
 			} else {
 				entryMeta.EntryType = aspirapb.EntryMeta_LeaderCommit
+				entryMeta.Data = e.Data
 			}
 		case raftpb.EntryConfChange:
 			entryMeta.EntryType = aspirapb.EntryMeta_ConfChange
+			entryMeta.Data = e.Data
 		default:
 			panic("meet new type")
 		}
@@ -287,7 +329,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 	}
 
 	laste := entries[len(entries)-1].Index
-	wal.cache.Store(lastKey, laste)
+	//wal.cache.Store(lastKey, laste)
 
 	if laste < last {
 		return wal.deleteFrom(laste + 1)
@@ -320,12 +362,8 @@ func (wal *WAL) InitialState() (hs raftpb.HardState, cs raftpb.ConfState, err er
 	if err != nil {
 		return
 	}
-	var snap raftpb.Snapshot
-	snap, err = wal.Snapshot()
-	if err != nil {
-		return
-	}
-	return hs, snap.Metadata.ConfState, nil
+	wal.conf.Nodes = []uint64{1, 2, 3}
+	return hs, wal.conf, nil
 }
 
 //max range of [lo, hi) is [0, keyMask)
@@ -356,6 +394,7 @@ func (wal *WAL) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 			e.Type = raftpb.EntryConfChange
 			if len(meta.Data) > 0 {
 				e.Data = meta.Data
+				fmt.Printf("readup %+v\n", e.Data)
 			}
 		}
 		e.Term = meta.Term

@@ -57,6 +57,17 @@ func ExtKey(idx uint64) lump.LumpId {
 
 }
 
+func memberShipKey() (ret lump.LumpId) {
+	var buf [8]byte
+	buf[0] = 0x80
+	copy(buf[1:], []byte("confKey"))
+	ret, err := lump.FromBytes(buf[:])
+	if err != nil {
+		panic("memberShipKey failed")
+	}
+	return
+}
+
 func main() {
 	flag.Parse()
 	store, err := storage.OpenCannylsStorage(*path)
@@ -84,6 +95,17 @@ func main() {
 		fmt.Printf("\n")
 	}
 
+	fmt.Printf("MEMBER SHIP : ")
+
+	data, err = store.Get(memberShipKey())
+	if err == nil {
+		var members aspirapb.MemberShip
+		utils.Check(members.Unmarshal(data))
+		fmt.Printf("%+v\n", members)
+	} else {
+		fmt.Printf("\n")
+	}
+
 	//entries
 	fmt.Printf("ENTRIES\n")
 	var entryMeta aspirapb.EntryMeta
@@ -93,14 +115,18 @@ func main() {
 			break
 		}
 		utils.Check(entryMeta.Unmarshal(data))
-		fmt.Printf("%+v:", entryMeta)
+		//fmt.Printf("%+v:", entryMeta)
 
 		if entryMeta.EntryType == aspirapb.EntryMeta_Put {
 			data, err = store.Get(ExtKey(i & keyMask))
 			utils.Check(err)
-			fmt.Printf(" ext: %s\n", data)
-		} else {
-			fmt.Printf("\n")
+			fmt.Printf("%+v ext: %s\n", entryMeta, data)
+		} else if entryMeta.EntryType == aspirapb.EntryMeta_ConfChange {
+			var cc raftpb.ConfChange
+			cc.Unmarshal(entryMeta.Data)
+			fmt.Printf("%+v\n", cc)
+		} else { // aspiarpb.EntryMeta_leaderCommit{
+
 		}
 
 	}
