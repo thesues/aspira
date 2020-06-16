@@ -257,7 +257,7 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 
 	var cc raftpb.ConfChange
 	utils.Check(cc.Unmarshal(e.Data))
-	fmt.Printf("applyConfChange: %+v\n", e.String())
+	//fmt.Printf("applyConfChange: %+v\n", e.String())
 	fmt.Printf("applyConfChange: %+v\n", cc)
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
@@ -268,11 +268,12 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 			//update state
 			as.state.Nodes[ctx.Id] = ctx.Addr
 		}
-
 	case raftpb.ConfChangeRemoveNode:
 	case raftpb.ConfChangeUpdateNode:
 	}
+
 	as.node.SetConfState(as.node.Raft().ApplyConfChange(cc))
+	as.node.DoneConfChange(cc.ID, nil)
 
 }
 

@@ -192,6 +192,7 @@ func (n *Node) DoneConfChange(id uint64, err error) {
 		return
 	}
 	delete(n.confChanges, id)
+	fmt.Printf("FUCK sending %+v", err)
 	ch <- err
 }
 

@@ -101,6 +101,7 @@ func main() {
 
 	wal := raftwal.Init(store)
 	es, err := wal.AllEntries(0, raftwal.MaxKey, math.MaxUint64)
+
 	for i := range es {
 		switch es[i].Type {
 		case raftpb.EntryConfChange:
@@ -110,7 +111,9 @@ func main() {
 		default:
 			fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, es[i])
 		}
+
 	}
+
 	//applied Data
 
 }
