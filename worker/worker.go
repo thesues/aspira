@@ -17,14 +17,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"time"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 
 	"github.com/golang/glog"
 	"github.com/thesues/aspira/conn"
@@ -50,8 +53,6 @@ type AspiraServer struct {
 
 func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err error) {
 
-	raftCxt := aspirapb.RaftContext{Id: id, Addr: addr}
-
 	var db *cannyls.Storage
 
 	_, err = os.Stat(path)
@@ -66,7 +67,7 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 	}
 
 	store := raftwal.Init(db)
-	node := conn.NewNode(&raftCxt, store)
+	node := conn.NewNode(&aspirapb.RaftContext{Id: id, Addr: addr}, store)
 	raftServer := conn.NewRaftServer(node)
 
 	as = &AspiraServer{
@@ -82,7 +83,7 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 	return as, nil
 }
 
-func (as *AspiraServer) InitAndStart(id uint64) (err error) {
+func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) {
 	if err = as.serveGRPC(); err != nil {
 		return
 	}
@@ -103,34 +104,53 @@ func (as *AspiraServer) InitAndStart(id uint64) (err error) {
 	*/
 	//static peers
 	restart := as.store.PastLife()
-	restart = true
 	if restart {
 		snap, err := as.store.Snapshot()
 		utils.Check(err)
-		as.node.SetConfState(&snap.Metadata.ConfState)
-
+		as.node.SetConfState(&snap.Metadata.ConfState) //for future snapshot
+		for i := 1; i <= 3; i++ {
+			as.node.Connect(uint64(i), "127.0.0.1:330"+fmt.Sprintf("%d", i))
+		}
 		as.node.SetRaft(raft.RestartNode(as.node.Cfg))
 		fmt.Printf("RESTART\n")
-	} else {
+	} else if len(clusterAddr) == 0 {
 		fmt.Printf("START\n")
-		//read from config file
-		rpeers := make([]raft.Peer, 3)
-		var i uint64
-		for i = 1; i <= 3; i++ {
-			ctx := aspirapb.RaftContext{
-				Id:   i,
-				Addr: "127.0.0.1:330" + fmt.Sprintf("%d", i),
-			}
-			data, err := ctx.Marshal()
-			utils.Check(err)
-			rpeers[i-1] = raft.Peer{ID: i, Context: data}
-		}
-
-		for i = 1; i <= 3; i++ {
-			as.node.Connect(i, "127.0.0.1:330"+fmt.Sprintf("%d", i))
-		}
-
+		rpeers := make([]raft.Peer, 1)
+		data, err := as.node.RaftContext.Marshal()
+		utils.Check(err)
+		rpeers[0] = raft.Peer{ID: as.node.Id, Context: data}
 		as.node.SetRaft(raft.StartNode(as.node.Cfg, rpeers))
+	} else {
+		//join remote cluster
+		p := conn.GetPools().Connect(clusterAddr)
+		if p == nil {
+			return errors.Errorf("Unhealthy connection to %v", clusterAddr)
+		}
+		c := aspirapb.NewRaftClient(p.Get())
+		for {
+			timeout := 8 * time.Second
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			// JoinCluster can block indefinitely, raft ignores conf change proposal
+			// if it has pending configuration.
+			_, err := c.JoinCluster(ctx, as.node.RaftContext)
+			if err == nil {
+				cancel()
+				break
+			}
+			if utils.ShouldCrash(err) {
+				cancel()
+				log.Fatalf("Error while joining cluster: %v", err)
+			}
+			glog.Errorf("Error while joining cluster: %v\n", err)
+			timeout *= 2
+			if timeout > 32*time.Second {
+				timeout = 32 * time.Second
+			}
+			time.Sleep(timeout) // This is useful because JoinCluster can exit immediately.
+			cancel()
+		}
+		as.node.SetRaft(raft.StartNode(as.node.Cfg, nil))
+
 	}
 
 	as.stopper.RunWorker(func() {
@@ -234,16 +254,21 @@ func (as *AspiraServer) trySnapshot() {
 */
 
 func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
+
 	var cc raftpb.ConfChange
 	utils.Check(cc.Unmarshal(e.Data))
+	fmt.Printf("applyConfChange: %+v\n", e.String())
 	fmt.Printf("applyConfChange: %+v\n", cc)
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
-		var ctx aspirapb.RaftContext
-		utils.Check(ctx.Unmarshal(cc.Context))
-		go as.node.Connect(ctx.Id, ctx.Addr)
-		//update state
-		as.state.Nodes[ctx.Id] = ctx.Addr
+		if len(cc.Context) > 0 {
+			var ctx aspirapb.RaftContext
+			utils.Check(ctx.Unmarshal(cc.Context))
+			go as.node.Connect(ctx.Id, ctx.Addr)
+			//update state
+			as.state.Nodes[ctx.Id] = ctx.Addr
+		}
+
 	case raftpb.ConfChangeRemoveNode:
 	case raftpb.ConfChangeUpdateNode:
 	}
@@ -252,7 +277,8 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 }
 
 var (
-	id = flag.Uint64("id", 0, "id")
+	id   = flag.Uint64("id", 0, "id")
+	join = flag.String("join", "", "remote addr")
 )
 
 func main() {
@@ -264,6 +290,6 @@ func main() {
 	stringId := fmt.Sprintf("%d", *id)
 	x, _ := NewAspiraServer(*id, "127.0.0.1:330"+stringId, stringId+".lusf")
 
-	x.InitAndStart(*id)
+	x.InitAndStart(*id, *join)
 
 }

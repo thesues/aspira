@@ -126,6 +126,7 @@ func (wal *WAL) Sync() {
 
 func (wal *WAL) HardState() (hd raftpb.HardState, err error) {
 	data, err := wal.db.Get(wal.hardStateKey())
+	//if err is noSuchKey, but Unmarshal will still success, and return a nil error
 	err = hd.Unmarshal(data)
 	return
 }
@@ -370,11 +371,19 @@ func (wal *WAL) InitialState() (hs raftpb.HardState, cs raftpb.ConfState, err er
 
 func (wal *WAL) PastLife() bool {
 	snap, _ := wal.Snapshot()
-	return !raft.IsEmptySnap(snap)
+	if !raft.IsEmptySnap(snap) {
+		return true
+	}
+	hs, err := wal.HardState()
+	if err != nil {
+		return false
+	}
+	return !raft.IsEmptyHardState(hs)
+
 }
 
 //max range of [lo, hi) is [0, keyMask)
-func (wal *WAL) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
+func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 	size := 0
 	err = wal.db.RangeIter(wal.EntryKey(lo), wal.EntryKey(hi), func(id lump.LumpId, data []byte) error {
 		var meta aspirapb.EntryMeta
@@ -442,7 +451,7 @@ func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 	if hi > last+1 {
 		return nil, raft.ErrUnavailable
 	}
-	return wal.allEntries(lo, hi, maxSize)
+	return wal.AllEntries(lo, hi, maxSize)
 }
 
 func (wal *WAL) reset(es []raftpb.Entry) error {

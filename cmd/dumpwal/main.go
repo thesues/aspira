@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math"
 
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/thesues/aspira/protos/aspirapb"
+	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/storage"
@@ -95,40 +96,20 @@ func main() {
 		fmt.Printf("\n")
 	}
 
-	fmt.Printf("MEMBER SHIP : ")
-
-	data, err = store.Get(memberShipKey())
-	if err == nil {
-		var members aspirapb.MemberShip
-		utils.Check(members.Unmarshal(data))
-		fmt.Printf("%+v\n", members)
-	} else {
-		fmt.Printf("\n")
-	}
-
 	//entries
 	fmt.Printf("ENTRIES\n")
-	var entryMeta aspirapb.EntryMeta
-	for i := uint64(1); i < keyMask; i++ {
-		data, err = store.Get(EntryKey(i))
-		if err != nil {
-			break
-		}
-		utils.Check(entryMeta.Unmarshal(data))
-		//fmt.Printf("%+v:", entryMeta)
 
-		if entryMeta.EntryType == aspirapb.EntryMeta_Put {
-			data, err = store.Get(ExtKey(i & keyMask))
-			utils.Check(err)
-			fmt.Printf("%+v ext: %s\n", entryMeta, data)
-		} else if entryMeta.EntryType == aspirapb.EntryMeta_ConfChange {
+	wal := raftwal.Init(store)
+	es, err := wal.AllEntries(0, raftwal.MaxKey, math.MaxUint64)
+	for i := range es {
+		switch es[i].Type {
+		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
-			cc.Unmarshal(entryMeta.Data)
-			fmt.Printf("index: %d, term: %d , %+v\n", entryMeta.Index, entryMeta.Term, cc)
-		} else { // aspiarpb.EntryMeta_leaderCommit{
-
+			cc.Unmarshal(es[i].Data)
+			fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, cc)
+		default:
+			fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, es[i])
 		}
-
 	}
 	//applied Data
 

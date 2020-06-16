@@ -257,7 +257,7 @@ func TestStorageAppend(t *testing.T) {
 		if err != tt.werr {
 			t.Errorf("#%d: err = %v, want %v", i, err, tt.werr)
 		}
-		entries, err := wal.allEntries(0, MaxKey, math.MaxUint64)
+		entries, err := wal.AllEntries(0, MaxKey, math.MaxUint64)
 		assert.Nil(t, err)
 		if !reflect.DeepEqual(entries, tt.wentries) {
 			t.Errorf("#%d: entries = %v, want %v", i, entries, tt.wentries)
@@ -287,7 +287,7 @@ func TestConfChange(t *testing.T) {
 	}
 
 	wal.reset(entries)
-	es, err := wal.allEntries(0, keyMask, math.MaxUint64)
+	es, err := wal.AllEntries(0, keyMask, math.MaxUint64)
 	assert.Nil(t, err)
 	for i := range es {
 		var cc raftpb.ConfChange
