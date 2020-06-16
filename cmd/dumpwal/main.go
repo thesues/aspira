@@ -109,7 +109,7 @@ func main() {
 	//entries
 	fmt.Printf("ENTRIES\n")
 	var entryMeta aspirapb.EntryMeta
-	for i := uint64(0); i < keyMask; i++ {
+	for i := uint64(1); i < keyMask; i++ {
 		data, err = store.Get(EntryKey(i))
 		if err != nil {
 			break
@@ -124,7 +124,7 @@ func main() {
 		} else if entryMeta.EntryType == aspirapb.EntryMeta_ConfChange {
 			var cc raftpb.ConfChange
 			cc.Unmarshal(entryMeta.Data)
-			fmt.Printf("%+v\n", cc)
+			fmt.Printf("index: %d, term: %d , %+v\n", entryMeta.Index, entryMeta.Term, cc)
 		} else { // aspiarpb.EntryMeta_leaderCommit{
 
 		}

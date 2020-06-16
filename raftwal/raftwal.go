@@ -17,8 +17,6 @@
 package raftwal
 
 import (
-	"fmt"
-
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
@@ -116,7 +114,7 @@ func (wal *WAL) Save(hd raftpb.HardState, entries []raftpb.Entry) (err error) {
 	if err = wal.setHardState(hd); err != nil {
 		return
 	}
-	if err = wal.addEntries(entries); err != nil {
+	if err = wal.addEntries(entries, true); err != nil {
 		return
 	}
 	return
@@ -272,28 +270,30 @@ index => {TERM, INDEX, TYPE, DATA}
 if TYPE is NORMAL split two.
 else save all
 */
-func (wal *WAL) addEntries(entries []raftpb.Entry) error {
+func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 	if len(entries) == 0 {
 		return nil
 	}
+	var last uint64 = 0
+	if check {
+		firstIndex, err := wal.FirstIndex() //atomic get
+		if err != nil {
+			return err
+		}
 
-	firstIndex, err := wal.FirstIndex() //atomic get
-	if err != nil {
-		return err
-	}
+		if entries[len(entries)-1].Index < firstIndex {
+			//warning
+			return nil
+		}
 
-	if entries[len(entries)-1].Index < firstIndex {
-		//warning
-		return nil
-	}
+		if firstIndex > entries[0].Index {
+			entries = entries[firstIndex-entries[0].Index:]
+		}
 
-	if firstIndex > entries[0].Index {
-		entries = entries[firstIndex-entries[0].Index:]
-	}
-
-	last, err := wal.LastIndex() //atomic get
-	if err != nil {
-		return err
+		last, err = wal.LastIndex() //atomic get
+		if err != nil {
+			return err
+		}
 	}
 
 	var entryMeta aspirapb.EntryMeta
@@ -368,11 +368,10 @@ func (wal *WAL) InitialState() (hs raftpb.HardState, cs raftpb.ConfState, err er
 
 //max range of [lo, hi) is [0, keyMask)
 func (wal *WAL) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
-	var meta aspirapb.EntryMeta
-	var e raftpb.Entry
 	size := 0
 	err = wal.db.RangeIter(wal.EntryKey(lo), wal.EntryKey(hi), func(id lump.LumpId, data []byte) error {
-
+		var meta aspirapb.EntryMeta
+		var e raftpb.Entry
 		if err = meta.Unmarshal(data); err != nil {
 			return err
 		}
@@ -384,18 +383,17 @@ func (wal *WAL) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 			if err != nil {
 				return err
 			}
-			if len(extData) > 0 {
-				e.Data = extData
-			}
+			//if len(extData) > 0 {
+			e.Data = extData
+			//}
 		case aspirapb.EntryMeta_LeaderCommit:
 			e.Type = raftpb.EntryNormal
 			e.Data = nil
 		default:
 			e.Type = raftpb.EntryConfChange
-			if len(meta.Data) > 0 {
-				e.Data = meta.Data
-				fmt.Printf("readup %+v\n", e.Data)
-			}
+			//if len(meta.Data) > 0 {
+			e.Data = meta.Data
+			//}
 		}
 		e.Term = meta.Term
 		e.Index = meta.Index
@@ -442,29 +440,7 @@ func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 
 func (wal *WAL) reset(es []raftpb.Entry) error {
 	wal.deleteFrom(0)
-	var entryMeta aspirapb.EntryMeta
-	ab := block.NewAlignedBytes(512, block.Min())
-	for _, e := range es {
-		entryMeta.Term = e.Term
-		entryMeta.Index = e.Index
-		if e.Type == raftpb.EntryNormal {
-			//parse data, get
-			entryMeta.EntryType = aspirapb.EntryMeta_Put
-			ab.Resize(uint32(len(e.Data)))
-			copy(ab.AsBytes(), e.Data)
-			wal.db.Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(ab))
-		} else {
-			entryMeta.EntryType = aspirapb.EntryMeta_ConfChange
-		}
-
-		data, err := entryMeta.Marshal()
-		if err != nil {
-			return err
-		}
-		if _, err = wal.db.PutEmbed(wal.EntryKey(entryMeta.Index), data); err != nil {
-			return err
-		}
-	}
+	wal.addEntries(es, false)
 	return nil
 }
 

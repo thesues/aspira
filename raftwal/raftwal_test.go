@@ -128,7 +128,7 @@ func TestStorageLastIndex(t *testing.T) {
 		t.Errorf("last = %d, want %d", last, 5)
 	}
 
-	wal.addEntries([]raftpb.Entry{{Index: 6, Term: 5}})
+	wal.addEntries([]raftpb.Entry{{Index: 6, Term: 5}}, true)
 	last, err = wal.LastIndex()
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
@@ -253,7 +253,7 @@ func TestStorageAppend(t *testing.T) {
 
 	for i, tt := range tests {
 		wal.reset(ents)
-		err := wal.addEntries(tt.entries)
+		err := wal.addEntries(tt.entries, true)
 		if err != tt.werr {
 			t.Errorf("#%d: err = %v, want %v", i, err, tt.werr)
 		}
@@ -262,6 +262,37 @@ func TestStorageAppend(t *testing.T) {
 		if !reflect.DeepEqual(entries, tt.wentries) {
 			t.Errorf("#%d: entries = %v, want %v", i, entries, tt.wentries)
 		}
+	}
+}
+
+func TestConfChange(t *testing.T) {
+	db, err := cannyls.CreateCannylsStorage("wal.lusf", 10<<20, 0.1)
+	defer os.Remove("wal.lusf")
+	assert.Nil(t, err)
+	wal := Init(db)
+	var entries []raftpb.Entry
+	for i := uint64(1); i < 4; i++ {
+		var ecc raftpb.ConfChange
+		var e raftpb.Entry
+		ecc.ID = i
+		ecc.NodeID = i
+		ecc.Type = raftpb.ConfChangeAddNode
+		data, err := ecc.Marshal()
+		assert.Nil(t, err)
+		e.Type = raftpb.EntryConfChange
+		e.Index = i
+		e.Term = i
+		e.Data = data
+		entries = append(entries, e)
+	}
+
+	wal.reset(entries)
+	es, err := wal.allEntries(0, keyMask, math.MaxUint64)
+	assert.Nil(t, err)
+	for i := range es {
+		var cc raftpb.ConfChange
+		cc.Unmarshal(es[i].Data)
+		assert.Equal(t, uint64(i+1), cc.NodeID)
 	}
 }
 

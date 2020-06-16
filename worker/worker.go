@@ -100,10 +100,12 @@ func (as *AspiraServer) InitAndStart(id uint64) (err error) {
 	//static peers
 	peers := as.store.MemberShip()
 	if len(peers.Nodes) > 0 {
-		for id, addr := range peers.Nodes {
-			fmt.Printf("%d => %s\n", id, addr)
-			as.node.Connect(id, addr)
-		}
+		/*
+			for id, addr := range peers.Nodes {
+				fmt.Printf("%d => %s\n", id, addr)
+				as.node.Connect(id, addr)
+			}
+		*/
 		as.node.SetRaft(raft.RestartNode(as.node.Cfg))
 		fmt.Printf("RESTART")
 	} else {
@@ -216,10 +218,15 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 	fmt.Printf("applyConfChange: %+v\n", cc)
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
+		addr, has := as.node.Peer(cc.NodeID)
+		if has {
+			go as.node.Connect(cc.NodeID, addr)
+			fmt.Printf("connected to %s for %d\n", addr, cc.NodeID)
+		}
 	case raftpb.ConfChangeRemoveNode:
 	case raftpb.ConfChangeUpdateNode:
 	}
-	as.node.SavePeers()
+	//as.node.SavePeers()
 	as.node.Raft().ApplyConfChange(cc)
 
 }

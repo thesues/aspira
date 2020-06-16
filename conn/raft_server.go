@@ -19,6 +19,7 @@ package conn
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -189,6 +190,8 @@ func (w *RaftServer) JoinCluster(ctx context.Context,
 
 // RaftMessage handles RAFT messages.
 func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
+
+	fmt.Printf("%d received msg\n", w.node.Id)
 	ctx := server.Context()
 	if ctx.Err() != nil {
 		return ctx.Err()

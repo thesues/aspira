@@ -424,6 +424,7 @@ func (n *Node) streamMessages(to uint64, s *stream) {
 
 	var logged int
 	for range ticker.C { // Don't do this in an busy-wait loop, use a ticker.
+		fmt.Printf("%d is sendint to %d\n", n.Id, to)
 		if err := n.doSendMessage(to, s.msgCh); err != nil {
 			// Update lastLog so we print error only a few times if we are not able to connect.
 			// Otherwise, the log is polluted with repeated errors.
@@ -441,13 +442,16 @@ func (n *Node) streamMessages(to uint64, s *stream) {
 func (n *Node) doSendMessage(to uint64, msgCh chan []byte) error {
 	addr, has := n.Peer(to)
 	if !has {
+		//panic("FUCK")
 		return errors.Errorf("Do not have address of peer %#x", to)
 	}
 	pool, err := GetPools().Get(addr)
 	if err != nil {
+		//panic("FUCK1")
 		return err
 	}
 
+	fmt.Printf("sending...\n")
 	c := pb.NewRaftClient(pool.Get())
 	ctx, span := otrace.StartSpan(context.Background(),
 		fmt.Sprintf("RaftMessage-%d-to-%d", n.Id, to))
@@ -517,10 +521,12 @@ func (n *Node) Connect(pid uint64, addr string) {
 	if pid == n.Id {
 		return
 	}
-	if paddr, ok := n.Peer(pid); ok && paddr == addr {
-		// Already connected.
-		return
-	}
+	/*
+		if paddr, ok := n.Peer(pid); ok && paddr == addr {
+			// Already connected.
+			return
+		}
+	*/
 	// Here's what we do.  Right now peerPool maps peer node id's to addr values.  If
 	// a *pool can be created, good, but if not, we still create a peerPoolEntry with
 	// a nil *pool.
