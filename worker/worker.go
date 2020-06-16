@@ -42,6 +42,7 @@ type AspiraServer struct {
 	store      *raftwal.WAL
 	addr       string
 	stopper    *utils.Stopper
+	state      aspirapb.MembershipState
 	//applyCh
 	//proposeCh
 	//getCh
@@ -74,6 +75,9 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 		addr:       addr,
 		stopper:    utils.NewStopper(),
 		store:      store,
+		state: aspirapb.MembershipState{
+			Nodes: make(map[uint64]string),
+		},
 	}
 	return as, nil
 }
@@ -98,26 +102,34 @@ func (as *AspiraServer) InitAndStart(id uint64) (err error) {
 		}
 	*/
 	//static peers
-	peers := as.store.MemberShip()
-	if len(peers.Nodes) > 0 {
-		/*
-			for id, addr := range peers.Nodes {
-				fmt.Printf("%d => %s\n", id, addr)
-				as.node.Connect(id, addr)
-			}
-		*/
+	restart := as.store.PastLife()
+	restart = true
+	if restart {
+		snap, err := as.store.Snapshot()
+		utils.Check(err)
+		as.node.SetConfState(&snap.Metadata.ConfState)
+
 		as.node.SetRaft(raft.RestartNode(as.node.Cfg))
-		fmt.Printf("RESTART")
+		fmt.Printf("RESTART\n")
 	} else {
-		fmt.Printf("START")
+		fmt.Printf("START\n")
+		//read from config file
 		rpeers := make([]raft.Peer, 3)
 		var i uint64
 		for i = 1; i <= 3; i++ {
-			rpeers[i-1] = raft.Peer{ID: i}
+			ctx := aspirapb.RaftContext{
+				Id:   i,
+				Addr: "127.0.0.1:330" + fmt.Sprintf("%d", i),
+			}
+			data, err := ctx.Marshal()
+			utils.Check(err)
+			rpeers[i-1] = raft.Peer{ID: i, Context: data}
 		}
+
 		for i = 1; i <= 3; i++ {
 			as.node.Connect(i, "127.0.0.1:330"+fmt.Sprintf("%d", i))
 		}
+
 		as.node.SetRaft(raft.StartNode(as.node.Cfg, rpeers))
 	}
 
@@ -212,22 +224,30 @@ func (as *AspiraServer) Run() {
 	}
 }
 
+/*
+func (as *AspiraServer) trySnapshot() {
+	data, err := as.state.Marshal()
+	utils.Check(err)
+
+	as.store.CreateSnapshot()
+}
+*/
+
 func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 	var cc raftpb.ConfChange
 	utils.Check(cc.Unmarshal(e.Data))
 	fmt.Printf("applyConfChange: %+v\n", cc)
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
-		addr, has := as.node.Peer(cc.NodeID)
-		if has {
-			go as.node.Connect(cc.NodeID, addr)
-			fmt.Printf("connected to %s for %d\n", addr, cc.NodeID)
-		}
+		var ctx aspirapb.RaftContext
+		utils.Check(ctx.Unmarshal(cc.Context))
+		go as.node.Connect(ctx.Id, ctx.Addr)
+		//update state
+		as.state.Nodes[ctx.Id] = ctx.Addr
 	case raftpb.ConfChangeRemoveNode:
 	case raftpb.ConfChangeUpdateNode:
 	}
-	//as.node.SavePeers()
-	as.node.Raft().ApplyConfChange(cc)
+	as.node.SetConfState(as.node.Raft().ApplyConfChange(cc))
 
 }
 

@@ -21,15 +21,13 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
-	"github.com/thesues/aspira/utils"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	cannyls "github.com/thesues/cannyls-go/storage"
 )
 
 type WAL struct {
-	db   *cannyls.Storage
-	conf raftpb.ConfState
+	db *cannyls.Storage
 }
 
 var (
@@ -73,6 +71,7 @@ func Init(db *cannyls.Storage) *WAL {
 	return wal
 }
 
+/*
 func (wal *WAL) memberShipKey() (ret lump.LumpId) {
 	var buf [8]byte
 	buf[0] = 0x80
@@ -83,6 +82,7 @@ func (wal *WAL) memberShipKey() (ret lump.LumpId) {
 	}
 	return
 }
+*/
 
 func (wal *WAL) snapshotKey() (ret lump.LumpId) {
 	//startsWith 0b10XXXXX
@@ -142,6 +142,7 @@ func (wal *WAL) setHardState(st raftpb.HardState) (err error) {
 	return
 }
 
+/*
 func (wal *WAL) SetMemberShip(peers aspirapb.MemberShip) {
 	//update cached confState
 	wal.conf.Nodes = nil
@@ -170,6 +171,7 @@ func (wal *WAL) MemberShip() aspirapb.MemberShip {
 	}
 	return peers
 }
+*/
 
 func (wal *WAL) Snapshot() (snap raftpb.Snapshot, err error) {
 
@@ -362,8 +364,13 @@ func (wal *WAL) InitialState() (hs raftpb.HardState, cs raftpb.ConfState, err er
 	if err != nil {
 		return
 	}
-	wal.conf.Nodes = []uint64{1, 2, 3}
-	return hs, wal.conf, nil
+	snap, _ := wal.Snapshot()
+	return hs, snap.Metadata.ConfState, nil
+}
+
+func (wal *WAL) PastLife() bool {
+	snap, _ := wal.Snapshot()
+	return !raft.IsEmptySnap(snap)
 }
 
 //max range of [lo, hi) is [0, keyMask)

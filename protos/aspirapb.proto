@@ -37,8 +37,9 @@ message RaftContext {
 	string addr = 2;
 }
 
-message MemberShip {
-	map<uint64, string> nodes = 1;
+
+message MembershipState {
+	map<uint64,string> nodes = 1;
 }
 
 message Snapshot {

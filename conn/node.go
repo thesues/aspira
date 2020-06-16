@@ -30,7 +30,6 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	"github.com/thesues/aspira/protos/aspirapb"
 	pb "github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
@@ -61,7 +60,7 @@ type Node struct {
 	Cfg         *raft.Config
 	MyAddr      string
 	Id          uint64
-	peers       aspirapb.MemberShip
+	peers       map[uint64]string
 	confChanges map[uint64]chan error
 	messages    chan sendmsg
 	RaftContext *pb.RaftContext
@@ -133,7 +132,7 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 		Rand:        rand.New(&lockedSource{src: rand.NewSource(time.Now().UnixNano())}),
 		confChanges: make(map[uint64]chan error),
 		messages:    make(chan sendmsg, 100),
-		peers:       store.MemberShip(),
+		peers:       make(map[uint64]string),
 		requestCh:   make(chan linReadReq, 100),
 	}
 
@@ -220,8 +219,7 @@ func (n *Node) ConfState() *raftpb.ConfState {
 func (n *Node) Peer(pid uint64) (string, bool) {
 	n.RLock()
 	defer n.RUnlock()
-	//addr, ok := n.peers[pid]
-	addr, ok := n.peers.Nodes[pid]
+	addr, ok := n.peers[pid]
 	return addr, ok
 }
 
@@ -230,14 +228,7 @@ func (n *Node) SetPeer(pid uint64, addr string) {
 	//x.AssertTruef(addr != "", "SetPeer for peer %d has empty addr.", pid)
 	n.Lock()
 	defer n.Unlock()
-	//n.peers[pid] = addr
-	n.peers.Nodes[pid] = addr
-}
-
-func (n *Node) SavePeers() {
-	n.Lock()
-	defer n.Unlock()
-	n.Store.SetMemberShip(n.peers)
+	n.peers[pid] = addr
 }
 
 // Send sends the given RAFT message from this node.
@@ -365,12 +356,10 @@ func (n *Node) BatchAndSendMessages() {
 				buf = b
 			}
 			totalSize += 4 + len(sm.data)
-			if err := binary.Write(buf, binary.LittleEndian, uint32(len(sm.data))); err != nil {
-				panic("bina")
-			}
-			if _, err := buf.Write(sm.data); err != nil {
-				panic("hehe")
-			}
+			utils.Check(binary.Write(buf, binary.LittleEndian, uint32(len(sm.data))))
+
+			_, err := buf.Write(sm.data)
+			utils.Check(err)
 
 			if totalSize > messageBatchSoftLimit {
 				// We limit the batch size, but we aren't pushing back on
@@ -424,7 +413,6 @@ func (n *Node) streamMessages(to uint64, s *stream) {
 
 	var logged int
 	for range ticker.C { // Don't do this in an busy-wait loop, use a ticker.
-		fmt.Printf("%d is sendint to %d\n", n.Id, to)
 		if err := n.doSendMessage(to, s.msgCh); err != nil {
 			// Update lastLog so we print error only a few times if we are not able to connect.
 			// Otherwise, the log is polluted with repeated errors.
@@ -442,16 +430,13 @@ func (n *Node) streamMessages(to uint64, s *stream) {
 func (n *Node) doSendMessage(to uint64, msgCh chan []byte) error {
 	addr, has := n.Peer(to)
 	if !has {
-		//panic("FUCK")
 		return errors.Errorf("Do not have address of peer %#x", to)
 	}
 	pool, err := GetPools().Get(addr)
 	if err != nil {
-		//panic("FUCK1")
 		return err
 	}
 
-	fmt.Printf("sending...\n")
 	c := pb.NewRaftClient(pool.Get())
 	ctx, span := otrace.StartSpan(context.Background(),
 		fmt.Sprintf("RaftMessage-%d-to-%d", n.Id, to))
@@ -521,12 +506,12 @@ func (n *Node) Connect(pid uint64, addr string) {
 	if pid == n.Id {
 		return
 	}
-	/*
-		if paddr, ok := n.Peer(pid); ok && paddr == addr {
-			// Already connected.
-			return
-		}
-	*/
+
+	if paddr, ok := n.Peer(pid); ok && paddr == addr {
+		// Already connected.
+		return
+	}
+
 	// Here's what we do.  Right now peerPool maps peer node id's to addr values.  If
 	// a *pool can be created, good, but if not, we still create a peerPoolEntry with
 	// a nil *pool.
@@ -547,8 +532,7 @@ func (n *Node) DeletePeer(pid uint64) {
 	}
 	n.Lock()
 	defer n.Unlock()
-	//delete(n.peers, pid)
-	delete(n.peers.Nodes, pid)
+	delete(n.peers, pid)
 }
 
 var errInternalRetry = errors.New("Retry proposal again")
