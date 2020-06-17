@@ -108,9 +108,10 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) 
 		snap, err := as.store.Snapshot()
 		utils.Check(err)
 		as.node.SetConfState(&snap.Metadata.ConfState) //for future snapshot
+		/*  if we have snapshot, we need explict Connect to remote
 		for i := 1; i <= 3; i++ {
 			as.node.Connect(uint64(i), "127.0.0.1:330"+fmt.Sprintf("%d", i))
-		}
+		}*/
 		as.node.SetRaft(raft.RestartNode(as.node.Cfg))
 		fmt.Printf("RESTART\n")
 	} else if len(clusterAddr) == 0 {
@@ -187,6 +188,7 @@ func (as *AspiraServer) Run() {
 		select {
 		case <-ticker.C:
 			n.Raft().Tick()
+			//fmt.Printf("leader ? %+v\n", as.AmLeader())
 		case rd := <-n.Raft().Ready():
 			/*
 				if rd.SoftState != nil {
@@ -202,11 +204,6 @@ func (as *AspiraServer) Run() {
 
 			if rd.MustSync {
 				n.Store.Sync()
-			}
-
-			for i := range rd.Messages {
-				//fmt.Printf("sending %+v", rd.Messages)
-				as.node.Send(&rd.Messages[i])
 			}
 
 			for _, entry := range rd.CommittedEntries {
@@ -239,6 +236,11 @@ func (as *AspiraServer) Run() {
 
 			}
 
+			for i := range rd.Messages {
+				//fmt.Printf("sending %+v", rd.Messages)
+				as.node.Send(&rd.Messages[i])
+			}
+
 			n.Raft().Advance()
 		}
 	}
@@ -252,6 +254,17 @@ func (as *AspiraServer) trySnapshot() {
 	as.store.CreateSnapshot()
 }
 */
+
+func (as *AspiraServer) AmLeader() bool {
+	if as.node.Raft() == nil {
+		return false
+	}
+	r := as.node.Raft()
+	if r.Status().Lead != r.Status().ID {
+		return false
+	}
+	return true
+}
 
 func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 
@@ -274,7 +287,6 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 
 	as.node.SetConfState(as.node.Raft().ApplyConfChange(cc))
 	as.node.DoneConfChange(cc.ID, nil)
-
 }
 
 var (
