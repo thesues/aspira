@@ -97,9 +97,14 @@ func main() {
 	}
 
 	//entries
-	fmt.Printf("ENTRIES\n")
-
 	wal := raftwal.Init(store)
+
+	fmt.Printf("ENTRIES: \n")
+	first, err := wal.FirstIndex()
+	fmt.Printf("FirstIndex : %d\n", first)
+	last, err := wal.LastIndex()
+	fmt.Printf("LastIndex  : %d\n", last)
+
 	es, err := wal.AllEntries(0, raftwal.MaxKey, math.MaxUint64)
 
 	for i := range es {

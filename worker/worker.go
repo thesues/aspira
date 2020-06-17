@@ -88,30 +88,16 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) 
 		return
 	}
 
-	/*
-		snap, _ := as.node.Store.Snapshot()
-		if raft.IsEmptySnap(snap) == false {
-			//restore conf state,
-			as.node.SetConfState(&snap.Metadata.ConfState)
-			for _, id := range snap.Metadata.ConfState.Nodes {
-				as.node.Connect(id)
-			}
-			//restart Node, nil
-		} else {
-
-			//start node
-		}
-	*/
-	//static peers
 	restart := as.store.PastLife()
 	if restart {
 		snap, err := as.store.Snapshot()
 		utils.Check(err)
 		as.node.SetConfState(&snap.Metadata.ConfState) //for future snapshot
-		/*  if we have snapshot, we need explict Connect to remote
-		for i := 1; i <= 3; i++ {
-			as.node.Connect(uint64(i), "127.0.0.1:330"+fmt.Sprintf("%d", i))
-		}*/
+		//if we have snapshot, we need explict Connect to remote
+		/*
+			for i := 1; i <= 3; i++ {
+				as.node.Connect(uint64(i), "127.0.0.1:330"+fmt.Sprintf("%d", i))
+			}*/
 		as.node.SetRaft(raft.RestartNode(as.node.Cfg))
 		fmt.Printf("RESTART\n")
 	} else if len(clusterAddr) == 0 {
@@ -181,14 +167,13 @@ func (as *AspiraServer) serveGRPC() (err error) {
 }
 
 func (as *AspiraServer) Run() {
-	ticker := time.NewTicker(20 * time.Millisecond)
+	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	n := as.node
 	for {
 		select {
 		case <-ticker.C:
 			n.Raft().Tick()
-			//fmt.Printf("leader ? %+v\n", as.AmLeader())
 		case rd := <-n.Raft().Ready():
 			/*
 				if rd.SoftState != nil {
@@ -281,12 +266,12 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 			//update state
 			as.state.Nodes[ctx.Id] = ctx.Addr
 		}
+		as.node.SetConfState(as.node.Raft().ApplyConfChange(cc))
+		as.node.DoneConfChange(cc.ID, nil)
 	case raftpb.ConfChangeRemoveNode:
 	case raftpb.ConfChangeUpdateNode:
 	}
 
-	as.node.SetConfState(as.node.Raft().ApplyConfChange(cc))
-	as.node.DoneConfChange(cc.ID, nil)
 }
 
 var (
