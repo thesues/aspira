@@ -123,6 +123,8 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 			// snapshot.
 			Applied: snap.Metadata.Index,
 
+			CheckQuorum: true,
+
 			//	Logger: &x.ToGlog{},
 		},
 		// processConfChange etc are not throttled so some extra delta, so that we don't
