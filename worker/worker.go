@@ -88,10 +88,29 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) 
 		return
 	}
 
+	if *debug {
+		fmt.Printf("DEBUG\n")
+		rpeers := make([]raft.Peer, 3)
+		var i uint64
+		for i = 1; i <= 3; i++ {
+			rpeers[i-1] = raft.Peer{ID: i}
+		}
+		for i = 1; i <= 3; i++ {
+			as.node.Connect(i, "127.0.0.1:330"+fmt.Sprintf("%d", i))
+		}
+		as.node.SetRaft(raft.StartNode(as.node.Cfg, rpeers))
+		as.stopper.RunWorker(func() {
+			as.node.BatchAndSendMessages()
+		})
+		as.Run()
+		return
+	}
+
 	restart := as.store.PastLife()
 	if restart {
 		snap, err := as.store.Snapshot()
 		utils.Check(err)
+		fmt.Printf("RESTART\n")
 		as.node.SetConfState(&snap.Metadata.ConfState) //for future snapshot
 		//if we have snapshot, we need explict Connect to remote
 		/*
@@ -99,7 +118,7 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) 
 				as.node.Connect(uint64(i), "127.0.0.1:330"+fmt.Sprintf("%d", i))
 			}*/
 		as.node.SetRaft(raft.RestartNode(as.node.Cfg))
-		fmt.Printf("RESTART\n")
+
 	} else if len(clusterAddr) == 0 {
 		fmt.Printf("START\n")
 		rpeers := make([]raft.Peer, 1)
@@ -275,8 +294,9 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 }
 
 var (
-	id   = flag.Uint64("id", 0, "id")
-	join = flag.String("join", "", "remote addr")
+	id    = flag.Uint64("id", 0, "id")
+	join  = flag.String("join", "", "remote addr")
+	debug = flag.Bool("debug", false, "debug")
 )
 
 func main() {
