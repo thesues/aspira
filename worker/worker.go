@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -38,7 +39,6 @@ import (
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
-	"github.com/thesues/cannyls-go/lump"
 	cannyls "github.com/thesues/cannyls-go/storage"
 	otrace "go.opencensus.io/trace"
 	"google.golang.org/grpc"
@@ -168,6 +168,11 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) 
 	as.stopper.RunWorker(func() {
 		as.node.BatchAndSendMessages()
 	})
+
+	as.stopper.RunWorker(func() {
+		as.ServeHTTP()
+	})
+
 	as.Run()
 	return
 }
@@ -206,6 +211,7 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 	}
 	switch p.ProposalType {
 	case aspirapb.AspiraProposal_Put:
+		fmt.Printf("apply put %d\n", e.Index)
 		as.store.ApplyPut(p, e.Index)
 	case aspirapb.AspiraProposal_PutWithOffset:
 		panic("to be implemented")
@@ -239,6 +245,7 @@ func (as *AspiraServer) Run() {
 			if rd.MustSync {
 				n.Store.Sync()
 			}
+
 			for _, entry := range rd.CommittedEntries {
 				n.Applied.Begin(entry.Index)
 				switch {
@@ -255,6 +262,7 @@ func (as *AspiraServer) Run() {
 				}
 				n.Applied.Done(entry.Index)
 			}
+			n.Store.Sync()
 
 			for i := range rd.Messages {
 				//fmt.Printf("sending %+v", rd.Messages)
@@ -287,6 +295,33 @@ func (as *AspiraServer) AmLeader() bool {
 }
 
 var errInternalRetry = errors.New("Retry Raft proposal internally")
+
+func (as *AspiraServer) getAndWait(ctx context.Context, index uint64) ([]byte, error) {
+	n := as.node
+	switch {
+	case n.Raft() == nil:
+		return nil, errors.Errorf("Raft isn't initialized yet.")
+	case ctx.Err() != nil:
+		return nil, ctx.Err()
+	}
+	type result struct {
+		data []byte
+		err  error
+	}
+
+	ch := make(chan result, 1)
+	go func() {
+		data, err := as.store.GetData(index)
+		ch <- result{data: data, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, errors.Errorf("TIMEOUT")
+	case result := <-ch:
+		return result.data, result.err
+	}
+}
 
 func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.AspiraProposal) error {
 	n := as.node
@@ -385,7 +420,7 @@ var (
 	debug = flag.Bool("debug", false, "debug")
 )
 
-func (as *AspiraServer) ServeHTTP(stopper *utils.Stopper) {
+func (as *AspiraServer) ServeHTTP() {
 	r := gin.Default()
 	r.POST("/put/", func(c *gin.Context) {
 		readFile, header, err := c.Request.FormFile("file")
@@ -393,7 +428,7 @@ func (as *AspiraServer) ServeHTTP(stopper *utils.Stopper) {
 			c.String(400, err.Error())
 			return
 		}
-		if header.Size > int64(lump.LUMP_MAX_SIZE) {
+		if header.Size > as.store.ObjectMaxSize() {
 			c.String(405, "size too big")
 			return
 		}
@@ -413,11 +448,32 @@ func (as *AspiraServer) ServeHTTP(stopper *utils.Stopper) {
 			c.String(400, "TIMEOUT")
 			return
 		}
-
 	})
 
 	r.GET("/get/:id", func(c *gin.Context) {
-
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil {
+			c.String(400, err.Error())
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		data, err := as.getAndWait(ctx, id)
+		if err != nil {
+			glog.Errorf(err.Error())
+			c.String(500, err.Error())
+			return
+		}
+		c.Status(200)
+		c.Header("content-length", fmt.Sprintf("%d", len(data)))
+		c.Stream(func(w io.Writer) bool {
+			_, err := w.Write(data)
+			if err != nil {
+				fmt.Println(err)
+				return true
+			}
+			return false
+		})
 	})
 
 	stringID := fmt.Sprintf("%d", as.node.Id)
@@ -433,7 +489,7 @@ func (as *AspiraServer) ServeHTTP(stopper *utils.Stopper) {
 	}()
 
 	select {
-	case <-stopper.ShouldStop():
+	case <-as.stopper.ShouldStop():
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {

@@ -38,7 +38,7 @@ var (
 	confStateKey = "confStat"
 	firstKey     = "first"
 	lastKey      = "last"
-	keyMask      = (^uint64(0) >> 2) //0x3FFFFFFFFFFFFFFF
+	keyMask      = (^uint64(0) >> 2) //0x3FFFFFFFFFFFFFFF, the first two bits are zero
 	MinimalKey   = ^keyMask
 	MaxKey       = keyMask
 	endOfList    = errors.Errorf("end of list of keys")
@@ -336,6 +336,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 		switch e.Type {
 		case raftpb.EntryNormal:
 			if len(e.Data) != 0 {
+				//FIXME
 				entryMeta.EntryType = aspirapb.EntryMeta_Put
 				ab.Resize(uint32(len(e.Data)))
 				copy(ab.AsBytes(), e.Data)
@@ -587,9 +588,11 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 	return
 }
 
-//Interface of states machine
+//INTERFACE of states machine
 //states machine and wal share the same cannyls storage
 func (wal *WAL) ApplyPut(p aspirapb.AspiraProposal, index uint64) error {
+	wal.Lock()
+	defer wal.Unlock()
 	id := lump.FromU64(0, index)
 	dataPortion, err := wal.db.GetRecord(id)
 	if err != nil {
@@ -600,4 +603,17 @@ func (wal *WAL) ApplyPut(p aspirapb.AspiraProposal, index uint64) error {
 
 func (wal *WAL) ApplyPutWithOffset(p aspirapb.AspiraProposal, index uint64) error {
 	return nil
+}
+
+func (wal *WAL) ObjectMaxSize() int64 {
+	return int64(lump.LUMP_MAX_SIZE)
+}
+
+func (wal *WAL) GetData(index uint64) ([]byte, error) {
+	wal.Lock()
+	defer wal.Unlock()
+	if index > keyMask {
+		return nil, errors.Errorf("index is too big:%d", index)
+	}
+	return wal.db.Get(lump.FromU64(0, index))
 }
