@@ -55,11 +55,16 @@ func (r *lockedSource) Seed(seed int64) {
 	r.src.Seed(seed)
 }
 
+type ProposalResult struct {
+	Err   error
+	Index uint64
+}
+
 // ProposalCtx stores the context for a proposal with extra information.
 type ProposalCtx struct {
-	Found uint32
-	ErrCh chan error
-	Ctx   context.Context
+	Found    uint32
+	ResultCh chan ProposalResult
+	Ctx      context.Context
 }
 
 type proposals struct {
@@ -105,7 +110,7 @@ func (p *proposals) Delete(key string) {
 	delete(p.all, key)
 }
 
-func (p *proposals) Done(key string, err error) {
+func (p *proposals) Done(key string, index uint64, err error) {
 	if len(key) == 0 {
 		return
 	}
@@ -119,7 +124,7 @@ func (p *proposals) Done(key string, err error) {
 		return
 	}
 	delete(p.all, key)
-	pd.ErrCh <- err
+	pd.ResultCh <- ProposalResult{Index: index, Err: err}
 }
 
 // RaftServer is a wrapper around node that implements the Raft service.

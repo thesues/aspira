@@ -14,18 +14,10 @@
  * limitations under the License.
  */
 
-
-// Style guide for Protocol Buffer 3.
-// Use CamelCase (with an initial capital) for message names – for example,
-// SongServerRequest. Use underscore_separated_names for field names – for
-// example, song_name.
-
 syntax = "proto3";
 
 
-
 package aspirapb;
-
 
 // Worker services.
 message Payload {
@@ -70,14 +62,35 @@ message EntryMeta {
 		bytes      Data = 4;
 }
 
+
+/*
+AspiraProposalPut{
+	string associateKey
+	bytes data
+}
+AspiraProposalPutWithOffset {
+	string associateKey
+	bytes data
+	uint64 key
+	uint32 reservation
+	uint32 offset
+}
+*/
+message AspiraProposal {
+	enum Type {
+		Put = 0;
+		PutWithOffset = 1;
+	}
+	Type ProposalType = 1;
+	uint64 key = 2;
+	uint64 offset = 3;
+	string associateKey = 4;
+	bytes data = 5;
+}
+
+
 service Raft {
 	rpc Heartbeat (Payload)        returns (stream Payload) {}
 	rpc RaftMessage (stream RaftBatch) returns (Payload) {}
 	rpc JoinCluster (RaftContext)      returns (Payload) {}
 }
-
-
-
-
-
-// vim: noexpandtab sw=2 ts=2

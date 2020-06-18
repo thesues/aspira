@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"log"
 	"strings"
 
 	"github.com/golang/glog"
@@ -24,4 +25,10 @@ func ShouldCrash(err error) bool {
 		strings.Contains(errStr, "REUSE_ADDR") ||
 		strings.Contains(errStr, "NO_ADDR") ||
 		strings.Contains(errStr, "ENTERPRISE_LIMIT_REACHED")
+}
+
+func AssertTruef(b bool, format string, args ...interface{}) {
+	if !b {
+		log.Fatalf("%+v", errors.Errorf(format, args...))
+	}
 }

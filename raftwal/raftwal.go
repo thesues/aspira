@@ -17,6 +17,8 @@
 package raftwal
 
 import (
+	"sync"
+
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
@@ -28,6 +30,7 @@ import (
 
 type WAL struct {
 	db *cannyls.Storage
+	sync.Mutex
 }
 
 var (
@@ -111,6 +114,8 @@ func (wal *WAL) hardStateKey() (ret lump.LumpId) {
 }
 
 func (wal *WAL) Save(hd raftpb.HardState, entries []raftpb.Entry) (err error) {
+	wal.Lock()
+	defer wal.Unlock()
 	if err = wal.setHardState(hd); err != nil {
 		return
 	}
@@ -121,10 +126,18 @@ func (wal *WAL) Save(hd raftpb.HardState, entries []raftpb.Entry) (err error) {
 }
 
 func (wal *WAL) Sync() {
+	wal.Lock()
+	defer wal.Unlock()
 	wal.db.JournalSync()
 }
 
-func (wal *WAL) HardState() (hd raftpb.HardState, err error) {
+func (wal *WAL) HardState() (raftpb.HardState, error) {
+	wal.Lock()
+	defer wal.Unlock()
+	return wal.hardState()
+}
+
+func (wal *WAL) hardState() (hd raftpb.HardState, err error) {
 	data, err := wal.db.Get(wal.hardStateKey())
 	//if err is noSuchKey, but Unmarshal will still success, and return a nil error
 	err = hd.Unmarshal(data)
@@ -175,6 +188,12 @@ func (wal *WAL) MemberShip() aspirapb.MemberShip {
 */
 
 func (wal *WAL) Snapshot() (snap raftpb.Snapshot, err error) {
+	wal.Lock()
+	defer wal.Unlock()
+	return wal.snapshot()
+}
+
+func (wal *WAL) snapshot() (snap raftpb.Snapshot, err error) {
 
 	data, err := wal.db.Get(wal.snapshotKey())
 	if err != nil {
@@ -240,7 +259,12 @@ func (wal *WAL) EntryKey(idx uint64) lump.LumpId {
 }
 
 func (wal *WAL) FirstIndex() (uint64, error) {
-	snap, _ := wal.Snapshot() //will never return error for now
+	wal.Lock()
+	defer wal.Unlock()
+	return wal.firstIndex()
+}
+func (wal *WAL) firstIndex() (uint64, error) {
+	snap, _ := wal.snapshot() //will never return error for now
 	if !raft.IsEmptySnap(snap) {
 		return snap.Metadata.Index + 1, nil
 	}
@@ -256,6 +280,11 @@ func (wal *WAL) FirstIndex() (uint64, error) {
 }
 
 func (wal *WAL) LastIndex() (uint64, error) {
+	wal.Lock()
+	defer wal.Unlock()
+	return wal.lastIndex()
+}
+func (wal *WAL) lastIndex() (uint64, error) {
 	id, ok := wal.db.MaxId()
 	if !ok || id.U64() < MinimalKey {
 		return 0, errNotFound
@@ -279,7 +308,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 	}
 	var last uint64 = 0
 	if check {
-		firstIndex, err := wal.FirstIndex() //atomic get
+		firstIndex, err := wal.firstIndex() //atomic get
 		if err != nil {
 			return err
 		}
@@ -293,7 +322,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 			entries = entries[firstIndex-entries[0].Index:]
 		}
 
-		last, err = wal.LastIndex() //atomic get
+		last, err = wal.lastIndex() //atomic get
 		if err != nil {
 			return err
 		}
@@ -361,20 +390,24 @@ func (wal *WAL) deleteFrom(from uint64) error {
 }
 
 func (wal *WAL) InitialState() (hs raftpb.HardState, cs raftpb.ConfState, err error) {
-	hs, err = wal.HardState()
+	wal.Lock()
+	defer wal.Unlock()
+	hs, err = wal.hardState()
 	if err != nil {
 		return
 	}
-	snap, _ := wal.Snapshot()
+	snap, _ := wal.snapshot()
 	return hs, snap.Metadata.ConfState, nil
 }
 
 func (wal *WAL) PastLife() bool {
-	snap, _ := wal.Snapshot()
+	wal.Lock()
+	defer wal.Unlock()
+	snap, _ := wal.snapshot()
 	if !raft.IsEmptySnap(snap) {
 		return true
 	}
-	hs, err := wal.HardState()
+	hs, err := wal.hardState()
 	if err != nil {
 		return false
 	}
@@ -383,6 +416,7 @@ func (wal *WAL) PastLife() bool {
 }
 
 //max range of [lo, hi) is [0, keyMask)
+//for debug, do not call this function
 func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 	size := 0
 	err = wal.db.RangeIter(wal.EntryKey(lo), wal.EntryKey(hi), func(id lump.LumpId, data []byte) error {
@@ -435,7 +469,9 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 }
 
 func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
-	first, err := wal.FirstIndex()
+	wal.Lock()
+	defer wal.Unlock()
+	first, err := wal.firstIndex()
 	if err != nil {
 		return es, err
 	}
@@ -443,7 +479,7 @@ func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 		return nil, raft.ErrCompacted
 	}
 
-	last, err := wal.LastIndex()
+	last, err := wal.lastIndex()
 	if err != nil {
 		return es, err
 
@@ -465,6 +501,7 @@ func (wal *WAL) deleteUntil(until uint64) error {
 		if _, _, err := wal.db.Delete(id); err != nil {
 			return err
 		}
+		//TODO: delete record of extkey
 		/*
 			if isDeleteExtLog {
 				wal.db.Delete(wal.ExtKey(id.U64() & keyMask))
@@ -479,7 +516,9 @@ func (wal *WAL) deleteUntil(until uint64) error {
 	// [FirstIndex()-1, LastIndex()]
 */
 func (wal *WAL) Term(idx uint64) (uint64, error) {
-	first, err := wal.FirstIndex()
+	wal.Lock()
+	defer wal.Unlock()
+	first, err := wal.firstIndex()
 	if err != nil {
 		return 0, err
 	}
@@ -503,7 +542,10 @@ func (wal *WAL) Term(idx uint64) (uint64, error) {
 }
 
 func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (snap raftpb.Snapshot, err error) {
-	first, err := wal.FirstIndex()
+	wal.Lock()
+	defer wal.Unlock()
+
+	first, err := wal.firstIndex()
 	if err != nil {
 		return
 	}
@@ -543,4 +585,19 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 		return
 	}
 	return
+}
+
+//Interface of states machine
+//states machine and wal share the same cannyls storage
+func (wal *WAL) ApplyPut(p aspirapb.AspiraProposal, index uint64) error {
+	id := lump.FromU64(0, index)
+	dataPortion, err := wal.db.GetRecord(id)
+	if err != nil {
+		return err
+	}
+	return wal.db.WriteRecord(id, *dataPortion)
+}
+
+func (wal *WAL) ApplyPutWithOffset(p aspirapb.AspiraProposal, index uint64) error {
+	return nil
 }

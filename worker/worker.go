@@ -20,13 +20,17 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/dgraph-io/dgraph/x"
+	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 
 	"github.com/golang/glog"
@@ -34,7 +38,9 @@ import (
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
+	"github.com/thesues/cannyls-go/lump"
 	cannyls "github.com/thesues/cannyls-go/storage"
+	otrace "go.opencensus.io/trace"
 	"google.golang.org/grpc"
 )
 
@@ -185,6 +191,30 @@ func (as *AspiraServer) serveGRPC() (err error) {
 	return nil
 }
 
+var errInvalidProposal = errors.New("Invalid group proposal")
+
+func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
+	var p aspirapb.AspiraProposal
+	glog.Info("apply commit: data is %d", e.Size())
+	//leader's first commit
+	if len(e.Data) == 0 {
+		return p.AssociateKey, nil
+	}
+	utils.Check(p.Unmarshal(e.Data))
+	if len(p.AssociateKey) == 0 {
+		return p.AssociateKey, errInvalidProposal
+	}
+	switch p.ProposalType {
+	case aspirapb.AspiraProposal_Put:
+		as.store.ApplyPut(p, e.Index)
+	case aspirapb.AspiraProposal_PutWithOffset:
+		panic("to be implemented")
+	default:
+		panic("never happen")
+	}
+	return p.AssociateKey, nil
+}
+
 func (as *AspiraServer) Run() {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -209,35 +239,21 @@ func (as *AspiraServer) Run() {
 			if rd.MustSync {
 				n.Store.Sync()
 			}
-
 			for _, entry := range rd.CommittedEntries {
+				n.Applied.Begin(entry.Index)
 				switch {
 				case entry.Type == raftpb.EntryConfChange:
 					as.applyConfChange(entry)
-					/*
-						var cc raftpb.ConfChange
-						cc.Unmarshal(entry.Data)
-						newConf := n.Raft().ApplyConfChange(cc)
-						fmt.Printf("%+v\n", newConf)
-						n.SetConfState(newConf)
-					*/
-					//set membership
-					//glog.Infof("Done applying conf change at %#x", n.Id)
 				case entry.Type == raftpb.EntryNormal:
-
-					fmt.Printf("%+v COMMITED\n", entry)
-					/*
-						key, err := n.applyProposal(entry)
-						if err != nil {
-							glog.Errorf("While applying proposal: %v\n", err)
-						}
-						n.Proposals.Done(key, err)
-					*/
-
+					uniqKey, err := as.applyProposal(entry)
+					if err != nil {
+						glog.Errorf("While applying proposal: %v\n", err)
+					}
+					n.Proposals.Done(uniqKey, entry.Index, err)
 				default:
 					glog.Warningf("Unhandled entry: %+v\n", entry)
 				}
-
+				n.Applied.Done(entry.Index)
 			}
 
 			for i := range rd.Messages {
@@ -270,6 +286,76 @@ func (as *AspiraServer) AmLeader() bool {
 	return true
 }
 
+var errInternalRetry = errors.New("Retry Raft proposal internally")
+
+func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.AspiraProposal) error {
+	n := as.node
+	switch {
+	case n.Raft() == nil:
+		return errors.Errorf("Raft isn't initialized yet.")
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case !as.AmLeader():
+		// Do this check upfront. Don't do this inside propose for reasons explained below.
+		return errors.Errorf("Not a leader. Aborting proposal: %+v", proposal)
+	}
+
+	span := otrace.FromContext(ctx)
+	// Overwrite ctx, so we no longer enforce the timeouts or cancels from ctx.
+	ctx = otrace.NewContext(context.Background(), span)
+
+	stop := x.SpanTimer(span, "n.proposeAndWait")
+	defer stop()
+
+	propose := func(timeout time.Duration) error {
+		cctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+
+		ch := make(chan conn.ProposalResult, 1)
+		pctx := &conn.ProposalCtx{
+			ResultCh: ch,
+			// Don't use the original context, because that's not what we're passing to Raft.
+			Ctx: cctx,
+		}
+		n.Rand.Uint64()
+		uniqKey := n.UniqueKey()
+		utils.AssertTruef(n.Proposals.Store(uniqKey, pctx), "Found existing proposal with key: [%v]", uniqKey)
+		defer n.Proposals.Delete(uniqKey)
+		proposal.AssociateKey = uniqKey
+		span.Annotatef(nil, "Proposing with key: %s. Timeout: %v", uniqKey, timeout)
+
+		data, err := proposal.Marshal()
+		if err != nil {
+			return err
+		}
+		// Propose the change.
+		if err := n.Raft().Propose(cctx, data); err != nil {
+			span.Annotatef(nil, "Error while proposing via Raft: %v", err)
+			return errors.Wrapf(err, "While proposing")
+		}
+
+		// Wait for proposal to be applied or timeout.
+		select {
+		case result := <-ch:
+			// We arrived here by a call to n.props.Done().
+			return result.Err
+		case <-cctx.Done():
+			span.Annotatef(nil, "Internal context timeout %s. Will retry...", timeout)
+			return errInternalRetry
+		}
+	}
+	err := errInternalRetry
+	timeout := 4 * time.Second
+	for err == errInternalRetry {
+		err = propose(timeout)
+		timeout *= 2 // Exponential backoff
+		if timeout > time.Minute {
+			timeout = 32 * time.Second
+		}
+	}
+	return err
+}
+
 func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 
 	var cc raftpb.ConfChange
@@ -298,6 +384,64 @@ var (
 	join  = flag.String("join", "", "remote addr")
 	debug = flag.Bool("debug", false, "debug")
 )
+
+func (as *AspiraServer) ServeHTTP(stopper *utils.Stopper) {
+	r := gin.Default()
+	r.POST("/put/", func(c *gin.Context) {
+		readFile, header, err := c.Request.FormFile("file")
+		if err != nil {
+			c.String(400, err.Error())
+			return
+		}
+		if header.Size > int64(lump.LUMP_MAX_SIZE) {
+			c.String(405, "size too big")
+			return
+		}
+		buf := make([]byte, header.Size, header.Size)
+		_, err = io.ReadFull(readFile, buf)
+		if err != nil {
+			c.String(409, "read failed")
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var p aspirapb.AspiraProposal
+		p.Data = buf
+		err = as.proposeAndWait(ctx, &p)
+		if err != nil {
+			glog.Errorf(err.Error())
+			c.String(400, "TIMEOUT")
+			return
+		}
+
+	})
+
+	r.GET("/get/:id", func(c *gin.Context) {
+
+	})
+
+	stringID := fmt.Sprintf("%d", as.node.Id)
+	srv := &http.Server{
+		Addr:    ":808" + stringID,
+		Handler: r,
+	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			panic("http server crashed")
+		}
+	}()
+
+	select {
+	case <-stopper.ShouldStop():
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			panic("Server Shutdown failed")
+		}
+		return
+	}
+}
 
 func main() {
 	//1 => 127.0.0.1:3301
