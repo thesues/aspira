@@ -247,7 +247,7 @@ func (as *AspiraServer) Run() {
 			if rd.MustSync {
 				syncStart := time.Now()
 				n.Store.Sync()
-				fmt.Printf("sync time %+v", time.Since(syncStart))
+				fmt.Printf("sync time %+v\n", time.Since(syncStart))
 			}
 
 			fmt.Printf("save logs %+v\n", time.Since(start))
