@@ -17,12 +17,15 @@
 package raftwal
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/golang/glog"
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
+	"github.com/thesues/aspira/utils"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	cannyls "github.com/thesues/cannyls-go/storage"
@@ -30,6 +33,7 @@ import (
 
 type WAL struct {
 	db *cannyls.Storage
+	ab *block.AlignedBytes
 	sync.Mutex
 }
 
@@ -48,6 +52,7 @@ var (
 func Init(db *cannyls.Storage) *WAL {
 	wal := &WAL{
 		db: db,
+		ab: block.NewAlignedBytes(512, block.Min()),
 	}
 
 	snap, err := wal.Snapshot()
@@ -293,15 +298,6 @@ func (wal *WAL) lastIndex() (uint64, error) {
 	return ret, nil
 }
 
-/*
-Term
-Index
-Type
-Data
-index => {TERM, INDEX, TYPE, DATA}
-if TYPE is NORMAL split two.
-else save all
-*/
 func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 	if len(entries) == 0 {
 		return nil
@@ -329,18 +325,24 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 	}
 
 	var entryMeta aspirapb.EntryMeta
-	ab := block.NewAlignedBytes(512, block.Min())
 	for _, e := range entries {
 		entryMeta.Term = e.Term
 		entryMeta.Index = e.Index
 		switch e.Type {
 		case raftpb.EntryNormal:
 			if len(e.Data) != 0 {
-				//FIXME
-				entryMeta.EntryType = aspirapb.EntryMeta_Put
-				ab.Resize(uint32(len(e.Data)))
-				copy(ab.AsBytes(), e.Data)
-				wal.db.Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(ab))
+				var proposal aspirapb.AspiraProposal
+				proposal.Unmarshal(e.Data)
+				if proposal.ProposalType == aspirapb.AspiraProposal_Put {
+					entryMeta.EntryType = aspirapb.EntryMeta_Put
+					entryMeta.AssociateKey = proposal.AssociateKey
+					wal.ab.Resize(uint32(len(proposal.Data)))
+					copy(wal.ab.AsBytes(), proposal.Data)
+					wal.db.Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(wal.ab))
+				} else {
+					entryMeta.EntryType = aspirapb.EntryMeta_PutWithOffset
+					entryMeta.Data = e.Data
+				}
 			} else {
 				entryMeta.EntryType = aspirapb.EntryMeta_LeaderCommit
 				entryMeta.Data = e.Data
@@ -419,6 +421,8 @@ func (wal *WAL) PastLife() bool {
 //max range of [lo, hi) is [0, keyMask)
 //for debug, do not call this function
 func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
+	fmt.Printf("hard disk read %d,%d\n", lo, hi)
+
 	size := 0
 	err = wal.db.RangeIter(wal.EntryKey(lo), wal.EntryKey(hi), func(id lump.LumpId, data []byte) error {
 		var meta aspirapb.EntryMeta
@@ -427,6 +431,13 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 			return err
 		}
 		switch meta.EntryType {
+		case aspirapb.EntryMeta_PutWithOffset:
+			e.Type = raftpb.EntryNormal
+			extData, err := wal.db.Get(wal.ExtKey(id.U64() & keyMask))
+			if err != nil {
+				return err
+			}
+			e.Data = extData
 		case aspirapb.EntryMeta_Put:
 			//build data
 			e.Type = raftpb.EntryNormal
@@ -434,17 +445,25 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 			if err != nil {
 				return err
 			}
+			//restore the proposal data from EntryMeta
+			var proposal aspirapb.AspiraProposal
+			proposal.AssociateKey = meta.AssociateKey
+			proposal.Data = extData
+			data, err := proposal.Marshal()
+			utils.Check(err)
 			//if len(extData) > 0 {
-			e.Data = extData
+			e.Data = data
 			//}
 		case aspirapb.EntryMeta_LeaderCommit:
 			e.Type = raftpb.EntryNormal
 			e.Data = nil
-		default:
+		case aspirapb.EntryMeta_ConfChange:
 			e.Type = raftpb.EntryConfChange
 			//if len(meta.Data) > 0 {
 			e.Data = meta.Data
 			//}
+		default:
+			glog.Fatalf("unknow type ")
 		}
 		e.Term = meta.Term
 		e.Index = meta.Index
@@ -593,12 +612,11 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 func (wal *WAL) ApplyPut(p aspirapb.AspiraProposal, index uint64) error {
 	wal.Lock()
 	defer wal.Unlock()
-	id := lump.FromU64(0, index)
-	dataPortion, err := wal.db.GetRecord(id)
+	dataPortion, err := wal.db.GetRecord(wal.ExtKey(index))
 	if err != nil {
 		return err
 	}
-	return wal.db.WriteRecord(id, *dataPortion)
+	return wal.db.WriteRecord(lump.FromU64(0, index), *dataPortion)
 }
 
 func (wal *WAL) ApplyPutWithOffset(p aspirapb.AspiraProposal, index uint64) error {

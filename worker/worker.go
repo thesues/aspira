@@ -211,8 +211,9 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 	}
 	switch p.ProposalType {
 	case aspirapb.AspiraProposal_Put:
-		fmt.Printf("apply put %d\n", e.Index)
-		as.store.ApplyPut(p, e.Index)
+		if err := as.store.ApplyPut(p, e.Index); err != nil {
+			glog.Errorf("Applyfailed for %d: %+v", e.Index, err)
+		}
 	case aspirapb.AspiraProposal_PutWithOffset:
 		panic("to be implemented")
 	default:
@@ -240,11 +241,16 @@ func (as *AspiraServer) Run() {
 					}
 				}*/
 
+			start := time.Now()
 			n.SaveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
 
 			if rd.MustSync {
+				syncStart := time.Now()
 				n.Store.Sync()
+				fmt.Printf("sync time %+v", time.Since(syncStart))
 			}
+
+			fmt.Printf("save logs %+v\n", time.Since(start))
 
 			for _, entry := range rd.CommittedEntries {
 				n.Applied.Begin(entry.Index)
@@ -262,7 +268,7 @@ func (as *AspiraServer) Run() {
 				}
 				n.Applied.Done(entry.Index)
 			}
-			n.Store.Sync()
+			//n.Store.Sync()
 
 			for i := range rd.Messages {
 				//fmt.Printf("sending %+v", rd.Messages)
@@ -442,12 +448,14 @@ func (as *AspiraServer) ServeHTTP() {
 		defer cancel()
 		var p aspirapb.AspiraProposal
 		p.Data = buf
+		start := time.Now()
 		err = as.proposeAndWait(ctx, &p)
 		if err != nil {
 			glog.Errorf(err.Error())
 			c.String(400, "TIMEOUT")
 			return
 		}
+		fmt.Printf("time eslpated %+v\n", time.Since(start))
 	})
 
 	r.GET("/get/:id", func(c *gin.Context) {

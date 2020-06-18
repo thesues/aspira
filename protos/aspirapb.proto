@@ -57,10 +57,16 @@ message EntryMeta {
 			Put = 0;
 			LeaderCommit = 1;
 			ConfChange = 2;
+			PutWithOffset = 3;
 		}
 		Type EntryType = 3;
 		bytes      Data = 4;
+		string     associateKey=5;
 }
+
+//Type == Put ==> set associateKey, save ext
+//Type == PutWithOffset => ext save all the data
+//Type == LeaderCommit => ...
 
 
 /*
