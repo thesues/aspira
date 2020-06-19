@@ -63,7 +63,7 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 
 	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
-		if db, err = cannyls.CreateCannylsStorage(path, 10<<20, 0.1); err != nil {
+		if db, err = cannyls.CreateCannylsStorage(path, 8<<30, 0.2); err != nil {
 			return
 		}
 	} else {
@@ -241,16 +241,14 @@ func (as *AspiraServer) Run() {
 					}
 				}*/
 
-			start := time.Now()
 			n.SaveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
 
-			if rd.MustSync {
-				syncStart := time.Now()
-				n.Store.Sync()
-				fmt.Printf("sync time %+v\n", time.Since(syncStart))
+			if rd.MustSync && (!raft.IsEmptyHardState(rd.HardState) || len(rd.Entries) > 0) {
+				fmt.Printf("len of entires %d", len(rd.Entries))
+				//syncStart := time.Now()
+				//n.Store.Sync()
+				//fmt.Printf("sync time %+v\n", time.Since(syncStart))
 			}
-
-			fmt.Printf("save logs %+v\n", time.Since(start))
 
 			for _, entry := range rd.CommittedEntries {
 				n.Applied.Begin(entry.Index)
@@ -274,7 +272,6 @@ func (as *AspiraServer) Run() {
 				//fmt.Printf("sending %+v", rd.Messages)
 				as.node.Send(&rd.Messages[i])
 			}
-
 			n.Raft().Advance()
 		}
 	}
@@ -329,16 +326,16 @@ func (as *AspiraServer) getAndWait(ctx context.Context, index uint64) ([]byte, e
 	}
 }
 
-func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.AspiraProposal) error {
+func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.AspiraProposal) (uint64, error) {
 	n := as.node
 	switch {
 	case n.Raft() == nil:
-		return errors.Errorf("Raft isn't initialized yet.")
+		return 0, errors.Errorf("Raft isn't initialized yet.")
 	case ctx.Err() != nil:
-		return ctx.Err()
+		return 0, ctx.Err()
 	case !as.AmLeader():
 		// Do this check upfront. Don't do this inside propose for reasons explained below.
-		return errors.Errorf("Not a leader. Aborting proposal: %+v", proposal)
+		return 0, errors.Errorf("Not a leader. Aborting proposal: %+v", len(proposal.Data))
 	}
 
 	span := otrace.FromContext(ctx)
@@ -348,7 +345,7 @@ func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.A
 	stop := x.SpanTimer(span, "n.proposeAndWait")
 	defer stop()
 
-	propose := func(timeout time.Duration) error {
+	propose := func(timeout time.Duration) (uint64, error) {
 		cctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 
@@ -367,34 +364,35 @@ func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.A
 
 		data, err := proposal.Marshal()
 		if err != nil {
-			return err
+			return 0, err
 		}
 		// Propose the change.
 		if err := n.Raft().Propose(cctx, data); err != nil {
 			span.Annotatef(nil, "Error while proposing via Raft: %v", err)
-			return errors.Wrapf(err, "While proposing")
+			return 0, errors.Wrapf(err, "While proposing")
 		}
 
 		// Wait for proposal to be applied or timeout.
 		select {
 		case result := <-ch:
 			// We arrived here by a call to n.props.Done().
-			return result.Err
+			return result.Index, result.Err
 		case <-cctx.Done():
 			span.Annotatef(nil, "Internal context timeout %s. Will retry...", timeout)
-			return errInternalRetry
+			return 0, errInternalRetry
 		}
 	}
+	var index uint64
 	err := errInternalRetry
 	timeout := 4 * time.Second
 	for err == errInternalRetry {
-		err = propose(timeout)
+		index, err = propose(timeout)
 		timeout *= 2 // Exponential backoff
 		if timeout > time.Minute {
 			timeout = 32 * time.Second
 		}
 	}
-	return err
+	return index, err
 }
 
 func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
@@ -449,13 +447,14 @@ func (as *AspiraServer) ServeHTTP() {
 		var p aspirapb.AspiraProposal
 		p.Data = buf
 		start := time.Now()
-		err = as.proposeAndWait(ctx, &p)
+		index, err := as.proposeAndWait(ctx, &p)
 		if err != nil {
 			glog.Errorf(err.Error())
 			c.String(400, "TIMEOUT")
 			return
 		}
 		fmt.Printf("time eslpated %+v\n", time.Since(start))
+		c.String(200, "wrote to %d", index)
 	})
 
 	r.GET("/get/:id", func(c *gin.Context) {

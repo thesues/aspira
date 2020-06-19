@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
 	"github.com/thesues/cannyls-go/lump"
@@ -105,8 +105,10 @@ func main() {
 	last, err := wal.LastIndex()
 	fmt.Printf("LastIndex  : %d\n", last)
 
-	es, err := wal.AllEntries(0, raftwal.MaxKey, math.MaxUint64)
-
+	es, err := wal.AllEntries(0, raftwal.MaxKey, 10<<20)
+	if err != nil {
+		panic(err.Error())
+	}
 	for i := range es {
 		switch es[i].Type {
 		case raftpb.EntryConfChange:
@@ -114,7 +116,9 @@ func main() {
 			cc.Unmarshal(es[i].Data)
 			fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, cc)
 		default:
-			fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, es[i])
+			var p aspirapb.AspiraProposal
+			p.Unmarshal(es[i].Data)
+			fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, p.ProposalType)
 		}
 
 	}

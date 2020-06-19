@@ -67,7 +67,7 @@ func Init(db *cannyls.Storage) *WAL {
 	_, err = wal.FirstIndex()
 	if err == errNotFound {
 		ents := make([]raftpb.Entry, 1)
-		ents[0].Type = raftpb.EntryConfChange
+		ents[0].Type = raftpb.EntryNormal
 		wal.reset(ents)
 	}
 
@@ -324,8 +324,8 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 		}
 	}
 
-	var entryMeta aspirapb.EntryMeta
 	for _, e := range entries {
+		var entryMeta aspirapb.EntryMeta
 		entryMeta.Term = e.Term
 		entryMeta.Index = e.Index
 		switch e.Type {
@@ -338,7 +338,11 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 					entryMeta.AssociateKey = proposal.AssociateKey
 					wal.ab.Resize(uint32(len(proposal.Data)))
 					copy(wal.ab.AsBytes(), proposal.Data)
-					wal.db.Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(wal.ab))
+					fmt.Printf("Wrote data %x\n", wal.ExtKey(entryMeta.Index).U64())
+					_, err := wal.db.Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(wal.ab))
+					if err != nil {
+						return err
+					}
 				} else {
 					entryMeta.EntryType = aspirapb.EntryMeta_PutWithOffset
 					entryMeta.Data = e.Data
@@ -421,7 +425,6 @@ func (wal *WAL) PastLife() bool {
 //max range of [lo, hi) is [0, keyMask)
 //for debug, do not call this function
 func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
-	fmt.Printf("hard disk read %d,%d\n", lo, hi)
 
 	size := 0
 	err = wal.db.RangeIter(wal.EntryKey(lo), wal.EntryKey(hi), func(id lump.LumpId, data []byte) error {
