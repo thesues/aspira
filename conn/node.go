@@ -91,7 +91,7 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 			HeartbeatTick:   1,  // 100ms if we call Tick() every 100 ms.
 			Storage:         store,
 			MaxInflightMsgs: 32,
-			MaxSizePerMsg:   256 << 20, // 256 MB should allow more batching.
+			MaxSizePerMsg:   512 << 20, // 512 MB should allow more batching.
 			//MaxCommittedSizePerReady: 64 << 20,  // Avoid loading entire Raft log into memory.
 			// We don't need lease based reads. They cause issues because they
 			// require CheckQuorum to be true, and that causes a lot of issues

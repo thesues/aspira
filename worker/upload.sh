@@ -1,3 +1,3 @@
-curl -v -X POST http://localhost:8081/put/ \
-  -F "file=@$1" \
+curl -v -X POST http://localhost:808$1/put/ \
+  -F "file=@$2" \
   -H "Content-Type: multipart/form-data"

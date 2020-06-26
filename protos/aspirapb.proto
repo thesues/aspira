@@ -57,7 +57,7 @@ message EntryMeta {
 			Put = 0;
 			LeaderCommit = 1;
 			ConfChange = 2;
-			PutWithOffset = 3;
+			PutSmall = 3;
 		}
 		Type EntryType = 3;
 		bytes      Data = 4;
@@ -86,6 +86,7 @@ message AspiraProposal {
 	enum Type {
 		Put = 0;
 		PutWithOffset = 1;
+		PutSmall = 2;
 	}
 	Type ProposalType = 1;
 	uint64 key = 2;

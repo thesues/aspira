@@ -34,12 +34,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 
+	"contrib.go.opencensus.io/exporter/jaeger"
 	"github.com/golang/glog"
 	"github.com/thesues/aspira/conn"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
 	cannyls "github.com/thesues/cannyls-go/storage"
+	"go.opencensus.io/trace"
 	otrace "go.opencensus.io/trace"
 	"google.golang.org/grpc"
 )
@@ -211,7 +213,11 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 	}
 	switch p.ProposalType {
 	case aspirapb.AspiraProposal_Put:
-		if err := as.store.ApplyPut(p, e.Index); err != nil {
+		if err := as.store.ApplyPut(e.Index); err != nil {
+			glog.Errorf("Applyfailed for %d: %+v", e.Index, err)
+		}
+	case aspirapb.AspiraProposal_PutSmall:
+		if err := as.store.ApplyPutSmall(e.Index, p.Data); err != nil {
 			glog.Errorf("Applyfailed for %d: %+v", e.Index, err)
 		}
 	case aspirapb.AspiraProposal_PutWithOffset:
@@ -223,6 +229,8 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 }
 
 func (as *AspiraServer) Run() {
+	var leader bool
+	ctx := context.Background()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	n := as.node
@@ -231,24 +239,26 @@ func (as *AspiraServer) Run() {
 		case <-ticker.C:
 			n.Raft().Tick()
 		case rd := <-n.Raft().Ready():
-			/*
-				if rd.SoftState != nil {
-					leader := rd.RaftState == raft.StateLeader
-					if leader {
-						fmt.Printf("I am leader...\n")
-					} else {
-						fmt.Printf("I am not leader...\n")
-					}
-				}*/
+			_, span := otrace.StartSpan(ctx, "Ready.Loop", otrace.WithSampler(otrace.ProbabilitySampler(0.001)))
 
+			span.Annotatef(nil, "Pushed %d readstates", len(rd.ReadStates))
+			if rd.SoftState != nil {
+				leader = rd.RaftState == raft.StateLeader
+			}
+
+			if leader {
+				for i := range rd.Messages {
+					as.node.Send(&rd.Messages[i])
+				}
+			}
 			n.SaveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
 
+			span.Annotatef(nil, "Saved to storage")
 			if rd.MustSync && (!raft.IsEmptyHardState(rd.HardState) || len(rd.Entries) > 0) {
-				fmt.Printf("len of entires %d", len(rd.Entries))
-				//syncStart := time.Now()
-				//n.Store.Sync()
-				//fmt.Printf("sync time %+v\n", time.Since(syncStart))
+				fmt.Printf("len of entires %d\n", len(rd.Entries))
+				n.Store.Sync()
 			}
+			span.Annotatef(nil, "Sync files done")
 
 			for _, entry := range rd.CommittedEntries {
 				n.Applied.Begin(entry.Index)
@@ -266,13 +276,19 @@ func (as *AspiraServer) Run() {
 				}
 				n.Applied.Done(entry.Index)
 			}
-			//n.Store.Sync()
+			span.Annotatef(nil, "Applied %d CommittedEntries", len(rd.CommittedEntries))
 
-			for i := range rd.Messages {
-				//fmt.Printf("sending %+v", rd.Messages)
-				as.node.Send(&rd.Messages[i])
+			if !leader {
+				for i := range rd.Messages {
+					//fmt.Printf("sending %+v", rd.Messages)
+					as.node.Send(&rd.Messages[i])
+				}
 			}
+			span.Annotate(nil, "Sent messages")
+
 			n.Raft().Advance()
+			span.Annotate(nil, "Advanced Raft")
+			span.End()
 		}
 	}
 }
@@ -446,6 +462,11 @@ func (as *AspiraServer) ServeHTTP() {
 		defer cancel()
 		var p aspirapb.AspiraProposal
 		p.Data = buf
+		if len(buf) < (32 << 10) {
+			p.ProposalType = aspirapb.AspiraProposal_PutSmall
+		} else {
+			p.ProposalType = aspirapb.AspiraProposal_Put
+		}
 		start := time.Now()
 		index, err := as.proposeAndWait(ctx, &p)
 		if err != nil {
@@ -511,6 +532,13 @@ func main() {
 	//2 => 127.0.0.1:3302
 
 	flag.Parse()
+
+	je, _ := jaeger.NewExporter(jaeger.Options{
+		Endpoint:    "http://localhost:14268",
+		ServiceName: "aspira",
+	})
+	otrace.RegisterExporter(je)
+	otrace.ApplyConfig(otrace.Config{DefaultSampler: trace.AlwaysSample()})
 
 	stringId := fmt.Sprintf("%d", *id)
 	x, _ := NewAspiraServer(*id, "127.0.0.1:330"+stringId, stringId+".lusf")
