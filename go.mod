@@ -5,13 +5,13 @@ go 1.13
 require (
 	contrib.go.opencensus.io/exporter/jaeger v0.1.0
 	github.com/coreos/etcd v3.3.18+incompatible
+	github.com/dgraph-io/badger v1.6.1
 	github.com/dgraph-io/dgraph v1.2.5
 	github.com/gin-gonic/gin v1.6.2
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/protobuf v1.4.1
 	github.com/golang/snappy v0.0.1
 	github.com/hashicorp/golang-lru v0.5.0
-	github.com/kr/pretty v0.2.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.6.0
 	github.com/thesues/cannyls-go v0.2.1-0.20200624193833-e1cd502e8e44

@@ -30,6 +30,7 @@ message RaftContext {
 }
 
 
+//save MembershipState into 
 message MembershipState {
 	map<uint64,string> nodes = 1;
 }
@@ -100,4 +101,10 @@ service Raft {
 	rpc Heartbeat (Payload)        returns (stream Payload) {}
 	rpc RaftMessage (stream RaftBatch) returns (Payload) {}
 	rpc JoinCluster (RaftContext)      returns (Payload) {}
+}
+
+
+service Aspira {
+	rpc StreamSnapshot (RaftContext)    returns (stream Payload) {}
+	//TODO grpc interface for put/Get
 }

@@ -80,12 +80,14 @@ func main() {
 	if err == nil {
 		var snap raftpb.Snapshot
 		utils.Check(snap.Unmarshal(data))
-		fmt.Printf("%+v\n", snap)
+		fmt.Printf("%+v\n", snap.Metadata)
+		var memberState aspirapb.MembershipState
+		memberState.Unmarshal(snap.Data)
+		fmt.Printf("memberstate %+v\n", memberState)
 	} else {
 		fmt.Printf("\n")
 	}
 	//
-
 	fmt.Printf("HARDSTAT : ")
 	data, err = store.Get(hardStateKey())
 	if err == nil {
@@ -105,7 +107,7 @@ func main() {
 	last, err := wal.LastIndex()
 	fmt.Printf("LastIndex  : %d\n", last)
 
-	es, err := wal.AllEntries(0, raftwal.MaxKey, 10<<20)
+	es, err := wal.AllEntries(first, raftwal.MaxKey, 10<<20)
 	if err != nil {
 		panic(err.Error())
 	}

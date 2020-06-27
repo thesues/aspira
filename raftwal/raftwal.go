@@ -196,12 +196,6 @@ func (wal *WAL) MemberShip() aspirapb.MemberShip {
 */
 
 func (wal *WAL) Snapshot() (snap raftpb.Snapshot, err error) {
-
-	return wal.snapshot()
-}
-
-func (wal *WAL) snapshot() (snap raftpb.Snapshot, err error) {
-
 	data, err := wal.db.Get(wal.snapshotKey())
 	if err != nil {
 		return snap, nil //empty snapshot
@@ -266,11 +260,7 @@ func (wal *WAL) EntryKey(idx uint64) lump.LumpId {
 }
 
 func (wal *WAL) FirstIndex() (uint64, error) {
-
-	return wal.firstIndex()
-}
-func (wal *WAL) firstIndex() (uint64, error) {
-	snap, _ := wal.snapshot() //will never return error for now
+	snap, _ := wal.Snapshot() //will never return error for now
 	if !raft.IsEmptySnap(snap) {
 		return snap.Metadata.Index + 1, nil
 	}
@@ -286,10 +276,6 @@ func (wal *WAL) firstIndex() (uint64, error) {
 }
 
 func (wal *WAL) LastIndex() (uint64, error) {
-
-	return wal.lastIndex()
-}
-func (wal *WAL) lastIndex() (uint64, error) {
 	id, ok := wal.db.MaxId()
 	if !ok || id.U64() < MinimalKey {
 		return 0, errNotFound
@@ -304,7 +290,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 	}
 	var last uint64 = 0
 	if check {
-		firstIndex, err := wal.firstIndex() //atomic get
+		firstIndex, err := wal.FirstIndex() //atomic get
 		if err != nil {
 			return err
 		}
@@ -318,7 +304,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 			entries = entries[firstIndex-entries[0].Index:]
 		}
 
-		last, err = wal.lastIndex() //atomic get
+		last, err = wal.LastIndex() //atomic get
 		if err != nil {
 			return err
 		}
@@ -404,13 +390,13 @@ func (wal *WAL) InitialState() (hs raftpb.HardState, cs raftpb.ConfState, err er
 	if err != nil {
 		return
 	}
-	snap, _ := wal.snapshot()
+	snap, _ := wal.Snapshot()
 	return hs, snap.Metadata.ConfState, nil
 }
 
 func (wal *WAL) PastLife() bool {
 
-	snap, _ := wal.snapshot()
+	snap, _ := wal.Snapshot()
 	if !raft.IsEmptySnap(snap) {
 		return true
 	}
@@ -434,6 +420,9 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 			size += e.Size()
 		} else {
 			data, err := wal.db.Get(id)
+			if err != nil {
+				glog.Fatalf("failed to get id %+v, err is %+v", id, data)
+			}
 			var meta aspirapb.EntryMeta
 			var e raftpb.Entry
 			if err = meta.Unmarshal(data); err != nil {
@@ -442,11 +431,7 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 			switch meta.EntryType {
 			case aspirapb.EntryMeta_PutSmall:
 				e.Type = raftpb.EntryNormal
-				data, err := wal.db.Get(wal.EntryKey(id.U64() & keyMask))
-				if err != nil {
-					glog.Fatalf("Get data failed %+v", err)
-				}
-				e.Data = data
+				e.Data = meta.Data
 			case aspirapb.EntryMeta_Put:
 				//build data
 				e.Type = raftpb.EntryNormal
@@ -473,7 +458,7 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 				e.Data = meta.Data
 				//}
 			default:
-				glog.Fatalf("unknow type ")
+				glog.Fatalf("unknow type read from %+v", id)
 			}
 			e.Term = meta.Term
 			e.Index = meta.Index
@@ -496,7 +481,8 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 
 func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 
-	first, err := wal.firstIndex()
+	fmt.Printf("all entries %d=>%d\n", lo, hi)
+	first, err := wal.FirstIndex()
 	if err != nil {
 		return es, err
 	}
@@ -504,7 +490,7 @@ func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 		return nil, raft.ErrCompacted
 	}
 
-	last, err := wal.lastIndex()
+	last, err := wal.LastIndex()
 	if err != nil {
 		return es, err
 
@@ -531,7 +517,7 @@ func (wal *WAL) deleteUntil(until uint64) error {
 */
 func (wal *WAL) Term(idx uint64) (uint64, error) {
 
-	first, err := wal.firstIndex()
+	first, err := wal.FirstIndex()
 	if err != nil {
 		return 0, err
 	}
@@ -556,7 +542,7 @@ func (wal *WAL) Term(idx uint64) (uint64, error) {
 
 func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (snap raftpb.Snapshot, err error) {
 
-	first, err := wal.firstIndex()
+	first, err := wal.FirstIndex()
 	if err != nil {
 		return
 	}
@@ -592,6 +578,7 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 	if _, err = wal.db.PutEmbed(wal.EntryKey(e.Index), data); err != nil {
 		return
 	}
+	wal.db.Sync()
 	if err = wal.deleteUntil(snap.Metadata.Index); err != nil {
 		return
 	}
@@ -599,7 +586,6 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 }
 
 func (wal *WAL) ApplyPut(index uint64) error {
-
 	dataPortion, err := wal.db.GetRecord(wal.ExtKey(index))
 	if err != nil {
 		return err

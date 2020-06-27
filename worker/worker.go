@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package main
+package worker
 
 import (
 	"context"
@@ -46,6 +46,10 @@ import (
 	"google.golang.org/grpc"
 )
 
+const (
+	SmallKeySize = 32 << 10
+)
+
 type AspiraServer struct {
 	node       *conn.Node
 	raftServer *conn.RaftServer //internal comms
@@ -53,10 +57,7 @@ type AspiraServer struct {
 	store      *raftwal.WAL
 	addr       string
 	stopper    *utils.Stopper
-	state      aspirapb.MembershipState
-	//applyCh
-	//proposeCh
-	//getCh
+	state      *aspirapb.MembershipState
 }
 
 func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err error) {
@@ -84,9 +85,7 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 		addr:       addr,
 		stopper:    utils.NewStopper(),
 		store:      store,
-		state: aspirapb.MembershipState{
-			Nodes: make(map[uint64]string),
-		},
+		state:      &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
 	}
 	return as, nil
 }
@@ -96,35 +95,23 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) 
 		return
 	}
 
-	if *debug {
-		fmt.Printf("DEBUG\n")
-		rpeers := make([]raft.Peer, 3)
-		var i uint64
-		for i = 1; i <= 3; i++ {
-			rpeers[i-1] = raft.Peer{ID: i}
-		}
-		for i = 1; i <= 3; i++ {
-			as.node.Connect(i, "127.0.0.1:330"+fmt.Sprintf("%d", i))
-		}
-		as.node.SetRaft(raft.StartNode(as.node.Cfg, rpeers))
-		as.stopper.RunWorker(func() {
-			as.node.BatchAndSendMessages()
-		})
-		as.Run()
-		return
-	}
-
 	restart := as.store.PastLife()
 	if restart {
 		snap, err := as.store.Snapshot()
 		utils.Check(err)
 		fmt.Printf("RESTART\n")
-		as.node.SetConfState(&snap.Metadata.ConfState) //for future snapshot
-		//if we have snapshot, we need explict Connect to remote
-		/*
-			for i := 1; i <= 3; i++ {
-				as.node.Connect(uint64(i), "127.0.0.1:330"+fmt.Sprintf("%d", i))
-			}*/
+
+		if !raft.IsEmptySnap(snap) {
+			as.node.SetConfState(&snap.Metadata.ConfState) //for future snapshot
+
+			var state aspirapb.MembershipState
+			utils.Check(state.Unmarshal(snap.Data))
+			as.state = &state
+			//as.nextRaftId = util.Max(as.nextRaftId, state.MaxRaftId+1)
+			for _, id := range snap.Metadata.ConfState.Nodes {
+				as.node.Connect(id, state.Nodes[id])
+			}
+		}
 		as.node.SetRaft(raft.RestartNode(as.node.Cfg))
 
 	} else if len(clusterAddr) == 0 {
@@ -172,6 +159,10 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) 
 	})
 
 	as.stopper.RunWorker(func() {
+		as.snapshotPeriodically()
+	})
+
+	as.stopper.RunWorker(func() {
 		as.ServeHTTP()
 	})
 
@@ -187,6 +178,7 @@ func (as *AspiraServer) serveGRPC() (err error) {
 	)
 
 	aspirapb.RegisterRaftServer(s, as.raftServer)
+	aspirapb.RegisterAspiraServer(s, as)
 	listener, err := net.Listen("tcp", as.addr)
 	if err != nil {
 		return err
@@ -202,7 +194,7 @@ var errInvalidProposal = errors.New("Invalid group proposal")
 
 func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 	var p aspirapb.AspiraProposal
-	glog.Info("apply commit: data is %d", e.Size())
+	glog.Infof("apply commit %d: data is %d", e.Index, e.Size())
 	//leader's first commit
 	if len(e.Data) == 0 {
 		return p.AssociateKey, nil
@@ -223,7 +215,7 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 	case aspirapb.AspiraProposal_PutWithOffset:
 		panic("to be implemented")
 	default:
-		panic("never happen")
+		glog.Fatalf("unkonw type %+v", p.ProposalType)
 	}
 	return p.AssociateKey, nil
 }
@@ -251,6 +243,18 @@ func (as *AspiraServer) Run() {
 					as.node.Send(&rd.Messages[i])
 				}
 			}
+
+			if !raft.IsEmptySnap(rd.Snapshot) {
+				glog.Warningf("I got snapshot %+v", rd.Snapshot.Metadata)
+				err := as.receiveSnapshot(rd.Snapshot)
+				if err != nil {
+					glog.Fatalf("can not receive remote snapshot")
+				}
+				glog.Infof("---> SNAPSHOT: %+v. DONE.\n", rd.Snapshot)
+
+				//open lusf file
+			}
+
 			n.SaveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
 
 			span.Annotatef(nil, "Saved to storage")
@@ -293,14 +297,35 @@ func (as *AspiraServer) Run() {
 	}
 }
 
-/*
-func (as *AspiraServer) trySnapshot() {
+func (as *AspiraServer) snapshotPeriodically() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			as.trySnapshot(10)
+		case <-as.stopper.ShouldStop():
+			return
+		}
+	}
+}
+
+func (as *AspiraServer) trySnapshot(skip uint64) {
+	glog.Infof("try snapshot")
+
+	existing, err := as.node.Store.Snapshot()
+	x.Checkf(err, "Unable to get existing snapshot")
+	si := existing.Metadata.Index
+	doneUntil := as.node.Applied.DoneUntil()
+
+	if doneUntil < si+skip {
+		return
+	}
 	data, err := as.state.Marshal()
 	utils.Check(err)
-
-	as.store.CreateSnapshot()
+	glog.Infof("Writing snapshot at index:%d\n", doneUntil-skip/2)
+	as.store.CreateSnapshot(doneUntil-skip/2, as.node.ConfState(), data)
 }
-*/
 
 func (as *AspiraServer) AmLeader() bool {
 	if as.node.Raft() == nil {
@@ -357,9 +382,6 @@ func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.A
 	span := otrace.FromContext(ctx)
 	// Overwrite ctx, so we no longer enforce the timeouts or cancels from ctx.
 	ctx = otrace.NewContext(context.Background(), span)
-
-	stop := x.SpanTimer(span, "n.proposeAndWait")
-	defer stop()
 
 	propose := func(timeout time.Duration) (uint64, error) {
 		cctx, cancel := context.WithTimeout(ctx, timeout)
@@ -462,7 +484,7 @@ func (as *AspiraServer) ServeHTTP() {
 		defer cancel()
 		var p aspirapb.AspiraProposal
 		p.Data = buf
-		if len(buf) < (32 << 10) {
+		if len(buf) < SmallKeySize {
 			p.ProposalType = aspirapb.AspiraProposal_PutSmall
 		} else {
 			p.ProposalType = aspirapb.AspiraProposal_Put
@@ -544,5 +566,51 @@ func main() {
 	x, _ := NewAspiraServer(*id, "127.0.0.1:330"+stringId, stringId+".lusf")
 
 	x.InitAndStart(*id, *join)
+
+}
+
+func (as *AspiraServer) receiveSnapshot(snap raftpb.Snapshot) error {
+	//close and delete current store
+	var memberStat aspirapb.MembershipState
+	utils.Check(memberStat.Unmarshal(snap.Data))
+	for _, remotePeer := range snap.Metadata.ConfState.Nodes {
+		addr := memberStat.Nodes[remotePeer]
+		glog.V(2).Infof("Snapshot.RaftContext.Addr: %q", addr)
+		//download lusf file
+		err := errors.Errorf("asdf")
+		if err != nil {
+			//if leader send the snapshot to us, we must have a connection to leader as well
+			continue
+		}
+
+	}
+	return errors.Errorf("failed to receiveSnapshot")
+}
+
+func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) error {
+	conn := pl.Get()
+	c := aspirapb.NewAspiraClient(conn)
+	stream, err := c.StreamSnapshot(context.Background(), as.node.RaftContext)
+	if err != nil {
+		return err
+	}
+
+	file, err := os.OpenFile("backup.lusf", os.O_CREATE|os.O_RDWR, 0644)
+
+	defer file.Close()
+	glog.Infof("Start to receive data")
+	for {
+		payload, err := stream.Recv()
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if len(payload.Data) > 0 {
+			file.Write(payload.Data)
+		} else {
+			break
+		}
+	}
+	glog.Infof("End to receive data")
+	return nil
 
 }
