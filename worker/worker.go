@@ -178,7 +178,7 @@ func (as *AspiraServer) serveGRPC() (err error) {
 	)
 
 	aspirapb.RegisterRaftServer(s, as.raftServer)
-	aspirapb.RegisterAspiraServer(s, as)
+	aspirapb.RegisterAspiraGRPCServer(s, as)
 	listener, err := net.Listen("tcp", as.addr)
 	if err != nil {
 		return err
@@ -589,7 +589,7 @@ func (as *AspiraServer) receiveSnapshot(snap raftpb.Snapshot) error {
 
 func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) error {
 	conn := pl.Get()
-	c := aspirapb.NewAspiraClient(conn)
+	c := aspirapb.NewAspiraGRPCClient(conn)
 	stream, err := c.StreamSnapshot(context.Background(), as.node.RaftContext)
 	if err != nil {
 		return err
