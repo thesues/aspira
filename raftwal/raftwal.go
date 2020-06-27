@@ -140,6 +140,10 @@ func (wal *WAL) Sync() {
 	wal.db.Sync()
 }
 
+func (wal *WAL) Flush() {
+	wal.db.Flush()
+}
+
 func (wal *WAL) HardState() (raftpb.HardState, error) {
 
 	return wal.hardState()
@@ -329,9 +333,9 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 					if err != nil {
 						return err
 					}
-					//aspirapb.AspiraProposal_PutSmall && aspirapb.AspiraProposal_PutOffset
+					//aspirapb.AspiraProposal_PutOffset
 				} else {
-					entryMeta.EntryType = aspirapb.EntryMeta_PutSmall
+					entryMeta.EntryType = aspirapb.EntryMeta_PutWithOffset
 					entryMeta.Data = e.Data
 				}
 			} else {
@@ -429,7 +433,7 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 				glog.Fatalf("Unmarshal data failed %+v", err)
 			}
 			switch meta.EntryType {
-			case aspirapb.EntryMeta_PutSmall:
+			case aspirapb.EntryMeta_PutWithOffset:
 				e.Type = raftpb.EntryNormal
 				e.Data = meta.Data
 			case aspirapb.EntryMeta_Put:
@@ -591,12 +595,6 @@ func (wal *WAL) ApplyPut(index uint64) error {
 		return err
 	}
 	return wal.db.WriteRecord(lump.FromU64(0, index), *dataPortion)
-}
-
-func (wal *WAL) ApplyPutSmall(index uint64, data []byte) error {
-
-	_, err := wal.db.PutEmbed(lump.FromU64(0, index), data)
-	return err
 }
 
 func (wal *WAL) ApplyPutWithOffset(p aspirapb.AspiraProposal, index uint64) error {

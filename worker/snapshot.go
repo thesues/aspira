@@ -1,4 +1,4 @@
-package worker
+package main
 
 import (
 	"github.com/thesues/aspira/protos/aspirapb"

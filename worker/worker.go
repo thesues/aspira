@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package worker
+package main
 
 import (
 	"context"
@@ -208,10 +208,6 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 		if err := as.store.ApplyPut(e.Index); err != nil {
 			glog.Errorf("Applyfailed for %d: %+v", e.Index, err)
 		}
-	case aspirapb.AspiraProposal_PutSmall:
-		if err := as.store.ApplyPutSmall(e.Index, p.Data); err != nil {
-			glog.Errorf("Applyfailed for %d: %+v", e.Index, err)
-		}
 	case aspirapb.AspiraProposal_PutWithOffset:
 		panic("to be implemented")
 	default:
@@ -260,7 +256,7 @@ func (as *AspiraServer) Run() {
 			span.Annotatef(nil, "Saved to storage")
 			if rd.MustSync && (!raft.IsEmptyHardState(rd.HardState) || len(rd.Entries) > 0) {
 				fmt.Printf("len of entires %d\n", len(rd.Entries))
-				n.Store.Sync()
+				n.Store.Flush()
 			}
 			span.Annotatef(nil, "Sync files done")
 
@@ -484,11 +480,9 @@ func (as *AspiraServer) ServeHTTP() {
 		defer cancel()
 		var p aspirapb.AspiraProposal
 		p.Data = buf
-		if len(buf) < SmallKeySize {
-			p.ProposalType = aspirapb.AspiraProposal_PutSmall
-		} else {
-			p.ProposalType = aspirapb.AspiraProposal_Put
-		}
+
+		p.ProposalType = aspirapb.AspiraProposal_Put
+
 		start := time.Now()
 		index, err := as.proposeAndWait(ctx, &p)
 		if err != nil {

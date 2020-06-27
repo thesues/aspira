@@ -14,7 +14,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.6.0
-	github.com/thesues/cannyls-go v0.2.1-0.20200624193833-e1cd502e8e44
+	github.com/thesues/cannyls-go v0.2.1-0.20200627064127-96382ad22fbe
 	github.com/twinj/uuid v1.0.0 // indirect
 	go.opencensus.io v0.22.3
 	golang.org/x/net v0.0.0-20200528225125-3c3fba18258b
