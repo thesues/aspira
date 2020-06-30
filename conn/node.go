@@ -146,17 +146,21 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 }
 
 // ReportRaftComms periodically prints the state of the node (heartbeats in and out).
-func (n *Node) ReportRaftComms() {
+func (n *Node) ReportRaftComms(stopper *utils.Stopper) {
 	if !glog.V(3) {
 		return
 	}
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
-
-	for range ticker.C {
-		out := atomic.SwapInt64(&n.heartbeatsOut, 0)
-		in := atomic.SwapInt64(&n.heartbeatsIn, 0)
-		glog.Infof("RaftComm: [%#x] Heartbeats out: %d, in: %d", n.Id, out, in)
+	for {
+		select {
+		case <-stopper.ShouldStop():
+			return
+		case <-ticker.C:
+			out := atomic.SwapInt64(&n.heartbeatsOut, 0)
+			in := atomic.SwapInt64(&n.heartbeatsIn, 0)
+			glog.Infof("RaftComm: [%#x] Heartbeats out: %d, in: %d", n.Id, out, in)
+		}
 	}
 }
 
@@ -245,16 +249,20 @@ func (n *Node) Send(msg *raftpb.Message) {
 		panic("")
 	}
 	//x.Check(err)
-
 	if glog.V(2) {
 		switch msg.Type {
+
 		case raftpb.MsgHeartbeat, raftpb.MsgHeartbeatResp:
 			atomic.AddInt64(&n.heartbeatsOut, 1)
-		case raftpb.MsgReadIndex, raftpb.MsgReadIndexResp:
-		case raftpb.MsgApp, raftpb.MsgAppResp:
-		case raftpb.MsgProp:
+			/*
+				case raftpb.MsgReadIndex, raftpb.MsgReadIndexResp:
+				case raftpb.MsgApp, raftpb.MsgAppResp:
+				case raftpb.MsgProp:
+			*/
 		default:
+			//if msg.To == 3 || msg.From == 3 {
 			glog.Infof("RaftComm: [%#x] Sending message of type %s to %#x", msg.From, msg.Type, msg.To)
+			//}
 		}
 	}
 	// As long as leadership is stable, any attempted Propose() calls should be reflected in the
@@ -344,68 +352,71 @@ type stream struct {
 	alive int32
 }
 
-func (n *Node) Stop() {
-	close(n.messages)
-}
-
 // BatchAndSendMessages sends messages in batches.
-func (n *Node) BatchAndSendMessages() {
+func (n *Node) BatchAndSendMessages(stopper *utils.Stopper) {
 	batches := make(map[uint64]*bytes.Buffer)
 	streams := make(map[uint64]*stream)
+	defer func() {
+		glog.Info("BatchAndSendMessags return")
+	}()
 
 	for {
-		totalSize := 0
-		sm := <-n.messages
-	slurp_loop:
-		for {
-			var buf *bytes.Buffer
-			if b, ok := batches[sm.to]; !ok {
-				buf = new(bytes.Buffer)
-				batches[sm.to] = buf
-			} else {
-				buf = b
-			}
-			totalSize += 4 + len(sm.data)
-			utils.Check(binary.Write(buf, binary.LittleEndian, uint32(len(sm.data))))
-
-			_, err := buf.Write(sm.data)
-			utils.Check(err)
-
-			if totalSize > messageBatchSoftLimit {
-				// We limit the batch size, but we aren't pushing back on
-				// n.messages, because the loop below spawns a goroutine
-				// to do its dirty work.  This is good because right now
-				// (*node).send fails(!) if the channel is full.
-				break
-			}
-
-			select {
-			case sm = <-n.messages:
-			default:
-				break slurp_loop
-			}
-		}
-
-		for to, buf := range batches {
-			if buf.Len() == 0 {
-				continue
-			}
-			s, ok := streams[to]
-			if !ok || atomic.LoadInt32(&s.alive) <= 0 {
-				s = &stream{
-					msgCh: make(chan []byte, 100),
-					alive: 1,
+		select {
+		case <-stopper.ShouldStop():
+			return
+		case sm := <-n.messages:
+			totalSize := 0
+		slurp_loop:
+			for {
+				var buf *bytes.Buffer
+				if b, ok := batches[sm.to]; !ok {
+					buf = new(bytes.Buffer)
+					batches[sm.to] = buf
+				} else {
+					buf = b
 				}
-				go n.streamMessages(to, s)
-				streams[to] = s
-			}
-			data := make([]byte, buf.Len())
-			copy(data, buf.Bytes())
-			buf.Reset()
+				totalSize += 4 + len(sm.data)
+				utils.Check(binary.Write(buf, binary.LittleEndian, uint32(len(sm.data))))
 
-			select {
-			case s.msgCh <- data:
-			default:
+				_, err := buf.Write(sm.data)
+				utils.Check(err)
+
+				if totalSize > messageBatchSoftLimit {
+					// We limit the batch size, but we aren't pushing back on
+					// n.messages, because the loop below spawns a goroutine
+					// to do its dirty work.  This is good because right now
+					// (*node).send fails(!) if the channel is full.
+					break
+				}
+
+				select {
+				case sm = <-n.messages:
+				default:
+					break slurp_loop
+				}
+			}
+
+			for to, buf := range batches {
+				if buf.Len() == 0 {
+					continue
+				}
+				s, ok := streams[to]
+				if !ok || atomic.LoadInt32(&s.alive) <= 0 {
+					s = &stream{
+						msgCh: make(chan []byte, 100),
+						alive: 1,
+					}
+					go n.streamMessages(to, s)
+					streams[to] = s
+				}
+				data := make([]byte, buf.Len())
+				copy(data, buf.Bytes())
+				buf.Reset()
+
+				select {
+				case s.msgCh <- data:
+				default:
+				}
 			}
 		}
 	}

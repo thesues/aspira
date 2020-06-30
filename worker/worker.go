@@ -146,8 +146,12 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) bool {
 		as.node.SetRaft(raft.StartNode(as.node.Cfg, nil))
 	}
 
-	go as.node.BatchAndSendMessages()
-
+	as.stopper.RunWorker(func() {
+		as.node.BatchAndSendMessages(as.stopper)
+	})
+	as.stopper.RunWorker(func() {
+		as.node.ReportRaftComms(as.stopper)
+	})
 	as.stopper.RunWorker(func() {
 		as.snapshotPeriodically()
 	})
@@ -168,6 +172,9 @@ func (as *AspiraServer) ServeGRPC() (err error) {
 		return err
 	}
 	go func() {
+		defer func() {
+			glog.Infof("GRPC server return")
+		}()
 		s.Serve(listener)
 	}()
 	as.grpcServer = s
@@ -221,6 +228,9 @@ func (as *AspiraServer) Run() bool {
 
 			if leader {
 				for i := range rd.Messages {
+					if rd.Messages[i].To == 0 {
+						glog.Warningf("THE MESSAGE IS %+V\n", rd.Messages[i])
+					}
 					as.node.Send(&rd.Messages[i])
 				}
 			}
@@ -251,6 +261,7 @@ func (as *AspiraServer) Run() bool {
 			span.Annotatef(nil, "Sync files done")
 
 			for _, entry := range rd.CommittedEntries {
+				fmt.Printf("try to commit index:%d, size:%d\n", entry.Index, entry.Size())
 				n.Applied.Begin(entry.Index)
 				switch {
 				case entry.Type == raftpb.EntryConfChange:
@@ -286,6 +297,9 @@ func (as *AspiraServer) Run() bool {
 func (as *AspiraServer) snapshotPeriodically() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
+	defer func() {
+		glog.Infof("snapshot period return")
+	}()
 	for {
 		select {
 		case <-ticker.C:
@@ -428,11 +442,14 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 		if len(cc.Context) > 0 {
 			var ctx aspirapb.RaftContext
 			utils.Check(ctx.Unmarshal(cc.Context))
-			go as.node.Connect(ctx.Id, ctx.Addr)
+			as.node.Connect(ctx.Id, ctx.Addr)
 			//update state
 			as.state.Nodes[ctx.Id] = ctx.Addr
 		}
-		as.node.SetConfState(as.node.Raft().ApplyConfChange(cc))
+
+		xx := as.node.Raft().ApplyConfChange(cc)
+		fmt.Printf("FUCKApply cc %+v\n", xx)
+		as.node.SetConfState(xx)
 		as.node.DoneConfChange(cc.ID, nil)
 	case raftpb.ConfChangeRemoveNode:
 	case raftpb.ConfChangeUpdateNode:
@@ -515,6 +532,9 @@ func (as *AspiraServer) ServeHTTP() {
 	}
 
 	go func() {
+		defer func() {
+			glog.Infof("HTTP return")
+		}()
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			panic("http server crashed")
 		}
@@ -533,7 +553,6 @@ func (as *AspiraServer) ServeHTTP() {
 
 func (as *AspiraServer) Stop() {
 	as.node.Raft().Stop()
-	as.node.Stop()
 	as.stopper.Close() //HTTP, createSnapshot
 	as.grpcServer.Stop()
 }
