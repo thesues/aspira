@@ -33,14 +33,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 
-	"contrib.go.opencensus.io/exporter/jaeger"
 	"github.com/golang/glog"
 	"github.com/thesues/aspira/conn"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
 	cannyls "github.com/thesues/cannyls-go/storage"
-	"go.opencensus.io/trace"
 	otrace "go.opencensus.io/trace"
 	"google.golang.org/grpc"
 )
@@ -66,7 +64,7 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 
 	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
-		if db, err = cannyls.CreateCannylsStorage(path, 8<<30, 0.1); err != nil {
+		if db, err = cannyls.CreateCannylsStorage(path, 8<<30, 0.05); err != nil {
 			return
 		}
 	} else {
@@ -90,9 +88,7 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 	return as, nil
 }
 
-func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) {
-
-MAINPROC:
+func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) bool {
 	restart := as.store.PastLife()
 	if restart {
 		snap, err := as.store.Snapshot()
@@ -105,7 +101,6 @@ MAINPROC:
 			var state aspirapb.MembershipState
 			utils.Check(state.Unmarshal(snap.Data))
 			as.state = &state
-			//as.nextRaftId = util.Max(as.nextRaftId, state.MaxRaftId+1)
 			for _, id := range snap.Metadata.ConfState.Nodes {
 				as.node.Connect(id, state.Nodes[id])
 			}
@@ -123,7 +118,7 @@ MAINPROC:
 		//join remote cluster
 		p := conn.GetPools().Connect(clusterAddr)
 		if p == nil {
-			return errors.Errorf("Unhealthy connection to %v", clusterAddr)
+			panic(fmt.Sprintf("Unhealthy connection to %v", clusterAddr))
 		}
 		c := aspirapb.NewRaftClient(p.Get())
 		for {
@@ -151,28 +146,12 @@ MAINPROC:
 		as.node.SetRaft(raft.StartNode(as.node.Cfg, nil))
 	}
 
-	as.stopper.RunWorker(func() {
-		as.node.BatchAndSendMessages()
-	})
+	go as.node.BatchAndSendMessages()
 
 	as.stopper.RunWorker(func() {
 		as.snapshotPeriodically()
 	})
-	if as.Run() {
-		/*
-			as.grpcServer.Stop()
-			fmt.Printf("grpc stop\n")
-			as.stopper.Stop()
-			fmt.Printf("localhost stop\n")
-			as.ServeGRPC()
-			fmt.Printf("restart GRPC\n")
-			clusterAddr = ""
-		*/
-		as.node.Raft().Stop()
-
-		goto MAINPROC
-	}
-	return
+	return as.Run()
 }
 
 func (as *AspiraServer) ServeGRPC() (err error) {
@@ -232,6 +211,7 @@ func (as *AspiraServer) Run() bool {
 		case <-ticker.C:
 			n.Raft().Tick()
 		case rd := <-n.Raft().Ready():
+
 			_, span := otrace.StartSpan(ctx, "Ready.Loop", otrace.WithSampler(otrace.ProbabilitySampler(0.001)))
 
 			span.Annotatef(nil, "Pushed %d readstates", len(rd.ReadStates))
@@ -246,7 +226,9 @@ func (as *AspiraServer) Run() bool {
 			}
 
 			if !raft.IsEmptySnap(rd.Snapshot) {
-				glog.Warningf("I got snapshot %+v", rd.Snapshot.Metadata)
+
+				//drain the messages
+				glog.Warningf("I Got snapshot %+v", rd.Snapshot.Metadata)
 				err := as.receiveSnapshot(rd.Snapshot)
 				if err != nil {
 					glog.Fatalf("can not receive remote snapshot %+v", err)
@@ -315,8 +297,6 @@ func (as *AspiraServer) snapshotPeriodically() {
 }
 
 func (as *AspiraServer) trySnapshot(skip uint64) {
-	glog.Infof("try snapshot")
-
 	existing, err := as.node.Store.Snapshot()
 	utils.Check(err)
 	si := existing.Metadata.Index
@@ -551,28 +531,46 @@ func (as *AspiraServer) ServeHTTP() {
 	}
 }
 
+func (as *AspiraServer) Stop() {
+	as.node.Raft().Stop()
+	as.node.Stop()
+	as.stopper.Close() //HTTP, createSnapshot
+	as.grpcServer.Stop()
+}
+
 func main() {
 	//1 => 127.0.0.1:3301
 	//2 => 127.0.0.1:3302
 
 	flag.Parse()
 
-	je, _ := jaeger.NewExporter(jaeger.Options{
-		Endpoint:    "http://localhost:14268",
-		ServiceName: "aspira",
-	})
-	otrace.RegisterExporter(je)
-	otrace.ApplyConfig(otrace.Config{DefaultSampler: trace.AlwaysSample()})
+	/*
+		je, _ := jaeger.NewExporter(jaeger.Options{
+			Endpoint:    "http://localhost:14268",
+			ServiceName: "aspira",
+		})
+		otrace.RegisterExporter(je)
+		otrace.ApplyConfig(otrace.Config{DefaultSampler: trace.AlwaysSample()})
+	*/
 
 	stringId := fmt.Sprintf("%d", *id)
-	x, _ := NewAspiraServer(*id, "127.0.0.1:330"+stringId, stringId+".lusf")
+	var x *AspiraServer
+	x, _ = NewAspiraServer(*id, "127.0.0.1:330"+stringId, stringId+".lusf")
 
 	x.ServeGRPC()
 	go func() {
 		x.ServeHTTP()
 	}()
 
-	x.InitAndStart(*id, *join)
+	for x.InitAndStart(*id, *join) {
+		//stop
+		x.Stop()
+		x, _ = NewAspiraServer(*id, "127.0.0.1:330"+stringId, stringId+".lusf")
+		x.ServeGRPC()
+		go func() {
+			x.ServeHTTP()
+		}()
+	}
 }
 
 func (as *AspiraServer) receiveSnapshot(snap raftpb.Snapshot) (err error) {
@@ -640,12 +638,5 @@ func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 	os.Remove(name)
 
 	os.Rename(backupName, name)
-
-	db, err := cannyls.OpenCannylsStorage(name)
-	if err != nil {
-		return err
-	}
-
-	as.store.SetDB(db)
 	return nil
 }

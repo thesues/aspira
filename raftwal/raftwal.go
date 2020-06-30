@@ -34,7 +34,6 @@ import (
 )
 
 type WAL struct {
-	sync.RWMutex   //protect DB
 	db             *cannyls.Storage
 	ab             *block.AlignedBytes
 	entryCache     *lru.Cache
@@ -626,11 +625,7 @@ func (wal *WAL) GetData(index uint64) ([]byte, error) {
 	if index > keyMask {
 		return nil, errors.Errorf("index is too big:%d", index)
 	}
-	db := wal.DB()
-	if db == nil {
-		return nil, errors.Errorf("retry later..")
-	}
-	return db.Get(lump.FromU64(0, index))
+	return wal.db.Get(lump.FromU64(0, index))
 }
 
 func (wal *WAL) GetStreamReader() (io.Reader, error) {
@@ -659,24 +654,7 @@ func (wal *WAL) FreeStreamReader() {
 	}
 }
 
-func (wal *WAL) DB() *cannyls.Storage {
-	wal.RLock()
-	defer wal.RUnlock()
-	return wal.db
-}
-
-func (wal *WAL) SetDB(db *cannyls.Storage) {
-	wal.Lock()
-	defer wal.Unlock()
-	if wal.readCounts != 0 {
-		glog.Fatalf("readCount is not zero")
-	}
-	wal.db = db
-}
-
 func (wal *WAL) CloseDB() {
-	wal.Lock()
-	defer wal.Unlock()
 	wal.db.Close()
 	wal.db = nil
 }

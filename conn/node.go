@@ -344,6 +344,10 @@ type stream struct {
 	alive int32
 }
 
+func (n *Node) Stop() {
+	close(n.messages)
+}
+
 // BatchAndSendMessages sends messages in batches.
 func (n *Node) BatchAndSendMessages() {
 	batches := make(map[uint64]*bytes.Buffer)
