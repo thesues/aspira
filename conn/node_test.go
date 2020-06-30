@@ -64,15 +64,6 @@ func (n *Node) run(wg *sync.WaitGroup) {
 }
 
 func TestProposal(t *testing.T) {
-	/*
-		dir, err := ioutil.TempDir("", "badger")
-		require.NoError(t, err)
-		defer os.RemoveAll(dir)
-
-		db, err := badger.Open(badger.DefaultOptions(dir))
-		require.NoError(t, err)
-	*/
-
 	db, err := cannyls.CreateCannylsStorage("wal.lusf", 10<<20, 0.1)
 	defer os.Remove("wal.lusf")
 	assert.Nil(t, err)

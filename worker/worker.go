@@ -30,7 +30,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/dgraph-io/dgraph/x"
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 
@@ -51,13 +50,14 @@ const (
 )
 
 type AspiraServer struct {
-	node       *conn.Node
-	raftServer *conn.RaftServer //internal comms
-	grpcServer *grpc.Server     //internal comms, raftServer is registered on grpcServer
-	store      *raftwal.WAL
-	addr       string
-	stopper    *utils.Stopper
-	state      *aspirapb.MembershipState
+	node          *conn.Node
+	raftServer    *conn.RaftServer //internal comms
+	grpcServer    *grpc.Server     //internal comms, raftServer is registered on grpcServer
+	store         *raftwal.WAL
+	addr          string
+	stopper       *utils.Stopper
+	state         *aspirapb.MembershipState
+	allowSnapshot bool
 }
 
 func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err error) {
@@ -66,7 +66,7 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 
 	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
-		if db, err = cannyls.CreateCannylsStorage(path, 8<<30, 0.2); err != nil {
+		if db, err = cannyls.CreateCannylsStorage(path, 8<<30, 0.1); err != nil {
 			return
 		}
 	} else {
@@ -91,10 +91,8 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 }
 
 func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) {
-	if err = as.serveGRPC(); err != nil {
-		return
-	}
 
+MAINPROC:
 	restart := as.store.PastLife()
 	if restart {
 		snap, err := as.store.Snapshot()
@@ -151,7 +149,6 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) 
 			cancel()
 		}
 		as.node.SetRaft(raft.StartNode(as.node.Cfg, nil))
-
 	}
 
 	as.stopper.RunWorker(func() {
@@ -161,16 +158,24 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) (err error) 
 	as.stopper.RunWorker(func() {
 		as.snapshotPeriodically()
 	})
+	if as.Run() {
+		/*
+			as.grpcServer.Stop()
+			fmt.Printf("grpc stop\n")
+			as.stopper.Stop()
+			fmt.Printf("localhost stop\n")
+			as.ServeGRPC()
+			fmt.Printf("restart GRPC\n")
+			clusterAddr = ""
+		*/
+		as.node.Raft().Stop()
 
-	as.stopper.RunWorker(func() {
-		as.ServeHTTP()
-	})
-
-	as.Run()
+		goto MAINPROC
+	}
 	return
 }
 
-func (as *AspiraServer) serveGRPC() (err error) {
+func (as *AspiraServer) ServeGRPC() (err error) {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(1<<25),
 		grpc.MaxSendMsgSize(1<<25),
@@ -183,9 +188,9 @@ func (as *AspiraServer) serveGRPC() (err error) {
 	if err != nil {
 		return err
 	}
-	as.stopper.RunWorker(func() {
+	go func() {
 		s.Serve(listener)
-	})
+	}()
 	as.grpcServer = s
 	return nil
 }
@@ -216,7 +221,7 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 	return p.AssociateKey, nil
 }
 
-func (as *AspiraServer) Run() {
+func (as *AspiraServer) Run() bool {
 	var leader bool
 	ctx := context.Background()
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -244,20 +249,23 @@ func (as *AspiraServer) Run() {
 				glog.Warningf("I got snapshot %+v", rd.Snapshot.Metadata)
 				err := as.receiveSnapshot(rd.Snapshot)
 				if err != nil {
-					glog.Fatalf("can not receive remote snapshot")
+					glog.Fatalf("can not receive remote snapshot %+v", err)
 				}
-				glog.Infof("---> SNAPSHOT: %+v. DONE.\n", rd.Snapshot)
 
-				//open lusf file
+				glog.Infof("---> SNAPSHOT: %+v. DONE.\n", rd.Snapshot)
+				return true
 			}
 
 			n.SaveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
 
 			span.Annotatef(nil, "Saved to storage")
-			if rd.MustSync && (!raft.IsEmptyHardState(rd.HardState) || len(rd.Entries) > 0) {
-				fmt.Printf("len of entires %d\n", len(rd.Entries))
+
+			//if rd.MustSync && (!raft.IsEmptyHardState(rd.HardState) || len(rd.Entries) > 0) {
+			//fmt.Printf("len of entires %d\n", len(rd.Entries))
+			if rd.MustSync {
 				n.Store.Flush()
 			}
+
 			span.Annotatef(nil, "Sync files done")
 
 			for _, entry := range rd.CommittedEntries {
@@ -310,7 +318,7 @@ func (as *AspiraServer) trySnapshot(skip uint64) {
 	glog.Infof("try snapshot")
 
 	existing, err := as.node.Store.Snapshot()
-	x.Checkf(err, "Unable to get existing snapshot")
+	utils.Check(err)
 	si := existing.Metadata.Index
 	doneUntil := as.node.Applied.DoneUntil()
 
@@ -559,52 +567,85 @@ func main() {
 	stringId := fmt.Sprintf("%d", *id)
 	x, _ := NewAspiraServer(*id, "127.0.0.1:330"+stringId, stringId+".lusf")
 
-	x.InitAndStart(*id, *join)
+	x.ServeGRPC()
+	go func() {
+		x.ServeHTTP()
+	}()
 
+	x.InitAndStart(*id, *join)
 }
 
-func (as *AspiraServer) receiveSnapshot(snap raftpb.Snapshot) error {
+func (as *AspiraServer) receiveSnapshot(snap raftpb.Snapshot) (err error) {
 	//close and delete current store
 	var memberStat aspirapb.MembershipState
 	utils.Check(memberStat.Unmarshal(snap.Data))
 	for _, remotePeer := range snap.Metadata.ConfState.Nodes {
-		addr := memberStat.Nodes[remotePeer]
-		glog.V(2).Infof("Snapshot.RaftContext.Addr: %q", addr)
-		//download lusf file
-		err := errors.Errorf("asdf")
-		if err != nil {
-			//if leader send the snapshot to us, we must have a connection to leader as well
+		p := as.getPeerPool(remotePeer)
+		if p == nil {
 			continue
 		}
-
+		glog.V(2).Infof("Snapshot.RaftContext.Addr: %+v", p.Addr)
+		err = as.populateSnapshot(snap, p)
+		if err == nil {
+			break
+		}
 	}
-	return errors.Errorf("failed to receiveSnapshot")
+	return
 }
 
-func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) error {
+func (as *AspiraServer) getPeerPool(peer uint64) *conn.Pool {
+	if peer == as.node.RaftContext.Id {
+		return nil
+	}
+	addr, ok := as.node.Peer(peer)
+	if !ok {
+		return nil
+	}
+	p, err := conn.GetPools().Get(addr)
+	if err != nil {
+		return nil
+	}
+	return p
+}
+
+func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (err error) {
 	conn := pl.Get()
 	c := aspirapb.NewAspiraGRPCClient(conn)
 	stream, err := c.StreamSnapshot(context.Background(), as.node.RaftContext)
 	if err != nil {
-		return err
+		return
 	}
 
-	file, err := os.OpenFile("backup.lusf", os.O_CREATE|os.O_RDWR, 0644)
+	backupName := fmt.Sprintf("backup-%d", as.node.RaftContext.Id)
+	file, err := os.OpenFile(backupName, os.O_CREATE|os.O_RDWR, 0644)
 
 	defer file.Close()
 	glog.Infof("Start to receive data")
+	var payload *aspirapb.Payload
 	for {
-		payload, err := stream.Recv()
+		payload, err = stream.Recv()
 		if err != nil && err != io.EOF {
-			return err
+			return
 		}
-		if len(payload.Data) > 0 {
+		if payload != nil {
 			file.Write(payload.Data)
 		} else {
 			break
 		}
 	}
 	glog.Infof("End to receive data")
-	return nil
 
+	as.store.CloseDB()
+	name := fmt.Sprintf("%d.lusf", as.node.RaftContext.Id)
+	os.Remove(name)
+
+	os.Rename(backupName, name)
+
+	db, err := cannyls.OpenCannylsStorage(name)
+	if err != nil {
+		return err
+	}
+
+	as.store.SetDB(db)
+	return nil
 }

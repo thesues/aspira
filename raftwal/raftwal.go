@@ -18,6 +18,7 @@ package raftwal
 
 import (
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/coreos/etcd/raft"
@@ -33,10 +34,12 @@ import (
 )
 
 type WAL struct {
-	db         *cannyls.Storage
-	ab         *block.AlignedBytes
-	entryCache *lru.Cache
-	sync.Mutex
+	sync.RWMutex   //protect DB
+	db             *cannyls.Storage
+	ab             *block.AlignedBytes
+	entryCache     *lru.Cache
+	readCountsLock *sync.Mutex
+	readCounts     int
 }
 
 var (
@@ -57,9 +60,11 @@ func Init(db *cannyls.Storage) *WAL {
 		glog.Errorf("can not create LRU %+v", err)
 	}
 	wal := &WAL{
-		db:         db,
-		ab:         block.NewAlignedBytes(512, block.Min()),
-		entryCache: cache,
+		db:             db,
+		ab:             block.NewAlignedBytes(512, block.Min()),
+		entryCache:     cache,
+		readCounts:     0,
+		readCountsLock: new(sync.Mutex),
 	}
 
 	snap, err := wal.Snapshot()
@@ -542,9 +547,16 @@ func (wal *WAL) Term(idx uint64) (uint64, error) {
 		return 0, raft.ErrCompacted
 	}
 	return e.Term, nil
+
 }
 
 func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (snap raftpb.Snapshot, err error) {
+
+	wal.readCountsLock.Lock()
+	defer wal.readCountsLock.Unlock()
+	if wal.readCounts > 0 {
+		return
+	}
 
 	first, err := wal.FirstIndex()
 	if err != nil {
@@ -589,7 +601,12 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 	return
 }
 
+/*
+ApplyPut and ApplyPutWithOffset do not need a DB lock, because before receiving the snapshot,
+worker will drain the applyMessage channel
+*/
 func (wal *WAL) ApplyPut(index uint64) error {
+
 	dataPortion, err := wal.db.GetRecord(wal.ExtKey(index))
 	if err != nil {
 		return err
@@ -609,5 +626,57 @@ func (wal *WAL) GetData(index uint64) ([]byte, error) {
 	if index > keyMask {
 		return nil, errors.Errorf("index is too big:%d", index)
 	}
-	return wal.db.Get(lump.FromU64(0, index))
+	db := wal.DB()
+	if db == nil {
+		return nil, errors.Errorf("retry later..")
+	}
+	return db.Get(lump.FromU64(0, index))
+}
+
+func (wal *WAL) GetStreamReader() (io.Reader, error) {
+	wal.readCountsLock.Lock()
+	defer wal.readCountsLock.Unlock()
+	reader, err := wal.db.GetSnapshotReader()
+	if err != nil {
+		return nil, err
+	}
+	wal.readCounts++
+	return reader, nil
+}
+
+func (wal *WAL) FreeStreamReader() {
+	wal.readCountsLock.Lock()
+	defer wal.readCountsLock.Unlock()
+
+	if wal.readCounts == 0 {
+		glog.Fatalf("FreeStreamReader > GetStreamReader")
+	}
+	wal.readCounts--
+	if wal.readCounts == 0 {
+		if err := wal.db.DeleteSnapshot(); err != nil {
+			glog.Errorf("failed to delete snapshot file %+v", err)
+		}
+	}
+}
+
+func (wal *WAL) DB() *cannyls.Storage {
+	wal.RLock()
+	defer wal.RUnlock()
+	return wal.db
+}
+
+func (wal *WAL) SetDB(db *cannyls.Storage) {
+	wal.Lock()
+	defer wal.Unlock()
+	if wal.readCounts != 0 {
+		glog.Fatalf("readCount is not zero")
+	}
+	wal.db = db
+}
+
+func (wal *WAL) CloseDB() {
+	wal.Lock()
+	defer wal.Unlock()
+	wal.db.Close()
+	wal.db = nil
 }
