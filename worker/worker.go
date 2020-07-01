@@ -106,7 +106,6 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) bool {
 			}
 		}
 		as.node.SetRaft(raft.RestartNode(as.node.Cfg))
-
 	} else if len(clusterAddr) == 0 {
 		fmt.Printf("START\n")
 		rpeers := make([]raft.Peer, 1)
@@ -245,7 +244,12 @@ func (as *AspiraServer) Run() bool {
 				}
 
 				glog.Infof("---> SNAPSHOT: %+v. DONE.\n", rd.Snapshot)
-				return true
+
+				snapOnDisk, _ := as.store.Snapshot()
+				if snapOnDisk.Metadata.Index != rd.Snapshot.Metadata.Index || snapOnDisk.Metadata.Term != rd.Snapshot.Metadata.Term {
+					panic("for loop, try again")
+				}
+				as.store.DeleteFrom(rd.Snapshot.Metadata.Index + 1)
 			}
 
 			n.SaveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
@@ -657,5 +661,11 @@ func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 	os.Remove(name)
 
 	os.Rename(backupName, name)
+
+	db, err := cannyls.OpenCannylsStorage(name)
+	if err != nil {
+		panic("can not open downloaded cannylsdb")
+	}
+	as.store.SetDB(db)
 	return nil
 }

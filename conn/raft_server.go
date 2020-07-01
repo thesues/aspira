@@ -238,8 +238,9 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 				case raftpb.MsgHeartbeat, raftpb.MsgHeartbeatResp:
 					atomic.AddInt64(&node.heartbeatsIn, 1)
 				case raftpb.MsgReadIndex, raftpb.MsgReadIndexResp:
-				case raftpb.MsgApp, raftpb.MsgAppResp:
-				case raftpb.MsgProp:
+					/*
+						case raftpb.MsgApp, raftpb.MsgAppResp:
+						case raftpb.MsgProp:*/
 				default:
 					glog.Infof("RaftComm: [%#x] Received msg of type: %s from %#x",
 						msg.To, msg.Type, msg.From)

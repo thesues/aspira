@@ -367,14 +367,14 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 	//wal.cache.Store(lastKey, laste)
 
 	if laste < last {
-		return wal.deleteFrom(laste + 1)
+		return wal.DeleteFrom(laste + 1)
 	}
 	return nil
 }
 
 // Delete entries in the range of index [from, inf).
 // both LOG and extendLOG will be removed
-func (wal *WAL) deleteFrom(from uint64) error {
+func (wal *WAL) DeleteFrom(from uint64) error {
 	logStart := wal.EntryKey(from)
 	logEnd := lump.FromU64(0, ^uint64(0)) //0xFFFFFFFFFFFFFFFF
 
@@ -510,7 +510,7 @@ func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 }
 
 func (wal *WAL) reset(es []raftpb.Entry) error {
-	wal.deleteFrom(0)
+	wal.DeleteFrom(0)
 	wal.addEntries(es, false)
 	return nil
 }
@@ -652,6 +652,10 @@ func (wal *WAL) FreeStreamReader() {
 			glog.Errorf("failed to delete snapshot file %+v", err)
 		}
 	}
+}
+
+func (wal *WAL) SetDB(db *cannyls.Storage) {
+	wal.db = db
 }
 
 func (wal *WAL) CloseDB() {
