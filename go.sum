@@ -324,6 +324,10 @@ github.com/stretchr/testify v1.6.0 h1:jlIyCplCJFULU/01vCkhKuTyc3OorI3bJFuw6obfgh
 github.com/stretchr/testify v1.6.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/thesues/cannyls-go v0.2.1-0.20200627064127-96382ad22fbe h1:q5D6CvUk+OOEvegHVZ5za+e84egD/59bmL3+OoHbQu8=
 github.com/thesues/cannyls-go v0.2.1-0.20200627064127-96382ad22fbe/go.mod h1:zWm3D05WBBDe9MtAxoXWrnh4WKwAgOl08DIrdcpFnCk=
+github.com/thesues/cannyls-go v0.2.1-0.20200705175459-3575367c4a48 h1:hNv0yl6DVH+l5C9Sf+295iSc8X+xC9QZgzyxc/fkaVc=
+github.com/thesues/cannyls-go v0.2.1-0.20200705175459-3575367c4a48/go.mod h1:zWm3D05WBBDe9MtAxoXWrnh4WKwAgOl08DIrdcpFnCk=
+github.com/thesues/cannyls-go v0.2.1-0.20200705175718-47121acd8f2a h1:dbEHbVwAgE1Ry7RUofcC105GKIqaHaICj/1bXYOrwxY=
+github.com/thesues/cannyls-go v0.2.1-0.20200705175718-47121acd8f2a/go.mod h1:zWm3D05WBBDe9MtAxoXWrnh4WKwAgOl08DIrdcpFnCk=
 github.com/thesues/go-judy v0.1.3 h1:NHTAU4TY+CYvE3pExqtxF4dPC+o4e685o6Z+dC0rUf0=
 github.com/thesues/go-judy v0.1.3/go.mod h1:MZmMG42kheHBNX0AvY0F02ZOBaqm2RsOqcGVfbHax9w=
 github.com/tinylib/msgp v0.0.0-20190103190839-ade0ca4ace05 h1:4UEPSXT1HqXDvnBx4FPNMuqu+tOzKJsRnbSwyuF74Fc=

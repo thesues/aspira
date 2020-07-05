@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -34,7 +36,7 @@ import (
 )
 
 type WAL struct {
-	db             *cannyls.Storage
+	p              unsafe.Pointer //the type is *cannyls.Storage
 	ab             *block.AlignedBytes
 	entryCache     *lru.Cache
 	readCountsLock *sync.Mutex
@@ -59,12 +61,12 @@ func Init(db *cannyls.Storage) *WAL {
 		glog.Errorf("can not create LRU %+v", err)
 	}
 	wal := &WAL{
-		db:             db,
 		ab:             block.NewAlignedBytes(512, block.Min()),
 		entryCache:     cache,
 		readCounts:     0,
 		readCountsLock: new(sync.Mutex),
 	}
+	atomic.StorePointer(&wal.p, unsafe.Pointer(db))
 
 	snap, err := wal.Snapshot()
 	if err != nil {
@@ -141,11 +143,11 @@ func (wal *WAL) Save(hd raftpb.HardState, entries []raftpb.Entry) (err error) {
 }
 
 func (wal *WAL) Sync() {
-	wal.db.Sync()
+	wal.DB().Sync()
 }
 
 func (wal *WAL) Flush() {
-	wal.db.Flush()
+	wal.DB().Flush()
 }
 
 func (wal *WAL) HardState() (raftpb.HardState, error) {
@@ -154,7 +156,7 @@ func (wal *WAL) HardState() (raftpb.HardState, error) {
 }
 
 func (wal *WAL) hardState() (hd raftpb.HardState, err error) {
-	data, err := wal.db.Get(wal.hardStateKey())
+	data, err := wal.DB().Get(wal.hardStateKey())
 	//if err is noSuchKey, but Unmarshal will still success, and return a nil error
 	err = hd.Unmarshal(data)
 	return
@@ -168,7 +170,7 @@ func (wal *WAL) setHardState(st raftpb.HardState) (err error) {
 	if err != nil {
 		return errors.Wrapf(err, "wal.Store: While marshal hardstate")
 	}
-	_, err = wal.db.PutEmbed(wal.hardStateKey(), data)
+	_, err = wal.DB().PutEmbed(wal.hardStateKey(), data)
 	return
 }
 
@@ -204,7 +206,7 @@ func (wal *WAL) MemberShip() aspirapb.MemberShip {
 */
 
 func (wal *WAL) Snapshot() (snap raftpb.Snapshot, err error) {
-	data, err := wal.db.Get(wal.snapshotKey())
+	data, err := wal.DB().Get(wal.snapshotKey())
 	if err != nil {
 		return snap, nil //empty snapshot
 	}
@@ -273,7 +275,7 @@ func (wal *WAL) FirstIndex() (uint64, error) {
 		return snap.Metadata.Index + 1, nil
 	}
 
-	firstIdx, err := wal.db.First(wal.EntryKey(0))
+	firstIdx, err := wal.DB().First(wal.EntryKey(0))
 	if err != nil {
 		return 0, errNotFound
 	}
@@ -284,7 +286,7 @@ func (wal *WAL) FirstIndex() (uint64, error) {
 }
 
 func (wal *WAL) LastIndex() (uint64, error) {
-	id, ok := wal.db.MaxId()
+	id, ok := wal.DB().MaxId()
 	if !ok || id.U64() < MinimalKey {
 		return 0, errNotFound
 	}
@@ -333,7 +335,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 					wal.ab.Resize(uint32(len(proposal.Data)))
 					copy(wal.ab.AsBytes(), proposal.Data)
 					fmt.Printf("Wrote Ext data %x\n\n", wal.ExtKey(entryMeta.Index).U64())
-					_, err := wal.db.Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(wal.ab))
+					_, err := wal.DB().Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(wal.ab))
 					if err != nil {
 						return err
 					}
@@ -357,7 +359,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 		if err != nil {
 			return err
 		}
-		if _, err = wal.db.PutEmbed(wal.EntryKey(entryMeta.Index), data); err != nil {
+		if _, err = wal.DB().PutEmbed(wal.EntryKey(entryMeta.Index), data); err != nil {
 			return err
 		}
 		wal.entryCache.Add(e.Index, e)
@@ -382,11 +384,11 @@ func (wal *WAL) DeleteFrom(from uint64) error {
 	exLogEnd := lump.FromU64(0, (uint64(1)<<63)-1) //0x7FFFFFFFFFFFFFFF
 
 	//remove LOG
-	if err := wal.db.DeleteRange(logStart, logEnd, false); err != nil {
+	if err := wal.DB().DeleteRange(logStart, logEnd, false); err != nil {
 		return err
 	}
 
-	if err := wal.db.DeleteRange(exLogStart, exLogEnd, true); err != nil {
+	if err := wal.DB().DeleteRange(exLogStart, exLogEnd, true); err != nil {
 		return err
 	}
 	return nil
@@ -418,7 +420,7 @@ func (wal *WAL) PastLife() bool {
 
 func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 	size := 0
-	for _, id := range wal.db.ListRange(wal.EntryKey(lo), wal.EntryKey(hi), 100) {
+	for _, id := range wal.DB().ListRange(wal.EntryKey(lo), wal.EntryKey(hi), 100) {
 		//if lru then
 		//else
 		//from id to index
@@ -427,7 +429,7 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 			es = append(es, e)
 			size += e.Size()
 		} else {
-			data, err := wal.db.Get(id)
+			data, err := wal.DB().Get(id)
 			if err != nil {
 				glog.Fatalf("failed to get id %+v, err is %+v", id, data)
 			}
@@ -443,7 +445,7 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 			case aspirapb.EntryMeta_Put:
 				//build data
 				e.Type = raftpb.EntryNormal
-				extData, err := wal.db.Get(wal.ExtKey(id.U64() & keyMask))
+				extData, err := wal.DB().Get(wal.ExtKey(id.U64() & keyMask))
 				if err != nil {
 					glog.Fatalf("Get data failed %+v", err)
 
@@ -516,7 +518,7 @@ func (wal *WAL) reset(es []raftpb.Entry) error {
 }
 
 func (wal *WAL) deleteUntil(until uint64) error {
-	return wal.db.DeleteRange(wal.EntryKey(0), wal.EntryKey(until), true)
+	return wal.DB().DeleteRange(wal.EntryKey(0), wal.EntryKey(until), true)
 }
 
 /*
@@ -534,7 +536,7 @@ func (wal *WAL) Term(idx uint64) (uint64, error) {
 	}
 
 	var e aspirapb.EntryMeta
-	data, err := wal.db.Get(wal.EntryKey(idx))
+	data, err := wal.DB().Get(wal.EntryKey(idx))
 	if err != nil {
 		return 0, raft.ErrUnavailable
 	}
@@ -567,7 +569,7 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 	}
 
 	var em aspirapb.EntryMeta
-	data, err := wal.db.Get(wal.EntryKey(i))
+	data, err := wal.DB().Get(wal.EntryKey(i))
 	if err != nil {
 		return
 	}
@@ -585,15 +587,15 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 	if err != nil {
 		return
 	}
-	wal.db.PutEmbed(wal.snapshotKey(), data)
+	wal.DB().PutEmbed(wal.snapshotKey(), data)
 
 	//set log value which represent snapshot.Term, snapshot.Index
 	e := raftpb.Entry{Term: snap.Metadata.Term, Index: snap.Metadata.Index}
 	data, err = e.Marshal()
-	if _, err = wal.db.PutEmbed(wal.EntryKey(e.Index), data); err != nil {
+	if _, err = wal.DB().PutEmbed(wal.EntryKey(e.Index), data); err != nil {
 		return
 	}
-	wal.db.Sync()
+	wal.DB().Sync()
 	if err = wal.deleteUntil(snap.Metadata.Index); err != nil {
 		return
 	}
@@ -606,15 +608,20 @@ worker will drain the applyMessage channel
 */
 func (wal *WAL) ApplyPut(index uint64) error {
 
-	dataPortion, err := wal.db.GetRecord(wal.ExtKey(index))
+	dataPortion, err := wal.DB().GetRecord(wal.ExtKey(index))
 	if err != nil {
 		return err
 	}
-	return wal.db.WriteRecord(lump.FromU64(0, index), *dataPortion)
+	return wal.DB().WriteRecord(lump.FromU64(0, index), *dataPortion)
 }
 
-func (wal *WAL) ApplyPutWithOffset(p aspirapb.AspiraProposal, index uint64) error {
+func (wal *WAL) ApplyPutWithOffset(index uint64) error {
 	return nil
+}
+
+func (wal *WAL) Delete(key uint64) (err error) {
+	_, _, err = wal.DB().Delete(lump.FromU64(0, key))
+	return
 }
 
 func (wal *WAL) ObjectMaxSize() int64 {
@@ -625,13 +632,13 @@ func (wal *WAL) GetData(index uint64) ([]byte, error) {
 	if index > keyMask {
 		return nil, errors.Errorf("index is too big:%d", index)
 	}
-	return wal.db.Get(lump.FromU64(0, index))
+	return wal.DB().Get(lump.FromU64(0, index))
 }
 
 func (wal *WAL) GetStreamReader() (io.Reader, error) {
 	wal.readCountsLock.Lock()
 	defer wal.readCountsLock.Unlock()
-	reader, err := wal.db.GetSnapshotReader()
+	reader, err := wal.DB().GetSnapshotReader()
 	if err != nil {
 		return nil, err
 	}
@@ -648,17 +655,20 @@ func (wal *WAL) FreeStreamReader() {
 	}
 	wal.readCounts--
 	if wal.readCounts == 0 {
-		if err := wal.db.DeleteSnapshot(); err != nil {
+		if err := wal.DB().DeleteSnapshot(); err != nil {
 			glog.Errorf("failed to delete snapshot file %+v", err)
 		}
 	}
 }
 
+func (wal *WAL) DB() (db *cannyls.Storage) {
+	v := atomic.LoadPointer(&wal.p)
+	return (*cannyls.Storage)(v)
+}
 func (wal *WAL) SetDB(db *cannyls.Storage) {
-	wal.db = db
+	atomic.StorePointer(&wal.p, unsafe.Pointer(db))
 }
 
 func (wal *WAL) CloseDB() {
-	wal.db.Close()
-	wal.db = nil
+	wal.DB().Close()
 }

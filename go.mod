@@ -15,7 +15,7 @@ require (
 	github.com/kr/pretty v0.2.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.6.0
-	github.com/thesues/cannyls-go v0.2.1-0.20200627064127-96382ad22fbe
+	github.com/thesues/cannyls-go v0.2.1-0.20200705175718-47121acd8f2a
 	go.opencensus.io v0.22.3
 	golang.org/x/net v0.0.0-20200528225125-3c3fba18258b
 	google.golang.org/grpc v1.29.1

@@ -3,11 +3,16 @@ package main
 import (
 	"io"
 
+	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
 )
 
 //stream snapsho API
 func (as *AspiraServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb.AspiraGRPC_StreamSnapshotServer) error {
+
+	if !as.AmLeader() {
+		return errors.Errorf("I am not leader, try next...")
+	}
 	reader, err := as.store.GetStreamReader()
 	if err != nil {
 		return err

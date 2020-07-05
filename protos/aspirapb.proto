@@ -87,6 +87,7 @@ message AspiraProposal {
 	enum Type {
 		Put = 0;
 		PutWithOffset = 1;
+		Delete = 2;
 	}
 	Type ProposalType = 1;
 	uint64 key = 2;

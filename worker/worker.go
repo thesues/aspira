@@ -23,14 +23,11 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 
 	"github.com/golang/glog"
@@ -88,7 +85,7 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 	return as, nil
 }
 
-func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) bool {
+func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 	restart := as.store.PastLife()
 	if restart {
 		snap, err := as.store.Snapshot()
@@ -154,7 +151,7 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) bool {
 	as.stopper.RunWorker(func() {
 		as.snapshotPeriodically()
 	})
-	return as.Run()
+	as.Run()
 }
 
 func (as *AspiraServer) ServeGRPC() (err error) {
@@ -193,20 +190,21 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 	if len(p.AssociateKey) == 0 {
 		return p.AssociateKey, errInvalidProposal
 	}
+	var err error
 	switch p.ProposalType {
 	case aspirapb.AspiraProposal_Put:
-		if err := as.store.ApplyPut(e.Index); err != nil {
-			glog.Errorf("Applyfailed for %d: %+v", e.Index, err)
-		}
+		err = as.store.ApplyPut(e.Index)
+	case aspirapb.AspiraProposal_Delete:
+		err = as.store.Delete(p.Key)
 	case aspirapb.AspiraProposal_PutWithOffset:
 		panic("to be implemented")
 	default:
 		glog.Fatalf("unkonw type %+v", p.ProposalType)
 	}
-	return p.AssociateKey, nil
+	return p.AssociateKey, err
 }
 
-func (as *AspiraServer) Run() bool {
+func (as *AspiraServer) Run() {
 	var leader bool
 	ctx := context.Background()
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -236,7 +234,8 @@ func (as *AspiraServer) Run() bool {
 
 			if !raft.IsEmptySnap(rd.Snapshot) {
 
-				//drain the messages
+				//drain the applied messages
+
 				glog.Warningf("I Got snapshot %+v", rd.Snapshot.Metadata)
 				err := as.receiveSnapshot(rd.Snapshot)
 				if err != nil {
@@ -256,8 +255,6 @@ func (as *AspiraServer) Run() bool {
 
 			span.Annotatef(nil, "Saved to storage")
 
-			//if rd.MustSync && (!raft.IsEmptyHardState(rd.HardState) || len(rd.Entries) > 0) {
-			//fmt.Printf("len of entires %d\n", len(rd.Entries))
 			if rd.MustSync {
 				n.Store.Flush()
 			}
@@ -285,7 +282,6 @@ func (as *AspiraServer) Run() bool {
 
 			if !leader {
 				for i := range rd.Messages {
-					//fmt.Printf("sending %+v", rd.Messages)
 					as.node.Send(&rd.Messages[i])
 				}
 			}
@@ -467,94 +463,6 @@ var (
 	debug = flag.Bool("debug", false, "debug")
 )
 
-func (as *AspiraServer) ServeHTTP() {
-	r := gin.Default()
-	r.POST("/put/", func(c *gin.Context) {
-		readFile, header, err := c.Request.FormFile("file")
-		if err != nil {
-			c.String(400, err.Error())
-			return
-		}
-		if header.Size > as.store.ObjectMaxSize() {
-			c.String(405, "size too big")
-			return
-		}
-		buf := make([]byte, header.Size, header.Size)
-		_, err = io.ReadFull(readFile, buf)
-		if err != nil {
-			c.String(409, "read failed")
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		var p aspirapb.AspiraProposal
-		p.Data = buf
-
-		p.ProposalType = aspirapb.AspiraProposal_Put
-
-		start := time.Now()
-		index, err := as.proposeAndWait(ctx, &p)
-		if err != nil {
-			glog.Errorf(err.Error())
-			c.String(400, "TIMEOUT")
-			return
-		}
-		fmt.Printf("time eslpated %+v\n", time.Since(start))
-		c.String(200, "wrote to %d", index)
-	})
-
-	r.GET("/get/:id", func(c *gin.Context) {
-		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-		if err != nil {
-			c.String(400, err.Error())
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		data, err := as.getAndWait(ctx, id)
-		if err != nil {
-			glog.Errorf(err.Error())
-			c.String(500, err.Error())
-			return
-		}
-		c.Status(200)
-		c.Header("content-length", fmt.Sprintf("%d", len(data)))
-		c.Stream(func(w io.Writer) bool {
-			_, err := w.Write(data)
-			if err != nil {
-				fmt.Println(err)
-				return true
-			}
-			return false
-		})
-	})
-
-	stringID := fmt.Sprintf("%d", as.node.Id)
-	srv := &http.Server{
-		Addr:    ":808" + stringID,
-		Handler: r,
-	}
-
-	go func() {
-		defer func() {
-			glog.Infof("HTTP return")
-		}()
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			panic("http server crashed")
-		}
-	}()
-
-	select {
-	case <-as.stopper.ShouldStop():
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
-			panic("Server Shutdown failed")
-		}
-		return
-	}
-}
-
 func (as *AspiraServer) Stop() {
 	as.node.Raft().Stop()
 	as.stopper.Close() //HTTP, createSnapshot
@@ -585,15 +493,7 @@ func main() {
 		x.ServeHTTP()
 	}()
 
-	for x.InitAndStart(*id, *join) {
-		//stop
-		x.Stop()
-		x, _ = NewAspiraServer(*id, "127.0.0.1:330"+stringId, stringId+".lusf")
-		x.ServeGRPC()
-		go func() {
-			x.ServeHTTP()
-		}()
-	}
+	x.InitAndStart(*id, *join)
 }
 
 func (as *AspiraServer) receiveSnapshot(snap raftpb.Snapshot) (err error) {
