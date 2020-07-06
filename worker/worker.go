@@ -30,12 +30,14 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 
+	"contrib.go.opencensus.io/exporter/jaeger"
 	"github.com/golang/glog"
 	"github.com/thesues/aspira/conn"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
 	cannyls "github.com/thesues/cannyls-go/storage"
+	"go.opencensus.io/trace"
 	otrace "go.opencensus.io/trace"
 	"google.golang.org/grpc"
 )
@@ -216,7 +218,7 @@ func (as *AspiraServer) Run() {
 			n.Raft().Tick()
 		case rd := <-n.Raft().Ready():
 
-			_, span := otrace.StartSpan(ctx, "Ready.Loop", otrace.WithSampler(otrace.ProbabilitySampler(0.001)))
+			_, span := otrace.StartSpan(ctx, "Ready.Loop", otrace.WithSampler(otrace.ProbabilitySampler(0.1)))
 
 			span.Annotatef(nil, "Pushed %d readstates", len(rd.ReadStates))
 			if rd.SoftState != nil {
@@ -458,9 +460,9 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 }
 
 var (
-	id    = flag.Uint64("id", 0, "id")
-	join  = flag.String("join", "", "remote addr")
-	debug = flag.Bool("debug", false, "debug")
+	id        = flag.Uint64("id", 0, "id")
+	join      = flag.String("join", "", "remote addr")
+	hasJaeger = flag.Bool("jaeger", false, "connect to jaeger")
 )
 
 func (as *AspiraServer) Stop() {
@@ -474,19 +476,18 @@ func main() {
 	//2 => 127.0.0.1:3302
 
 	flag.Parse()
-
-	/*
+	if *hasJaeger {
 		je, _ := jaeger.NewExporter(jaeger.Options{
 			Endpoint:    "http://localhost:14268",
 			ServiceName: "aspira",
 		})
 		otrace.RegisterExporter(je)
 		otrace.ApplyConfig(otrace.Config{DefaultSampler: trace.AlwaysSample()})
-	*/
+	}
 
-	stringId := fmt.Sprintf("%d", *id)
+	stringID := fmt.Sprintf("%d", *id)
 	var x *AspiraServer
-	x, _ = NewAspiraServer(*id, "127.0.0.1:330"+stringId, stringId+".lusf")
+	x, _ = NewAspiraServer(*id, "127.0.0.1:330"+stringID, stringID+".lusf")
 
 	x.ServeGRPC()
 	go func() {

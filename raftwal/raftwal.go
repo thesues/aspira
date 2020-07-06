@@ -39,20 +39,25 @@ type WAL struct {
 	p              unsafe.Pointer //the type is *cannyls.Storage
 	ab             *block.AlignedBytes
 	entryCache     *lru.Cache
+	cache          *sync.Map
 	readCountsLock *sync.Mutex
 	readCounts     int
 }
 
 var (
-	snapshotKey  = "snapshot"
-	confStateKey = "confStat"
-	firstKey     = "first"
-	lastKey      = "last"
-	keyMask      = (^uint64(0) >> 2) //0x3FFFFFFFFFFFFFFF, the first two bits are zero
-	MinimalKey   = ^keyMask
-	MaxKey       = keyMask
-	endOfList    = errors.Errorf("end of list of keys")
-	errNotFound  = errors.New("Unable to find raft entry")
+	//_XXXX variables are used in WAL.cache
+	_snapshotKey = "snapshot"
+	/*
+		_confStateKey = "confStat"
+		_firstKey     = "first"
+		_lastKey      = "last"
+	*/
+
+	keyMask     = (^uint64(0) >> 2) //0x3FFFFFFFFFFFFFFF, the first two bits are zero
+	minimalKey  = ^keyMask
+	maxKey      = keyMask
+	endOfList   = errors.Errorf("end of list of keys")
+	errNotFound = errors.New("Unable to find raft entry")
 )
 
 func Init(db *cannyls.Storage) *WAL {
@@ -65,6 +70,7 @@ func Init(db *cannyls.Storage) *WAL {
 		entryCache:     cache,
 		readCounts:     0,
 		readCountsLock: new(sync.Mutex),
+		cache:          new(sync.Map),
 	}
 	atomic.StorePointer(&wal.p, unsafe.Pointer(db))
 
@@ -174,81 +180,20 @@ func (wal *WAL) setHardState(st raftpb.HardState) (err error) {
 	return
 }
 
-/*
-func (wal *WAL) SetMemberShip(peers aspirapb.MemberShip) {
-	//update cached confState
-	wal.conf.Nodes = nil
-	for k := range peers.Nodes {
-		wal.conf.Nodes = append(wal.conf.Nodes, k)
-	}
-	data, err := peers.Marshal()
-	utils.Check(err)
-
-	_, err = wal.db.PutEmbed(wal.memberShipKey(), data)
-	utils.Check(err)
-}
-
-func (wal *WAL) MemberShip() aspirapb.MemberShip {
-	var peers aspirapb.MemberShip
-	data, err := wal.db.Get(wal.memberShipKey())
-	if err != nil {
-		peers.Nodes = make(map[uint64]string)
-		return peers
-	}
-	utils.Check(peers.Unmarshal(data))
-	//update cached confState
-	wal.conf.Nodes = nil
-	for k := range peers.Nodes {
-		wal.conf.Nodes = append(wal.conf.Nodes, k)
-	}
-	return peers
-}
-*/
-
 func (wal *WAL) Snapshot() (snap raftpb.Snapshot, err error) {
+	//cache
+	if snapRaw, ok := wal.cache.Load(_snapshotKey); ok {
+		return snapRaw.(raftpb.Snapshot), nil
+	}
+
 	data, err := wal.DB().Get(wal.snapshotKey())
 	if err != nil {
 		return snap, nil //empty snapshot
 	}
 	err = snap.Unmarshal(data)
+	wal.cache.Store(_snapshotKey, snap)
 	return
 }
-
-/*
-func (wal *WAL) setSnapshot(snap raftpb.Snapshot) error {
-	if raft.IsEmptySnap(snap) {
-		return nil
-	}
-
-	data, err := snap.Marshal()
-	if err != nil {
-		return errors.Wrapf(err, "wal.Store: While marshal snapshot")
-	}
-	if _, err = wal.db.PutEmbed(wal.snapshotKey(), data); err != nil {
-		return errors.Wrapf(err, "wal.Store: failed to write data")
-	}
-
-	e := pb.EntryMeta{Term: snap.Metadata.Term, Index: snap.Metadata.Index}
-	data, err = e.Marshal()
-	if err != nil {
-		return err
-	}
-	wal.db.PutEmbed(wal.EntryKey(e.Index), data)
-	// Update the last index cache here. This is useful so when a follower gets a jump due to
-	// receiving a snapshot and Save is called, addEntries wouldn't have much. So, the last index
-	// cache would need to rely upon this update here.
-	if val, ok := wal.cache.Load(lastKey); ok {
-		le := val.(uint64)
-		if le < snap.Metadata.Index {
-			wal.cache.Store(lastKey, snap.Metadata.Index)
-		}
-	}
-	// Cache snapshot.
-	wal.cache.Store(snapshotKey, &snap)
-	return nil
-
-}
-*/
 
 func (wal *WAL) ExtKey(idx uint64) lump.LumpId {
 	if idx > keyMask {
@@ -287,7 +232,7 @@ func (wal *WAL) FirstIndex() (uint64, error) {
 
 func (wal *WAL) LastIndex() (uint64, error) {
 	id, ok := wal.DB().MaxId()
-	if !ok || id.U64() < MinimalKey {
+	if !ok || id.U64() < minimalKey {
 		return 0, errNotFound
 	}
 	ret := id.U64() & keyMask
@@ -596,6 +541,7 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 		return
 	}
 	wal.DB().Sync()
+	wal.cache.Store(_snapshotKey, snap)
 	if err = wal.deleteUntil(snap.Metadata.Index); err != nil {
 		return
 	}
