@@ -36,12 +36,12 @@ import (
 )
 
 type WAL struct {
-	p              unsafe.Pointer //the type is *cannyls.Storage
-	ab             *block.AlignedBytes
-	entryCache     *lru.Cache
-	cache          *sync.Map
-	readCountsLock *sync.Mutex
-	readCounts     int
+	p          unsafe.Pointer //the type is *cannyls.Storage
+	ab         *block.AlignedBytes
+	entryCache *lru.Cache
+	cache      *sync.Map
+	dbLock     *sync.Mutex //protect readCounts
+	readCounts int
 }
 
 var (
@@ -66,11 +66,11 @@ func Init(db *cannyls.Storage) *WAL {
 		glog.Errorf("can not create LRU %+v", err)
 	}
 	wal := &WAL{
-		ab:             block.NewAlignedBytes(512, block.Min()),
-		entryCache:     cache,
-		readCounts:     0,
-		readCountsLock: new(sync.Mutex),
-		cache:          new(sync.Map),
+		ab:         block.NewAlignedBytes(512, block.Min()),
+		entryCache: cache,
+		readCounts: 0,
+		dbLock:     new(sync.Mutex),
+		cache:      new(sync.Map),
 	}
 	atomic.StorePointer(&wal.p, unsafe.Pointer(db))
 
@@ -376,7 +376,7 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 		} else {
 			data, err := wal.DB().Get(id)
 			if err != nil {
-				glog.Fatalf("failed to get id %+v, err is %+v", id, data)
+				glog.Fatalf("failed to get id %+v, err is %+v", id, err)
 			}
 			var meta aspirapb.EntryMeta
 			var e raftpb.Entry
@@ -496,12 +496,14 @@ func (wal *WAL) Term(idx uint64) (uint64, error) {
 
 }
 
-func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (snap raftpb.Snapshot, err error) {
+func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (created bool, err error) {
 
-	wal.readCountsLock.Lock()
-	defer wal.readCountsLock.Unlock()
+	var snap raftpb.Snapshot
+	wal.dbLock.Lock()
+	defer wal.dbLock.Unlock()
+
 	if wal.readCounts > 0 {
-		return
+		return false, errors.Errorf("followers are reading snapshot, deter the snapshot")
 	}
 
 	first, err := wal.FirstIndex()
@@ -532,7 +534,9 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 	if err != nil {
 		return
 	}
-	wal.DB().PutEmbed(wal.snapshotKey(), data)
+	if _, err = wal.DB().PutEmbed(wal.snapshotKey(), data); err != nil {
+		return
+	}
 
 	//set log value which represent snapshot.Term, snapshot.Index
 	e := raftpb.Entry{Term: snap.Metadata.Term, Index: snap.Metadata.Index}
@@ -545,7 +549,7 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (sn
 	if err = wal.deleteUntil(snap.Metadata.Index); err != nil {
 		return
 	}
-	return
+	return true, nil
 }
 
 /*
@@ -582,8 +586,8 @@ func (wal *WAL) GetData(index uint64) ([]byte, error) {
 }
 
 func (wal *WAL) GetStreamReader() (io.Reader, error) {
-	wal.readCountsLock.Lock()
-	defer wal.readCountsLock.Unlock()
+	wal.dbLock.Lock()
+	defer wal.dbLock.Unlock()
 	reader, err := wal.DB().GetSnapshotReader()
 	if err != nil {
 		return nil, err
@@ -593,8 +597,8 @@ func (wal *WAL) GetStreamReader() (io.Reader, error) {
 }
 
 func (wal *WAL) FreeStreamReader() {
-	wal.readCountsLock.Lock()
-	defer wal.readCountsLock.Unlock()
+	wal.dbLock.Lock()
+	defer wal.dbLock.Unlock()
 
 	if wal.readCounts == 0 {
 		glog.Fatalf("FreeStreamReader > GetStreamReader")
@@ -612,9 +616,14 @@ func (wal *WAL) DB() (db *cannyls.Storage) {
 	return (*cannyls.Storage)(v)
 }
 func (wal *WAL) SetDB(db *cannyls.Storage) {
+	wal.dbLock.Lock()
+	defer wal.dbLock.Unlock()
 	atomic.StorePointer(&wal.p, unsafe.Pointer(db))
 }
 
 func (wal *WAL) CloseDB() {
+	wal.dbLock.Lock()
+	defer wal.dbLock.Unlock()
 	wal.DB().Close()
+	wal.cache.Delete(_snapshotKey)
 }

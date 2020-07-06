@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
@@ -30,6 +31,7 @@ func (as *AspiraServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb
 		if err = stream.Send(&aspirapb.Payload{Data: buf[:n]}); err != nil {
 			return err
 		}
+		time.Sleep(2 * time.Millisecond)
 	}
 	return nil
 }

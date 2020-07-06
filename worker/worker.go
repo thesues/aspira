@@ -150,9 +150,6 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 	as.stopper.RunWorker(func() {
 		as.node.ReportRaftComms(as.stopper)
 	})
-	as.stopper.RunWorker(func() {
-		as.snapshotPeriodically()
-	})
 	as.Run()
 }
 
@@ -209,6 +206,7 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 func (as *AspiraServer) Run() {
 	var leader bool
 	ctx := context.Background()
+	var createSnapshot bool = true
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	n := as.node
@@ -217,7 +215,6 @@ func (as *AspiraServer) Run() {
 		case <-ticker.C:
 			n.Raft().Tick()
 		case rd := <-n.Raft().Ready():
-
 			_, span := otrace.StartSpan(ctx, "Ready.Loop", otrace.WithSampler(otrace.ProbabilitySampler(0.1)))
 
 			span.Annotatef(nil, "Pushed %d readstates", len(rd.ReadStates))
@@ -225,19 +222,25 @@ func (as *AspiraServer) Run() {
 				leader = rd.RaftState == raft.StateLeader
 			}
 
+			createSnapshot = true
 			if leader {
 				for i := range rd.Messages {
-					if rd.Messages[i].To == 0 {
-						glog.Warningf("THE MESSAGE IS %+V\n", rd.Messages[i])
-					}
 					as.node.Send(&rd.Messages[i])
+					if !raft.IsEmptySnap(rd.Messages[i].Snapshot) {
+						createSnapshot = true
+						glog.Warningf("from %d to %d, snap is %v", rd.Messages[i].From, rd.Messages[i].To, rd.Messages[i].Snapshot)
+					}
+				}
+				for _, progress := range n.Raft().Status().Progress {
+					if progress.State == raft.ProgressStateSnapshot {
+						createSnapshot = false
+					}
 				}
 			}
 
 			if !raft.IsEmptySnap(rd.Snapshot) {
 
 				//drain the applied messages
-
 				glog.Warningf("I Got snapshot %+v", rd.Snapshot.Metadata)
 				err := as.receiveSnapshot(rd.Snapshot)
 				if err != nil {
@@ -251,20 +254,25 @@ func (as *AspiraServer) Run() {
 					panic("for loop, try again")
 				}
 				as.store.DeleteFrom(rd.Snapshot.Metadata.Index + 1)
+				as.node.SetConfState(&rd.Snapshot.Metadata.ConfState)
 			}
 
-			n.SaveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
+			n.SaveToStorage(rd.HardState, rd.Entries)
 
 			span.Annotatef(nil, "Saved to storage")
 
-			if rd.MustSync {
+			synced := false
+			if createSnapshot {
+				synced = as.trySnapshot(1000)
+			}
+
+			if rd.MustSync && !synced {
 				n.Store.Flush()
 			}
 
 			span.Annotatef(nil, "Sync files done")
 
 			for _, entry := range rd.CommittedEntries {
-				fmt.Printf("try to commit index:%d, size:%d\n", entry.Index, entry.Size())
 				n.Applied.Begin(entry.Index)
 				switch {
 				case entry.Type == raftpb.EntryConfChange:
@@ -278,6 +286,7 @@ func (as *AspiraServer) Run() {
 				default:
 					glog.Warningf("Unhandled entry: %+v\n", entry)
 				}
+				fmt.Printf("commit index:%d, size:%d\n", entry.Index, entry.Size())
 				n.Applied.Done(entry.Index)
 			}
 			span.Annotatef(nil, "Applied %d CommittedEntries", len(rd.CommittedEntries))
@@ -296,23 +305,7 @@ func (as *AspiraServer) Run() {
 	}
 }
 
-func (as *AspiraServer) snapshotPeriodically() {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-	defer func() {
-		glog.Infof("snapshot period return")
-	}()
-	for {
-		select {
-		case <-ticker.C:
-			as.trySnapshot(10)
-		case <-as.stopper.ShouldStop():
-			return
-		}
-	}
-}
-
-func (as *AspiraServer) trySnapshot(skip uint64) {
+func (as *AspiraServer) trySnapshot(skip uint64) (created bool) {
 	existing, err := as.node.Store.Snapshot()
 	utils.Check(err)
 	si := existing.Metadata.Index
@@ -324,7 +317,11 @@ func (as *AspiraServer) trySnapshot(skip uint64) {
 	data, err := as.state.Marshal()
 	utils.Check(err)
 	glog.Infof("Writing snapshot at index:%d\n", doneUntil-skip/2)
-	as.store.CreateSnapshot(doneUntil-skip/2, as.node.ConfState(), data)
+	created, err = as.store.CreateSnapshot(doneUntil-skip/2, as.node.ConfState(), data)
+	if err != nil {
+		glog.Warningf("trySnapshot have error %+v", err)
+	}
+	return created
 }
 
 func (as *AspiraServer) AmLeader() bool {
@@ -450,7 +447,7 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 		}
 
 		xx := as.node.Raft().ApplyConfChange(cc)
-		fmt.Printf("FUCKApply cc %+v\n", xx)
+		fmt.Printf("Apply CC %+v\n", xx)
 		as.node.SetConfState(xx)
 		as.node.DoneConfChange(cc.ID, nil)
 	case raftpb.ConfChangeRemoveNode:
