@@ -267,7 +267,12 @@ func (as *AspiraServer) Run() {
 			}
 
 			if rd.MustSync && !synced {
-				n.Store.Flush()
+				if *strict {
+					n.Store.Sync()
+				} else {
+					n.Store.Flush()
+				}
+
 			}
 
 			span.Annotatef(nil, "Sync files done")
@@ -286,7 +291,7 @@ func (as *AspiraServer) Run() {
 				default:
 					glog.Warningf("Unhandled entry: %+v\n", entry)
 				}
-				fmt.Printf("commit index:%d, size:%d\n", entry.Index, entry.Size())
+				glog.Info("commit index:%d, size:%d\n", entry.Index, entry.Size())
 				n.Applied.Done(entry.Index)
 			}
 			span.Annotatef(nil, "Applied %d CommittedEntries", len(rd.CommittedEntries))
@@ -460,6 +465,7 @@ var (
 	id        = flag.Uint64("id", 0, "id")
 	join      = flag.String("join", "", "remote addr")
 	hasJaeger = flag.Bool("jaeger", false, "connect to jaeger")
+	strict    = flag.Bool("strict", false, "strict sync every entry")
 )
 
 func (as *AspiraServer) Stop() {
@@ -482,6 +488,7 @@ func main() {
 		otrace.ApplyConfig(otrace.Config{DefaultSampler: trace.AlwaysSample()})
 	}
 
+	glog.Warningf("strict is %+v", *strict)
 	stringID := fmt.Sprintf("%d", *id)
 	var x *AspiraServer
 	x, _ = NewAspiraServer(*id, "127.0.0.1:330"+stringID, stringID+".lusf")
