@@ -47,27 +47,27 @@ const (
 )
 
 type AspiraServer struct {
-	node          *conn.Node
-	raftServer    *conn.RaftServer //internal comms
-	grpcServer    *grpc.Server     //internal comms, raftServer is registered on grpcServer
-	store         *raftwal.WAL
-	addr          string
-	stopper       *utils.Stopper
-	state         *aspirapb.MembershipState
-	allowSnapshot bool
+	node        *conn.Node
+	raftServer  *conn.RaftServer //internal comms
+	grpcServer  *grpc.Server     //internal comms, raftServer is registered on grpcServer
+	store       *raftwal.WAL
+	addr        string
+	stopper     *utils.Stopper
+	state       *aspirapb.MembershipState
+	hasDirectIO bool
 }
 
-func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err error) {
+func NewAspiraServer(id uint64, addr string, path string, hasDirectIO bool) (as *AspiraServer, err error) {
 
 	var db *cannyls.Storage
 
 	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
-		if db, err = cannyls.CreateCannylsStorage(path, 8<<30, 0.05); err != nil {
+		if db, err = cannyls.CreateCannylsStorage(path, 8<<30, 0.05, hasDirectIO); err != nil {
 			return
 		}
 	} else {
-		if db, err = cannyls.OpenCannylsStorage(path); err != nil {
+		if db, err = cannyls.OpenCannylsStorage(path, hasDirectIO); err != nil {
 			return
 		}
 	}
@@ -77,12 +77,13 @@ func NewAspiraServer(id uint64, addr string, path string) (as *AspiraServer, err
 	raftServer := conn.NewRaftServer(node)
 
 	as = &AspiraServer{
-		node:       node,
-		raftServer: raftServer,
-		addr:       addr,
-		stopper:    utils.NewStopper(),
-		store:      store,
-		state:      &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
+		node:        node,
+		raftServer:  raftServer,
+		addr:        addr,
+		stopper:     utils.NewStopper(),
+		store:       store,
+		state:       &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
+		hasDirectIO: hasDirectIO,
 	}
 	return as, nil
 }
@@ -271,7 +272,7 @@ func (as *AspiraServer) Run() {
 			}
 
 			if rd.MustSync && !synced {
-				if *strict {
+				if *strict || as.hasDirectIO == false {
 					n.Store.Sync()
 				} else {
 					n.Store.Flush()
@@ -497,7 +498,7 @@ func main() {
 	xlog.Logger.Warnf("strict is %+v", *strict)
 	stringID := fmt.Sprintf("%d", *id)
 	var x *AspiraServer
-	x, _ = NewAspiraServer(*id, "127.0.0.1:330"+stringID, stringID+".lusf")
+	x, _ = NewAspiraServer(*id, "127.0.0.1:330"+stringID, stringID+".lusf", true)
 
 	x.ServeGRPC()
 	go func() {
@@ -574,7 +575,7 @@ func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 
 	os.Rename(backupName, name)
 
-	db, err := cannyls.OpenCannylsStorage(name)
+	db, err := cannyls.OpenCannylsStorage(name, as.hasDirectIO)
 	if err != nil {
 		panic("can not open downloaded cannylsdb")
 	}

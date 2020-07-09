@@ -197,6 +197,7 @@ github.com/gogo/protobuf v1.2.1/go.mod h1:hp+jE20tsWTFYpLwKvXlhS1hjn+gTNwPg2I6zV
 github.com/gogo/protobuf v1.3.1 h1:DqDEcV5aeaTmdFBePNpYsp3FlcVH/2ISVVM9Qf8PSls=
 github.com/gogo/protobuf v1.3.1/go.mod h1:SlYgWuQ5SjCEi6WLHjHCa1yvBfUnHcTbrrZtXPKa29o=
 github.com/golang/geo v0.0.0-20170810003146-31fb0106dc4a/go.mod h1:vgWZ7cu0fq0KY3PpEHsocXOWJpRtkcbKemU4IUw0M60=
+github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b h1:VKtxabqXZkF25pY9ekfRL6a582T4P37/31XEstQ5p58=
 github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfUlaOkMMuAQtPIUF8ecWP5IEl/CR7VP2Q=
 github.com/golang/groupcache v0.0.0-20160516000752-02826c3e7903/go.mod h1:cIg4eruTrX1D+g88fzRXU5OdNfaM+9IcxsU14FzY7Hc=
 github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6 h1:ZgQEtGgCBiWRM39fZuwSd1LwSqqSW0hOdXCYYDX0R3I=
@@ -464,6 +465,8 @@ github.com/thesues/cannyls-go v0.2.1-0.20200705175459-3575367c4a48 h1:hNv0yl6DVH
 github.com/thesues/cannyls-go v0.2.1-0.20200705175459-3575367c4a48/go.mod h1:zWm3D05WBBDe9MtAxoXWrnh4WKwAgOl08DIrdcpFnCk=
 github.com/thesues/cannyls-go v0.2.1-0.20200705175718-47121acd8f2a h1:dbEHbVwAgE1Ry7RUofcC105GKIqaHaICj/1bXYOrwxY=
 github.com/thesues/cannyls-go v0.2.1-0.20200705175718-47121acd8f2a/go.mod h1:zWm3D05WBBDe9MtAxoXWrnh4WKwAgOl08DIrdcpFnCk=
+github.com/thesues/cannyls-go v0.2.1-0.20200709211751-0dadb5eb7051 h1:60KSgTidPxId3msDpVX9svZdcu+mZ51ISvxsL+zg2/E=
+github.com/thesues/cannyls-go v0.2.1-0.20200709211751-0dadb5eb7051/go.mod h1:zWm3D05WBBDe9MtAxoXWrnh4WKwAgOl08DIrdcpFnCk=
 github.com/thesues/go-judy v0.1.0 h1:TQ7/6DrsB97SucjgCYE7V3tVZxXUtsEDgDGflzx4l6A=
 github.com/thesues/go-judy v0.1.0/go.mod h1:MZmMG42kheHBNX0AvY0F02ZOBaqm2RsOqcGVfbHax9w=
 github.com/thesues/go-judy v0.1.3 h1:NHTAU4TY+CYvE3pExqtxF4dPC+o4e685o6Z+dC0rUf0=

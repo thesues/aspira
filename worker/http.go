@@ -45,6 +45,12 @@ func (as *AspiraServer) del(c *gin.Context) {
 	c.String(200, "delete %d", id)
 }
 
+/*
+func (as *AspiraServer) putWithOffset(c *gin.Context) {
+
+}
+*/
+
 // @Summary Put an object
 // @Accept  multipart/form-data
 // @Param   file formData file true  "this is a test file"

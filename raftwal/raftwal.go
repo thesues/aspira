@@ -535,17 +535,17 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (cr
 	if err != nil {
 		return
 	}
+
+	wal.DB().Sync()
 	if _, err = wal.DB().PutEmbed(wal.snapshotKey(), data); err != nil {
 		return
 	}
-
 	//set log value which represent snapshot.Term, snapshot.Index
 	e := raftpb.Entry{Term: snap.Metadata.Term, Index: snap.Metadata.Index}
 	data, err = e.Marshal()
 	if _, err = wal.DB().PutEmbed(wal.EntryKey(e.Index), data); err != nil {
 		return
 	}
-	wal.DB().Sync()
 	wal.cache.Store(_snapshotKey, snap)
 	if err = wal.deleteUntil(snap.Metadata.Index); err != nil {
 		return
