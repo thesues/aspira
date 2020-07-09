@@ -4,14 +4,14 @@ import (
 	"log"
 	"strings"
 
-	"github.com/golang/glog"
 	"github.com/pkg/errors"
+	"github.com/thesues/aspira/xlog"
 	"google.golang.org/grpc/status"
 )
 
 func Check(err error) {
 	if err != nil {
-		glog.Fatalf("%+v", errors.Wrap(err, ""))
+		xlog.Logger.Fatalf("%+v", errors.Wrap(err, ""))
 	}
 }
 

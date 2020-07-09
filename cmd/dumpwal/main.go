@@ -107,7 +107,7 @@ func main() {
 	last, err := wal.LastIndex()
 	fmt.Printf("LastIndex  : %d\n", last)
 
-	es, err := wal.AllEntries(first, raftwal.MaxKey, 10<<20)
+	es, err := wal.AllEntries(first, (^uint64(0) >> 2), 10<<20)
 	if err != nil {
 		panic(err.Error())
 	}

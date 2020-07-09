@@ -31,11 +31,11 @@ import (
 	"github.com/pkg/errors"
 
 	"contrib.go.opencensus.io/exporter/jaeger"
-	"github.com/golang/glog"
 	"github.com/thesues/aspira/conn"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
+	"github.com/thesues/aspira/xlog"
 	cannyls "github.com/thesues/cannyls-go/storage"
 	"go.opencensus.io/trace"
 	otrace "go.opencensus.io/trace"
@@ -133,7 +133,7 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 				cancel()
 				log.Fatalf("Error while joining cluster: %v", err)
 			}
-			glog.Errorf("Error while joining cluster: %v\n", err)
+			xlog.Logger.Errorf("Error while joining cluster: %v\n", err)
 			timeout *= 2
 			if timeout > 32*time.Second {
 				timeout = 32 * time.Second
@@ -168,7 +168,7 @@ func (as *AspiraServer) ServeGRPC() (err error) {
 	}
 	go func() {
 		defer func() {
-			glog.Infof("GRPC server return")
+			xlog.Logger.Infof("GRPC server return")
 		}()
 		s.Serve(listener)
 	}()
@@ -180,7 +180,7 @@ var errInvalidProposal = errors.New("Invalid group proposal")
 
 func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 	var p aspirapb.AspiraProposal
-	glog.Infof("apply commit %d: data is %d", e.Index, e.Size())
+	xlog.Logger.Infof("apply commit %d: data is %d", e.Index, e.Size())
 	//leader's first commit
 	if len(e.Data) == 0 {
 		return p.AssociateKey, nil
@@ -198,7 +198,7 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 	case aspirapb.AspiraProposal_PutWithOffset:
 		panic("to be implemented")
 	default:
-		glog.Fatalf("unkonw type %+v", p.ProposalType)
+		xlog.Logger.Fatalf("unkonw type %+v", p.ProposalType)
 	}
 	return p.AssociateKey, err
 }
@@ -226,33 +226,37 @@ func (as *AspiraServer) Run() {
 			if leader {
 				for i := range rd.Messages {
 					as.node.Send(&rd.Messages[i])
+
 					if !raft.IsEmptySnap(rd.Messages[i].Snapshot) {
 						createSnapshot = true
-						glog.Warningf("from %d to %d, snap is %v", rd.Messages[i].From, rd.Messages[i].To, rd.Messages[i].Snapshot)
+						xlog.Logger.Warnf("from %d to %d, snap is %v", rd.Messages[i].From, rd.Messages[i].To, rd.Messages[i].Snapshot)
 					}
+
 				}
+
 				for _, progress := range n.Raft().Status().Progress {
 					if progress.State == raft.ProgressStateSnapshot {
 						createSnapshot = false
 					}
 				}
 			}
-
 			if !raft.IsEmptySnap(rd.Snapshot) {
 
 				//drain the applied messages
-				glog.Warningf("I Got snapshot %+v", rd.Snapshot.Metadata)
+				xlog.Logger.Warnf("I Got snapshot %+v", rd.Snapshot.Metadata)
 				err := as.receiveSnapshot(rd.Snapshot)
 				if err != nil {
-					glog.Fatalf("can not receive remote snapshot %+v", err)
+					xlog.Logger.Fatalf("can not receive remote snapshot %+v", err)
 				}
 
-				glog.Infof("---> SNAPSHOT: %+v. DONE.\n", rd.Snapshot)
+				xlog.Logger.Infof("---> SNAPSHOT: %+v. DONE.\n", rd.Snapshot)
 
 				snapOnDisk, _ := as.store.Snapshot()
+
 				if snapOnDisk.Metadata.Index != rd.Snapshot.Metadata.Index || snapOnDisk.Metadata.Term != rd.Snapshot.Metadata.Term {
 					panic("for loop, try again")
 				}
+
 				as.store.DeleteFrom(rd.Snapshot.Metadata.Index + 1)
 				as.node.SetConfState(&rd.Snapshot.Metadata.ConfState)
 			}
@@ -285,13 +289,13 @@ func (as *AspiraServer) Run() {
 				case entry.Type == raftpb.EntryNormal:
 					uniqKey, err := as.applyProposal(entry)
 					if err != nil {
-						glog.Errorf("While applying proposal: %v\n", err)
+						xlog.Logger.Errorf("While applying proposal: %v\n", err)
 					}
 					n.Proposals.Done(uniqKey, entry.Index, err)
 				default:
-					glog.Warningf("Unhandled entry: %+v\n", entry)
+					xlog.Logger.Warnf("Unhandled entry: %+v\n", entry)
 				}
-				glog.Info("commit index:%d, size:%d\n", entry.Index, entry.Size())
+				xlog.Logger.Infof("commit index:%d, size:%d\n", entry.Index, entry.Size())
 				n.Applied.Done(entry.Index)
 			}
 			span.Annotatef(nil, "Applied %d CommittedEntries", len(rd.CommittedEntries))
@@ -321,10 +325,10 @@ func (as *AspiraServer) trySnapshot(skip uint64) (created bool) {
 	}
 	data, err := as.state.Marshal()
 	utils.Check(err)
-	glog.Infof("Writing snapshot at index:%d\n", doneUntil-skip/2)
+	xlog.Logger.Infof("Writing snapshot at index:%d\n", doneUntil-skip/2)
 	created, err = as.store.CreateSnapshot(doneUntil-skip/2, as.node.ConfState(), data)
 	if err != nil {
-		glog.Warningf("trySnapshot have error %+v", err)
+		xlog.Logger.Warnf("trySnapshot have error %+v", err)
 	}
 	return created
 }
@@ -376,9 +380,11 @@ func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.A
 		return 0, errors.Errorf("Raft isn't initialized yet.")
 	case ctx.Err() != nil:
 		return 0, ctx.Err()
-	case !as.AmLeader():
-		// Do this check upfront. Don't do this inside propose for reasons explained below.
-		return 0, errors.Errorf("Not a leader. Aborting proposal: %+v", len(proposal.Data))
+		/*
+			case !as.AmLeader():
+				// Do this check upfront. Don't do this inside propose for reasons explained below.
+				return 0, errors.Errorf("Not a leader. Aborting proposal: %+v", len(proposal.Data))
+		*/
 	}
 
 	span := otrace.FromContext(ctx)
@@ -488,7 +494,7 @@ func main() {
 		otrace.ApplyConfig(otrace.Config{DefaultSampler: trace.AlwaysSample()})
 	}
 
-	glog.Warningf("strict is %+v", *strict)
+	xlog.Logger.Warnf("strict is %+v", *strict)
 	stringID := fmt.Sprintf("%d", *id)
 	var x *AspiraServer
 	x, _ = NewAspiraServer(*id, "127.0.0.1:330"+stringID, stringID+".lusf")
@@ -510,7 +516,7 @@ func (as *AspiraServer) receiveSnapshot(snap raftpb.Snapshot) (err error) {
 		if p == nil {
 			continue
 		}
-		glog.V(2).Infof("Snapshot.RaftContext.Addr: %+v", p.Addr)
+		xlog.Logger.Infof("Snapshot.RaftContext.Addr: %+v", p.Addr)
 		err = as.populateSnapshot(snap, p)
 		if err == nil {
 			break
@@ -537,6 +543,7 @@ func (as *AspiraServer) getPeerPool(peer uint64) *conn.Pool {
 func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (err error) {
 	conn := pl.Get()
 	c := aspirapb.NewAspiraGRPCClient(conn)
+	xlog.Logger.Warnf("know snapshot %d", snap.Metadata.Index)
 	stream, err := c.StreamSnapshot(context.Background(), as.node.RaftContext)
 	if err != nil {
 		return
@@ -546,7 +553,7 @@ func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 	file, err := os.OpenFile(backupName, os.O_CREATE|os.O_RDWR, 0644)
 
 	defer file.Close()
-	glog.Infof("Start to receive data")
+	xlog.Logger.Infof("Start to receive data")
 	var payload *aspirapb.Payload
 	for {
 		payload, err = stream.Recv()
@@ -559,7 +566,7 @@ func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 			break
 		}
 	}
-	glog.Infof("End to receive data")
+	xlog.Logger.Infof("End to receive data")
 
 	as.store.CloseDB()
 	name := fmt.Sprintf("%d.lusf", as.node.RaftContext.Id)
@@ -572,5 +579,7 @@ func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 		panic("can not open downloaded cannylsdb")
 	}
 	as.store.SetDB(db)
+	sa, _ := as.store.Snapshot()
+	xlog.Logger.Warnf("get snapshot %d", sa.Metadata.Index)
 	return nil
 }

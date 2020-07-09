@@ -105,6 +105,6 @@ service Raft {
 
 
 service AspiraGRPC {
-	rpc StreamSnapshot (RaftContext)    returns (stream Payload) {}
+	rpc StreamSnapshot (RaftContext) returns (stream Payload) {}
 	//TODO grpc interface for put/Get
 }

@@ -21,7 +21,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/thesues/aspira/xlog"
+
 	"github.com/pkg/errors"
 	pb "github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/utils"
@@ -88,7 +89,7 @@ func (p *Pools) remove(addr string) {
 	if !ok {
 		return
 	}
-	glog.Warningf("DISCONNECTING from %s\n", addr)
+	xlog.Logger.Warnf("DISCONNECTING from %s\n", addr)
 	delete(p.all, addr)
 	pool.shutdown()
 }
@@ -109,7 +110,7 @@ func (p *Pools) Connect(addr string) *Pool {
 
 	pool, err := newPool(addr)
 	if err != nil {
-		glog.Errorf("Unable to connect to host: %s", addr)
+		xlog.Logger.Errorf("Unable to connect to host: %s", addr)
 		return nil
 	}
 
@@ -120,7 +121,7 @@ func (p *Pools) Connect(addr string) *Pool {
 		go pool.shutdown() // Not being used, so release the resources.
 		return existingPool
 	}
-	glog.Infof("CONNECTING to %s\n", addr)
+	xlog.Logger.Infof("CONNECTING to %s\n", addr)
 	p.all[addr] = pool
 	return pool
 }
@@ -152,10 +153,10 @@ func (p *Pool) Get() *grpc.ClientConn {
 }
 
 func (p *Pool) shutdown() {
-	glog.Warningf("Shutting down extra connection to %s", p.Addr)
+	xlog.Logger.Warnf("Shutting down extra connection to %s", p.Addr)
 	p.stopper.Stop()
 	if err := p.conn.Close(); err != nil {
-		glog.Warningf("Could not close pool connection with error: %s", err)
+		xlog.Logger.Warnf("Could not close pool connection with error: %s", err)
 	}
 }
 
@@ -209,9 +210,9 @@ func (p *Pool) MonitorHealth() {
 		default:
 			err := p.listenToHeartbeat()
 			if lastErr != nil && err == nil {
-				glog.Infof("Connection established with %v\n", p.Addr)
+				xlog.Logger.Infof("Connection established with %v\n", p.Addr)
 			} else if err != nil && lastErr == nil {
-				glog.Warningf("Connection lost with %v. Error: %v\n", p.Addr, err)
+				xlog.Logger.Warnf("Connection lost with %v. Error: %v\n", p.Addr, err)
 			}
 			lastErr = err
 			// Sleep for a bit before retrying.

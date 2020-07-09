@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/golang/glog"
 	"github.com/pkg/errors"
 	pb "github.com/thesues/aspira/protos/aspirapb"
+	"github.com/thesues/aspira/xlog"
 
 	otrace "go.opencensus.io/trace"
 )
@@ -233,21 +233,20 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 			// This should be done in order, and not via a goroutine.
 			// Step can block forever. See: https://github.com/etcd-io/etcd/issues/10585
 			// So, add a context with timeout to allow it to get out of the blockage.
-			if glog.V(2) {
-				switch msg.Type {
-				case raftpb.MsgHeartbeat, raftpb.MsgHeartbeatResp:
-					atomic.AddInt64(&node.heartbeatsIn, 1)
-				case raftpb.MsgReadIndex, raftpb.MsgReadIndexResp:
-					/*
-						case raftpb.MsgApp, raftpb.MsgAppResp:
-						case raftpb.MsgProp:*/
-				default:
-					glog.Infof("RaftComm: [%#x] Received msg of type: %s from %#x",
-						msg.To, msg.Type, msg.From)
-				}
+			switch msg.Type {
+			case raftpb.MsgHeartbeat, raftpb.MsgHeartbeatResp:
+				atomic.AddInt64(&node.heartbeatsIn, 1)
+			case raftpb.MsgReadIndex, raftpb.MsgReadIndexResp:
+				/*
+					case raftpb.MsgApp, raftpb.MsgAppResp:
+					case raftpb.MsgProp:*/
+			default:
+				xlog.Logger.Debugf("RaftComm: [%#x] Received msg of type: %s from %#x",
+					msg.To, msg.Type, msg.From)
 			}
+
 			if err := raft.Step(ctx, msg); err != nil {
-				glog.Warningf("Error while raft.Step from %#x: %v. Closing RaftMessage stream.",
+				xlog.Logger.Warnf("Error while raft.Step from %#x: %v. Closing RaftMessage stream.",
 					rc.GetId(), err)
 				return errors.Wrapf(err, "error while raft.Step from %#x", rc.GetId())
 			}
@@ -262,7 +261,7 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 			return err
 		}
 		if loop%1e6 == 0 {
-			glog.V(2).Infof("%d messages received by %#x from %#x", loop, node.Id, rc.GetId())
+			xlog.Logger.Infof("%d messages received by %#x from %#x", loop, node.Id, rc.GetId())
 		}
 		if loop == 1 {
 			rc = batch.GetContext()

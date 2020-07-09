@@ -25,11 +25,11 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/golang/glog"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/utils"
+	"github.com/thesues/aspira/xlog"
 	"github.com/thesues/cannyls-go/block"
 	"github.com/thesues/cannyls-go/lump"
 	cannyls "github.com/thesues/cannyls-go/storage"
@@ -63,7 +63,7 @@ var (
 func Init(db *cannyls.Storage) *WAL {
 	cache, err := lru.New(1000)
 	if err != nil {
-		glog.Errorf("can not create LRU %+v", err)
+		xlog.Logger.Errorf("can not create LRU %+v", err)
 	}
 	wal := &WAL{
 		ab:         block.NewAlignedBytes(512, block.Min()),
@@ -376,12 +376,12 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 		} else {
 			data, err := wal.DB().Get(id)
 			if err != nil {
-				glog.Fatalf("failed to get id %+v, err is %+v", id, err)
+				xlog.Logger.Fatalf("failed to get id %+v, err is %+v", id, err)
 			}
 			var meta aspirapb.EntryMeta
 			var e raftpb.Entry
 			if err = meta.Unmarshal(data); err != nil {
-				glog.Fatalf("Unmarshal data failed %+v", err)
+				xlog.Logger.Fatalf("Unmarshal data failed %+v", err)
 			}
 			switch meta.EntryType {
 			case aspirapb.EntryMeta_PutWithOffset:
@@ -392,7 +392,7 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 				e.Type = raftpb.EntryNormal
 				extData, err := wal.DB().Get(wal.ExtKey(id.U64() & keyMask))
 				if err != nil {
-					glog.Fatalf("Get data failed %+v", err)
+					xlog.Logger.Fatalf("Get data failed %+v", err)
 
 				}
 				//restore the proposal data from EntryMeta
@@ -413,7 +413,7 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 				e.Data = meta.Data
 				//}
 			default:
-				glog.Fatalf("unknow type read from %+v", id)
+				xlog.Logger.Fatalf("unknow type read from %+v", id)
 			}
 			e.Term = meta.Term
 			e.Index = meta.Index
@@ -463,6 +463,7 @@ func (wal *WAL) reset(es []raftpb.Entry) error {
 }
 
 func (wal *WAL) deleteUntil(until uint64) error {
+	//TODO delete LRU??
 	return wal.DB().DeleteRange(wal.EntryKey(0), wal.EntryKey(until), true)
 }
 
@@ -601,12 +602,12 @@ func (wal *WAL) FreeStreamReader() {
 	defer wal.dbLock.Unlock()
 
 	if wal.readCounts == 0 {
-		glog.Fatalf("FreeStreamReader > GetStreamReader")
+		xlog.Logger.Fatalf("FreeStreamReader > GetStreamReader")
 	}
 	wal.readCounts--
 	if wal.readCounts == 0 {
 		if err := wal.DB().DeleteSnapshot(); err != nil {
-			glog.Errorf("failed to delete snapshot file %+v", err)
+			xlog.Logger.Errorf("failed to delete snapshot file %+v", err)
 		}
 	}
 }
@@ -626,4 +627,5 @@ func (wal *WAL) CloseDB() {
 	defer wal.dbLock.Unlock()
 	wal.DB().Close()
 	wal.cache.Delete(_snapshotKey)
+	wal.entryCache.Purge()
 }
