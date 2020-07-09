@@ -465,6 +465,8 @@ github.com/thesues/cannyls-go v0.2.1-0.20200705175459-3575367c4a48 h1:hNv0yl6DVH
 github.com/thesues/cannyls-go v0.2.1-0.20200705175459-3575367c4a48/go.mod h1:zWm3D05WBBDe9MtAxoXWrnh4WKwAgOl08DIrdcpFnCk=
 github.com/thesues/cannyls-go v0.2.1-0.20200705175718-47121acd8f2a h1:dbEHbVwAgE1Ry7RUofcC105GKIqaHaICj/1bXYOrwxY=
 github.com/thesues/cannyls-go v0.2.1-0.20200705175718-47121acd8f2a/go.mod h1:zWm3D05WBBDe9MtAxoXWrnh4WKwAgOl08DIrdcpFnCk=
+github.com/thesues/cannyls-go v0.2.1-0.20200708180613-28b62b64ebcf h1:ZGA9ndk2PDS2VcCVmKG7/bVbNhlhwavM6Cjo8JaafeE=
+github.com/thesues/cannyls-go v0.2.1-0.20200708180613-28b62b64ebcf/go.mod h1:zWm3D05WBBDe9MtAxoXWrnh4WKwAgOl08DIrdcpFnCk=
 github.com/thesues/cannyls-go v0.2.1-0.20200709211751-0dadb5eb7051 h1:60KSgTidPxId3msDpVX9svZdcu+mZ51ISvxsL+zg2/E=
 github.com/thesues/cannyls-go v0.2.1-0.20200709211751-0dadb5eb7051/go.mod h1:zWm3D05WBBDe9MtAxoXWrnh4WKwAgOl08DIrdcpFnCk=
 github.com/thesues/go-judy v0.1.0 h1:TQ7/6DrsB97SucjgCYE7V3tVZxXUtsEDgDGflzx4l6A=

@@ -63,11 +63,11 @@ func NewAspiraServer(id uint64, addr string, path string, hasDirectIO bool) (as 
 
 	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
-		if db, err = cannyls.CreateCannylsStorage(path, 8<<30, 0.05, hasDirectIO); err != nil {
+		if db, err = cannyls.CreateCannylsStorage(path, 8<<30, 0.05); err != nil {
 			return
 		}
 	} else {
-		if db, err = cannyls.OpenCannylsStorage(path, hasDirectIO); err != nil {
+		if db, err = cannyls.OpenCannylsStorage(path); err != nil {
 			return
 		}
 	}
@@ -77,13 +77,12 @@ func NewAspiraServer(id uint64, addr string, path string, hasDirectIO bool) (as 
 	raftServer := conn.NewRaftServer(node)
 
 	as = &AspiraServer{
-		node:        node,
-		raftServer:  raftServer,
-		addr:        addr,
-		stopper:     utils.NewStopper(),
-		store:       store,
-		state:       &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
-		hasDirectIO: hasDirectIO,
+		node:       node,
+		raftServer: raftServer,
+		addr:       addr,
+		stopper:    utils.NewStopper(),
+		store:      store,
+		state:      &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
 	}
 	return as, nil
 }
@@ -272,7 +271,7 @@ func (as *AspiraServer) Run() {
 			}
 
 			if rd.MustSync && !synced {
-				if *strict || as.hasDirectIO == false {
+				if *strict {
 					n.Store.Sync()
 				} else {
 					n.Store.Flush()
@@ -575,7 +574,7 @@ func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 
 	os.Rename(backupName, name)
 
-	db, err := cannyls.OpenCannylsStorage(name, as.hasDirectIO)
+	db, err := cannyls.OpenCannylsStorage(name)
 	if err != nil {
 		panic("can not open downloaded cannylsdb")
 	}
