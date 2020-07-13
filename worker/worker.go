@@ -472,6 +472,7 @@ var (
 	join      = flag.String("join", "", "remote addr")
 	hasJaeger = flag.Bool("jaeger", false, "connect to jaeger")
 	strict    = flag.Bool("strict", false, "strict sync every entry")
+	addr      = flag.String("addr", "", "")
 )
 
 func (as *AspiraServer) Stop() {
@@ -496,12 +497,13 @@ func main() {
 
 	xlog.InitLog(*id)
 
-	xlog.Logger.Warnf("strict is %+v", *strict)
+	xlog.Logger.Infof("strict is %+v", *strict)
+
 	stringID := fmt.Sprintf("%d", *id)
 	var x *AspiraServer
-	x, _ = NewAspiraServer(*id, "127.0.0.1:330"+stringID, stringID+".lusf", true)
+	x, _ = NewAspiraServer(*id, *addr, stringID+".lusf", true)
 
-	x.ServeGRPC()
+	utils.Check(x.ServeGRPC())
 	go func() {
 		x.ServeHTTP()
 	}()

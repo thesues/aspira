@@ -17,7 +17,6 @@
 package raftwal
 
 import (
-	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -436,7 +435,7 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 
 func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 
-	fmt.Printf("all entries %d=>%d\n", lo, hi)
+	xlog.Logger.Debugf("search entries %d=>%d\n", lo, hi)
 	first, err := wal.FirstIndex()
 	if err != nil {
 		return es, err
