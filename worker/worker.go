@@ -155,8 +155,8 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 
 func (as *AspiraServer) ServeGRPC() (err error) {
 	s := grpc.NewServer(
-		grpc.MaxRecvMsgSize(1<<25),
-		grpc.MaxSendMsgSize(1<<25),
+		grpc.MaxRecvMsgSize(256<<20),
+		grpc.MaxSendMsgSize(256<<20),
 		grpc.MaxConcurrentStreams(1000),
 	)
 
@@ -243,7 +243,7 @@ func (as *AspiraServer) Run() {
 			if !raft.IsEmptySnap(rd.Snapshot) {
 
 				//drain the applied messages
-				xlog.Logger.Warnf("I Got snapshot %+v", rd.Snapshot.Metadata)
+				xlog.Logger.Info("I Got snapshot %+v", rd.Snapshot.Metadata)
 				err := as.receiveSnapshot(rd.Snapshot)
 				if err != nil {
 					xlog.Logger.Fatalf("can not receive remote snapshot %+v", err)
@@ -547,7 +547,7 @@ func (as *AspiraServer) getPeerPool(peer uint64) *conn.Pool {
 func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (err error) {
 	conn := pl.Get()
 	c := aspirapb.NewAspiraGRPCClient(conn)
-	xlog.Logger.Warnf("know snapshot %d", snap.Metadata.Index)
+	xlog.Logger.Infof("know snapshot %d", snap.Metadata.Index)
 	stream, err := c.StreamSnapshot(context.Background(), as.node.RaftContext)
 	if err != nil {
 		return

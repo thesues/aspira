@@ -1,7 +1,7 @@
 package xlog
 
 import (
-	"fmt"
+	"os"
 
 	"go.uber.org/zap"
 )
@@ -13,8 +13,8 @@ var (
 
 func InitLog(id uint64) {
 	cfg := zap.NewDevelopmentConfig()
-	fileName := fmt.Sprintf("%d.log", id)
-	cfg.OutputPaths = []string{fileName}
+	//fileName := fmt.Sprintf("%d.log", id)
+	cfg.OutputPaths = []string{os.Stderr.Name()}
 	cfg.Level.SetLevel(zap.InfoLevel)
 	ZapLogger, err := cfg.Build()
 	if err != nil {

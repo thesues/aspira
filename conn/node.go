@@ -123,7 +123,7 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 			// snapshot.
 			Applied: snap.Metadata.Index,
 
-			CheckQuorum: true,
+			//CheckQuorum: true,
 
 			//	Logger: &x.ToGlog{},
 		},
@@ -347,7 +347,7 @@ func (n *Node) PastLife() (uint64, bool, error) {
 */
 
 const (
-	messageBatchSoftLimit = 10e6
+	messageBatchSoftLimit = 128 << 20
 )
 
 type stream struct {

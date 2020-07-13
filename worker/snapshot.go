@@ -32,7 +32,7 @@ func (as *AspiraServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb
 		if err = stream.Send(&aspirapb.Payload{Data: buf[:n]}); err != nil {
 			return err
 		}
-		time.Sleep(2 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 	return nil
 }
