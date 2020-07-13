@@ -543,6 +543,171 @@ func (m *AspiraProposal) GetData() []byte {
 	return nil
 }
 
+//zero service
+type AllocIDRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *AllocIDRequest) Reset()         { *m = AllocIDRequest{} }
+func (m *AllocIDRequest) String() string { return proto.CompactTextString(m) }
+func (*AllocIDRequest) ProtoMessage()    {}
+func (*AllocIDRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_978c3dd237f791ac, []int{7}
+}
+func (m *AllocIDRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AllocIDRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AllocIDRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AllocIDRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AllocIDRequest.Merge(m, src)
+}
+func (m *AllocIDRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *AllocIDRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_AllocIDRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AllocIDRequest proto.InternalMessageInfo
+
+type AllocIDResponse struct {
+	ID                   uint64   `protobuf:"varint,1,opt,name=ID,proto3" json:"ID,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *AllocIDResponse) Reset()         { *m = AllocIDResponse{} }
+func (m *AllocIDResponse) String() string { return proto.CompactTextString(m) }
+func (*AllocIDResponse) ProtoMessage()    {}
+func (*AllocIDResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_978c3dd237f791ac, []int{8}
+}
+func (m *AllocIDResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AllocIDResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AllocIDResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AllocIDResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AllocIDResponse.Merge(m, src)
+}
+func (m *AllocIDResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *AllocIDResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_AllocIDResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AllocIDResponse proto.InternalMessageInfo
+
+func (m *AllocIDResponse) GetID() uint64 {
+	if m != nil {
+		return m.ID
+	}
+	return 0
+}
+
+type LeaderReportRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *LeaderReportRequest) Reset()         { *m = LeaderReportRequest{} }
+func (m *LeaderReportRequest) String() string { return proto.CompactTextString(m) }
+func (*LeaderReportRequest) ProtoMessage()    {}
+func (*LeaderReportRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_978c3dd237f791ac, []int{9}
+}
+func (m *LeaderReportRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LeaderReportRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_LeaderReportRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *LeaderReportRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LeaderReportRequest.Merge(m, src)
+}
+func (m *LeaderReportRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *LeaderReportRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_LeaderReportRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LeaderReportRequest proto.InternalMessageInfo
+
+type LeaderReportReponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *LeaderReportReponse) Reset()         { *m = LeaderReportReponse{} }
+func (m *LeaderReportReponse) String() string { return proto.CompactTextString(m) }
+func (*LeaderReportReponse) ProtoMessage()    {}
+func (*LeaderReportReponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_978c3dd237f791ac, []int{10}
+}
+func (m *LeaderReportReponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LeaderReportReponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_LeaderReportReponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *LeaderReportReponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LeaderReportReponse.Merge(m, src)
+}
+func (m *LeaderReportReponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *LeaderReportReponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_LeaderReportReponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LeaderReportReponse proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterEnum("aspirapb.EntryMeta_Type", EntryMeta_Type_name, EntryMeta_Type_value)
 	proto.RegisterEnum("aspirapb.AspiraProposal_Type", AspiraProposal_Type_name, AspiraProposal_Type_value)
@@ -554,52 +719,62 @@ func init() {
 	proto.RegisterType((*RaftBatch)(nil), "aspirapb.RaftBatch")
 	proto.RegisterType((*EntryMeta)(nil), "aspirapb.EntryMeta")
 	proto.RegisterType((*AspiraProposal)(nil), "aspirapb.AspiraProposal")
+	proto.RegisterType((*AllocIDRequest)(nil), "aspirapb.AllocIDRequest")
+	proto.RegisterType((*AllocIDResponse)(nil), "aspirapb.AllocIDResponse")
+	proto.RegisterType((*LeaderReportRequest)(nil), "aspirapb.LeaderReportRequest")
+	proto.RegisterType((*LeaderReportReponse)(nil), "aspirapb.LeaderReportReponse")
 }
 
 func init() { proto.RegisterFile("aspirapb.proto", fileDescriptor_978c3dd237f791ac) }
 
 var fileDescriptor_978c3dd237f791ac = []byte{
-	// 632 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x54, 0xdd, 0x6e, 0x12, 0x41,
-	0x14, 0xee, 0xc0, 0xf2, 0x77, 0x40, 0xdc, 0x8e, 0x7f, 0xd8, 0xa4, 0x84, 0x6c, 0xbc, 0x20, 0x31,
-	0xc1, 0x8a, 0xd1, 0xd4, 0x5e, 0x98, 0xb4, 0xd4, 0xf8, 0xd7, 0x2a, 0x99, 0x92, 0x78, 0x69, 0x06,
-	0xf6, 0x50, 0x36, 0xc2, 0xce, 0x66, 0x67, 0x30, 0xe5, 0x09, 0x7c, 0x05, 0x7d, 0x0e, 0x5f, 0xc2,
-	0x4b, 0x1f, 0xc1, 0xd4, 0x78, 0xe5, 0x4b, 0x98, 0x39, 0x0b, 0x6c, 0x29, 0xbd, 0xe9, 0xdd, 0x39,
-	0xc3, 0xf7, 0x9d, 0xf9, 0xbe, 0xb3, 0xdf, 0x00, 0x55, 0xa9, 0xa3, 0x20, 0x96, 0x51, 0xbf, 0x15,
-	0xc5, 0xca, 0x28, 0x5e, 0x5c, 0xf4, 0xde, 0x36, 0x14, 0xba, 0x72, 0x36, 0x56, 0xd2, 0xe7, 0x1c,
-	0x9c, 0x43, 0x69, 0x64, 0x8d, 0x35, 0x58, 0xb3, 0x22, 0xa8, 0xf6, 0x1e, 0x43, 0x59, 0xc8, 0xa1,
-	0xe9, 0xa8, 0xd0, 0xe0, 0x99, 0xe1, 0x55, 0xc8, 0x04, 0x3e, 0x01, 0xf2, 0x22, 0x13, 0x10, 0x45,
-	0xfa, 0x7e, 0x5c, 0xcb, 0x34, 0x58, 0xb3, 0x24, 0xa8, 0xf6, 0xbe, 0x32, 0xb8, 0x79, 0x8c, 0x93,
-	0x3e, 0xc6, 0x7a, 0x14, 0x44, 0x27, 0x46, 0x1a, 0xe4, 0x7b, 0x90, 0x0b, 0x95, 0x8f, 0xba, 0xc6,
-	0x1a, 0xd9, 0x66, 0xb9, 0xfd, 0xa0, 0xb5, 0xd4, 0x73, 0x09, 0xd9, 0x7a, 0x6f, 0x61, 0x2f, 0x43,
-	0x13, 0xcf, 0x44, 0x42, 0xd9, 0xda, 0x05, 0x48, 0x0f, 0xb9, 0x0b, 0xd9, 0xcf, 0x38, 0x23, 0x09,
-	0x8e, 0xb0, 0x25, 0xbf, 0x0d, 0xb9, 0x2f, 0x72, 0x3c, 0xc5, 0xb9, 0x88, 0xa4, 0xd9, 0xcb, 0xec,
-	0x32, 0xef, 0x3b, 0x83, 0xe2, 0x49, 0x28, 0x23, 0x3d, 0x52, 0x86, 0x3f, 0x82, 0xc2, 0x20, 0x71,
-	0x41, 0xe4, 0x72, 0xfb, 0x4e, 0x2a, 0xe2, 0x82, 0x45, 0xb1, 0x40, 0xd9, 0xb9, 0x41, 0xe8, 0xe3,
-	0x19, 0xcd, 0x75, 0x44, 0xd2, 0xf0, 0x7b, 0x50, 0x88, 0x51, 0xfa, 0x9f, 0x8c, 0xae, 0x65, 0xe9,
-	0x3c, 0x6f, 0xdb, 0x9e, 0xb6, 0xab, 0xf0, 0x55, 0x88, 0x35, 0xa7, 0xc1, 0x9a, 0x45, 0x41, 0x35,
-	0xbf, 0x0f, 0x45, 0x1d, 0x84, 0x03, 0xb4, 0xe8, 0x1c, 0xa1, 0x0b, 0xd4, 0xf7, 0xb4, 0x17, 0x40,
-	0xc9, 0xde, 0x7a, 0x20, 0xcd, 0x60, 0x74, 0x7d, 0x6d, 0x0f, 0xa1, 0x10, 0x25, 0x5f, 0x8d, 0xd4,
-	0x95, 0xdb, 0x9b, 0x29, 0x61, 0xfe, 0x39, 0xc5, 0x02, 0xe1, 0xfd, 0x63, 0x50, 0xa2, 0xe5, 0x1d,
-	0xa3, 0x91, 0x56, 0x67, 0x0f, 0xe3, 0xc9, 0x7c, 0x83, 0x54, 0x5b, 0xab, 0x6f, 0x2e, 0x5a, 0xa5,
-	0x86, 0x3f, 0x9b, 0xd3, 0x7a, 0xb3, 0x08, 0xc9, 0x6c, 0xb5, 0x5d, 0x4b, 0xaf, 0x59, 0x4e, 0x6c,
-	0xd9, 0xdf, 0x45, 0x0a, 0x5d, 0xe6, 0xc8, 0x49, 0x73, 0xc4, 0x3d, 0xa8, 0x48, 0xad, 0xd5, 0x20,
-	0x90, 0x06, 0xdf, 0xe1, 0x8c, 0xb6, 0x51, 0x12, 0x2b, 0x67, 0xde, 0x21, 0x38, 0xc4, 0x2f, 0x40,
-	0xb6, 0x3b, 0x35, 0xee, 0x06, 0x77, 0xa1, 0x72, 0x84, 0xd2, 0xc7, 0xb8, 0xa3, 0x26, 0x93, 0xc0,
-	0xb8, 0x8c, 0x57, 0x01, 0x3a, 0x2a, 0x1c, 0x76, 0x46, 0x32, 0x3c, 0x45, 0x37, 0xc3, 0x37, 0xe1,
-	0x46, 0x77, 0x6a, 0x3e, 0x06, 0x66, 0xf4, 0x61, 0x38, 0xd4, 0x68, 0xdc, 0xac, 0xf7, 0x97, 0x41,
-	0x75, 0x9f, 0x44, 0x76, 0x63, 0x15, 0x29, 0x2d, 0xc7, 0x7c, 0x1f, 0x2a, 0x8b, 0x9a, 0xbc, 0x30,
-	0xf2, 0xb2, 0x9d, 0x7a, 0x59, 0xc5, 0x27, 0x86, 0x56, 0x28, 0x8b, 0xd8, 0x65, 0xd2, 0xd8, 0xdd,
-	0x85, 0xbc, 0xa2, 0x3b, 0x17, 0x39, 0x48, 0xba, 0x35, 0xa7, 0xce, 0xba, 0x53, 0xca, 0x8a, 0xdd,
-	0x50, 0x2e, 0xd9, 0x90, 0xad, 0xbd, 0xd6, 0x65, 0xf7, 0x6b, 0xde, 0x18, 0x07, 0xc8, 0x1f, 0xe2,
-	0x18, 0x0d, 0xba, 0x99, 0xf6, 0x0f, 0x06, 0x8e, 0xcd, 0x06, 0x7f, 0x0a, 0xa5, 0xd7, 0x28, 0x63,
-	0xd3, 0x47, 0x69, 0xf8, 0x7a, 0x0e, 0xb6, 0xd6, 0x8f, 0xbc, 0x8d, 0x1d, 0xc6, 0x9f, 0x27, 0x2f,
-	0xfb, 0x18, 0xb5, 0x96, 0xa7, 0xc8, 0x6f, 0xad, 0x26, 0x8e, 0x72, 0x79, 0x25, 0xb5, 0x49, 0xd4,
-	0xb7, 0x2a, 0x08, 0x3b, 0xe3, 0xa9, 0x36, 0x18, 0xf3, 0xab, 0xc3, 0x7a, 0x25, 0xb9, 0x7d, 0x04,
-	0x90, 0x2c, 0xfb, 0x95, 0xe8, 0x76, 0xf8, 0x0b, 0xa8, 0x9e, 0x98, 0x18, 0xe5, 0x64, 0xf9, 0x4a,
-	0xaf, 0x31, 0x6b, 0x87, 0x1d, 0xb8, 0x3f, 0xcf, 0xeb, 0xec, 0xd7, 0x79, 0x9d, 0xfd, 0x3e, 0xaf,
-	0xb3, 0x6f, 0x7f, 0xea, 0x1b, 0xfd, 0x3c, 0xfd, 0xbf, 0x3d, 0xf9, 0x1f, 0x00, 0x00, 0xff, 0xff,
-	0x1e, 0x5e, 0x8f, 0x92, 0xf1, 0x04, 0x00, 0x00,
+	// 732 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x54, 0xcd, 0x6e, 0x13, 0x49,
+	0x10, 0x4e, 0x8f, 0xc7, 0x7f, 0x65, 0xaf, 0x33, 0xe9, 0x6c, 0x76, 0x1d, 0x4b, 0xb1, 0xbc, 0xa3,
+	0x3d, 0x58, 0x5a, 0xc9, 0x9b, 0xf5, 0x0a, 0x14, 0x72, 0x40, 0x24, 0x36, 0x02, 0x43, 0x02, 0x56,
+	0xc7, 0x12, 0x12, 0x17, 0xd4, 0xf6, 0x94, 0xe3, 0x11, 0xf6, 0xf4, 0x30, 0xdd, 0x46, 0xf1, 0x13,
+	0xf0, 0x0a, 0x70, 0xe1, 0x25, 0x78, 0x09, 0x8e, 0x3c, 0x02, 0x0a, 0xe2, 0xc4, 0x4b, 0xa0, 0xe9,
+	0xf1, 0x78, 0xec, 0xd8, 0x1c, 0x72, 0xab, 0xaa, 0xae, 0xaf, 0xba, 0xbe, 0xaa, 0xaf, 0x1b, 0x4a,
+	0x5c, 0xfa, 0x6e, 0xc0, 0xfd, 0x7e, 0xc3, 0x0f, 0x84, 0x12, 0x34, 0x17, 0xfb, 0xf6, 0x01, 0x64,
+	0xbb, 0x7c, 0x36, 0x16, 0xdc, 0xa1, 0x14, 0xcc, 0x36, 0x57, 0xbc, 0x4c, 0x6a, 0xa4, 0x5e, 0x64,
+	0xda, 0xb6, 0xff, 0x83, 0x02, 0xe3, 0x43, 0xd5, 0x12, 0x9e, 0xc2, 0x2b, 0x45, 0x4b, 0x60, 0xb8,
+	0x8e, 0x4e, 0xc8, 0x30, 0xc3, 0xd5, 0x10, 0xee, 0x38, 0x41, 0xd9, 0xa8, 0x91, 0x7a, 0x9e, 0x69,
+	0xdb, 0x7e, 0x47, 0x60, 0xfb, 0x1c, 0x27, 0x7d, 0x0c, 0xe4, 0xc8, 0xf5, 0x2f, 0x14, 0x57, 0x48,
+	0x8f, 0x21, 0xed, 0x09, 0x07, 0x65, 0x99, 0xd4, 0x52, 0xf5, 0x42, 0xf3, 0xef, 0xc6, 0xa2, 0x9f,
+	0x1b, 0x99, 0x8d, 0x67, 0x61, 0xda, 0x43, 0x4f, 0x05, 0x33, 0x16, 0x41, 0x2a, 0x47, 0x00, 0x49,
+	0x90, 0x5a, 0x90, 0x7a, 0x8d, 0x33, 0xdd, 0x82, 0xc9, 0x42, 0x93, 0xfe, 0x0e, 0xe9, 0xb7, 0x7c,
+	0x3c, 0xc5, 0x79, 0x13, 0x91, 0x73, 0x6c, 0x1c, 0x11, 0xfb, 0x03, 0x81, 0xdc, 0x85, 0xc7, 0x7d,
+	0x39, 0x12, 0x8a, 0xfe, 0x0b, 0xd9, 0x41, 0xc4, 0x42, 0x83, 0x0b, 0xcd, 0xbd, 0xa4, 0x89, 0x25,
+	0x8a, 0x2c, 0xce, 0x0a, 0xeb, 0xba, 0x9e, 0x83, 0x57, 0xba, 0xae, 0xc9, 0x22, 0x87, 0xfe, 0x09,
+	0xd9, 0x00, 0xb9, 0xf3, 0x4a, 0xc9, 0x72, 0x4a, 0xc7, 0x33, 0xa1, 0xdb, 0x93, 0xe1, 0x28, 0x1c,
+	0xe1, 0x61, 0xd9, 0xac, 0x91, 0x7a, 0x8e, 0x69, 0x9b, 0xee, 0x43, 0x4e, 0xba, 0xde, 0x00, 0xc3,
+	0xec, 0xb4, 0xce, 0xce, 0x6a, 0xbf, 0x27, 0x6d, 0x17, 0xf2, 0xe1, 0xad, 0xa7, 0x5c, 0x0d, 0x46,
+	0xb7, 0xef, 0xed, 0x1f, 0xc8, 0xfa, 0xd1, 0xd6, 0x74, 0x77, 0x85, 0xe6, 0x4e, 0x02, 0x98, 0xaf,
+	0x93, 0xc5, 0x19, 0xf6, 0x0f, 0x02, 0x79, 0x3d, 0xbc, 0x73, 0x54, 0x3c, 0xec, 0xb3, 0x87, 0xc1,
+	0x64, 0x3e, 0x41, 0x6d, 0x87, 0x54, 0x3b, 0xcb, 0x54, 0xb5, 0x43, 0xef, 0xce, 0x61, 0xbd, 0x99,
+	0x8f, 0x9a, 0x6c, 0xa9, 0x59, 0x4e, 0xae, 0x59, 0x54, 0x6c, 0x84, 0xe7, 0x2c, 0x49, 0x5d, 0xe8,
+	0xc8, 0x4c, 0x74, 0x44, 0x6d, 0x28, 0x72, 0x29, 0xc5, 0xc0, 0xe5, 0x0a, 0x9f, 0xe2, 0x4c, 0x4f,
+	0x23, 0xcf, 0x56, 0x62, 0x76, 0x1b, 0x4c, 0x8d, 0xcf, 0x42, 0xaa, 0x3b, 0x55, 0xd6, 0x16, 0xb5,
+	0xa0, 0x78, 0x86, 0xdc, 0xc1, 0xa0, 0x25, 0x26, 0x13, 0x57, 0x59, 0x84, 0x96, 0x00, 0x5a, 0xc2,
+	0x1b, 0xb6, 0x46, 0xdc, 0xbb, 0x44, 0xcb, 0xa0, 0x3b, 0xf0, 0x5b, 0x77, 0xaa, 0x5e, 0xb8, 0x6a,
+	0xf4, 0x7c, 0x38, 0x94, 0xa8, 0xac, 0x94, 0xfd, 0x9d, 0x40, 0xe9, 0x44, 0x37, 0xd9, 0x0d, 0x84,
+	0x2f, 0x24, 0x1f, 0xd3, 0x13, 0x28, 0xc6, 0xb6, 0xe6, 0x42, 0x34, 0x97, 0x83, 0x84, 0xcb, 0x6a,
+	0x7e, 0x44, 0x68, 0x05, 0x12, 0xcb, 0xce, 0x48, 0x64, 0xf7, 0x07, 0x64, 0x84, 0xbe, 0x33, 0xd6,
+	0x41, 0xe4, 0xad, 0x31, 0x35, 0xd7, 0x99, 0x6a, 0xad, 0x84, 0x13, 0x4a, 0x47, 0x13, 0x0a, 0x6d,
+	0xbb, 0x71, 0x93, 0xfd, 0x1a, 0x37, 0x42, 0x01, 0x32, 0x6d, 0x1c, 0xa3, 0x42, 0xcb, 0xb0, 0x2d,
+	0x28, 0x9d, 0x8c, 0xc7, 0x62, 0xd0, 0x69, 0x33, 0x7c, 0x33, 0x45, 0xa9, 0xec, 0xbf, 0x60, 0x7b,
+	0x11, 0x91, 0xbe, 0xf0, 0x24, 0x86, 0xef, 0xb5, 0xd3, 0x9e, 0xaf, 0xda, 0xe8, 0xb4, 0xed, 0x3d,
+	0xd8, 0x8d, 0x26, 0xca, 0xd0, 0x17, 0x81, 0x8a, 0x91, 0x6b, 0x61, 0x8d, 0x6e, 0x7e, 0x22, 0x60,
+	0x86, 0xf2, 0xa3, 0x77, 0x20, 0xff, 0x18, 0x79, 0xa0, 0xfa, 0xc8, 0x15, 0x5d, 0x97, 0x5a, 0x65,
+	0x3d, 0x64, 0x6f, 0x1d, 0x12, 0x7a, 0x2f, 0xfa, 0x3c, 0xce, 0x51, 0x4a, 0x7e, 0x89, 0x74, 0x77,
+	0x55, 0xd4, 0x5a, 0xfa, 0x1b, 0xa1, 0x75, 0x0d, 0x7d, 0x22, 0x5c, 0xaf, 0x35, 0x9e, 0x4a, 0x85,
+	0x01, 0xdd, 0xfc, 0x1e, 0x36, 0x82, 0x9b, 0x67, 0x00, 0xd1, 0x3e, 0x1f, 0xb1, 0x6e, 0x8b, 0xde,
+	0x87, 0xd2, 0x85, 0x0a, 0x90, 0x4f, 0x16, 0x1f, 0xc1, 0x2d, 0x6a, 0x1d, 0x92, 0xe6, 0x47, 0x02,
+	0xb9, 0x97, 0x18, 0x08, 0x5d, 0xac, 0x1b, 0x0b, 0x32, 0x9a, 0x13, 0x5d, 0x92, 0xd0, 0x86, 0xb1,
+	0x56, 0x7e, 0x79, 0xac, 0xc7, 0xab, 0x79, 0x3e, 0x80, 0xec, 0x7c, 0x67, 0x74, 0xe9, 0x6d, 0xad,
+	0x2e, 0xb6, 0xb2, 0xbf, 0xe1, 0x44, 0xce, 0x6b, 0x9c, 0x5a, 0x9f, 0xaf, 0xab, 0xe4, 0xcb, 0x75,
+	0x95, 0x7c, 0xbd, 0xae, 0x92, 0xf7, 0xdf, 0xaa, 0x5b, 0xfd, 0x8c, 0xfe, 0xe3, 0xff, 0xff, 0x19,
+	0x00, 0x00, 0xff, 0xff, 0x32, 0x79, 0xdc, 0xbe, 0xf5, 0x05, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -910,6 +1085,149 @@ var _AspiraGRPC_serviceDesc = grpc.ServiceDesc{
 			StreamName:    "StreamSnapshot",
 			Handler:       _AspiraGRPC_StreamSnapshot_Handler,
 			ServerStreams: true,
+		},
+	},
+	Metadata: "aspirapb.proto",
+}
+
+// ZeroGRPCClient is the client API for ZeroGRPC service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type ZeroGRPCClient interface {
+	LeaderReport(ctx context.Context, opts ...grpc.CallOption) (ZeroGRPC_LeaderReportClient, error)
+	AllocID(ctx context.Context, in *AllocIDRequest, opts ...grpc.CallOption) (*AllocIDResponse, error)
+}
+
+type zeroGRPCClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewZeroGRPCClient(cc *grpc.ClientConn) ZeroGRPCClient {
+	return &zeroGRPCClient{cc}
+}
+
+func (c *zeroGRPCClient) LeaderReport(ctx context.Context, opts ...grpc.CallOption) (ZeroGRPC_LeaderReportClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_ZeroGRPC_serviceDesc.Streams[0], "/aspirapb.ZeroGRPC/LeaderReport", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &zeroGRPCLeaderReportClient{stream}
+	return x, nil
+}
+
+type ZeroGRPC_LeaderReportClient interface {
+	Send(*LeaderReportRequest) error
+	CloseAndRecv() (*LeaderReportReponse, error)
+	grpc.ClientStream
+}
+
+type zeroGRPCLeaderReportClient struct {
+	grpc.ClientStream
+}
+
+func (x *zeroGRPCLeaderReportClient) Send(m *LeaderReportRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *zeroGRPCLeaderReportClient) CloseAndRecv() (*LeaderReportReponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(LeaderReportReponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *zeroGRPCClient) AllocID(ctx context.Context, in *AllocIDRequest, opts ...grpc.CallOption) (*AllocIDResponse, error) {
+	out := new(AllocIDResponse)
+	err := c.cc.Invoke(ctx, "/aspirapb.ZeroGRPC/AllocID", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ZeroGRPCServer is the server API for ZeroGRPC service.
+type ZeroGRPCServer interface {
+	LeaderReport(ZeroGRPC_LeaderReportServer) error
+	AllocID(context.Context, *AllocIDRequest) (*AllocIDResponse, error)
+}
+
+// UnimplementedZeroGRPCServer can be embedded to have forward compatible implementations.
+type UnimplementedZeroGRPCServer struct {
+}
+
+func (*UnimplementedZeroGRPCServer) LeaderReport(srv ZeroGRPC_LeaderReportServer) error {
+	return status.Errorf(codes.Unimplemented, "method LeaderReport not implemented")
+}
+func (*UnimplementedZeroGRPCServer) AllocID(ctx context.Context, req *AllocIDRequest) (*AllocIDResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AllocID not implemented")
+}
+
+func RegisterZeroGRPCServer(s *grpc.Server, srv ZeroGRPCServer) {
+	s.RegisterService(&_ZeroGRPC_serviceDesc, srv)
+}
+
+func _ZeroGRPC_LeaderReport_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ZeroGRPCServer).LeaderReport(&zeroGRPCLeaderReportServer{stream})
+}
+
+type ZeroGRPC_LeaderReportServer interface {
+	SendAndClose(*LeaderReportReponse) error
+	Recv() (*LeaderReportRequest, error)
+	grpc.ServerStream
+}
+
+type zeroGRPCLeaderReportServer struct {
+	grpc.ServerStream
+}
+
+func (x *zeroGRPCLeaderReportServer) SendAndClose(m *LeaderReportReponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *zeroGRPCLeaderReportServer) Recv() (*LeaderReportRequest, error) {
+	m := new(LeaderReportRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _ZeroGRPC_AllocID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AllocIDRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ZeroGRPCServer).AllocID(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/aspirapb.ZeroGRPC/AllocID",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ZeroGRPCServer).AllocID(ctx, req.(*AllocIDRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _ZeroGRPC_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "aspirapb.ZeroGRPC",
+	HandlerType: (*ZeroGRPCServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "AllocID",
+			Handler:    _ZeroGRPC_AllocID_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "LeaderReport",
+			Handler:       _ZeroGRPC_LeaderReport_Handler,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "aspirapb.proto",
@@ -1260,6 +1578,119 @@ func (m *AspiraProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *AllocIDRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AllocIDRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AllocIDRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *AllocIDResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AllocIDResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AllocIDResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.ID != 0 {
+		i = encodeVarintAspirapb(dAtA, i, uint64(m.ID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *LeaderReportRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LeaderReportRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LeaderReportRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *LeaderReportReponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LeaderReportReponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LeaderReportReponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintAspirapb(dAtA []byte, offset int, v uint64) int {
 	offset -= sovAspirapb(v)
 	base := offset
@@ -1426,6 +1857,57 @@ func (m *AspiraProposal) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovAspirapb(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *AllocIDRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *AllocIDResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.ID != 0 {
+		n += 1 + sovAspirapb(uint64(m.ID))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *LeaderReportRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *LeaderReportReponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -2411,6 +2893,241 @@ func (m *AspiraProposal) Unmarshal(dAtA []byte) error {
 				m.Data = []byte{}
 			}
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAspirapb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AllocIDRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAspirapb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AllocIDRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AllocIDRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAspirapb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AllocIDResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAspirapb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AllocIDResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AllocIDResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			m.ID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ID |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAspirapb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LeaderReportRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAspirapb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LeaderReportRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LeaderReportRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAspirapb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LeaderReportReponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAspirapb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LeaderReportReponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LeaderReportReponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAspirapb(dAtA[iNdEx:])

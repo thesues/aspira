@@ -9,7 +9,9 @@ var (
 )
 
 func init() {
-	lg, _ := zap.NewDevelopment()
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Level.SetLevel(zap.InfoLevel)
+	lg, _ := cfg.Build()
 	Logger = lg.Sugar()
 }
 

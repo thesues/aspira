@@ -1,25 +1,27 @@
 package main
-import (
-	"github.com/urfave/cli/v2"
-	"github.com/coreos/etcd/embed"
-	_"github.com/thesues/aspira/xlog"
-	"os"
-	"fmt"
-	"strings"
-	"net/url"
 
+import (
+	"fmt"
+	"net/url"
+	"os"
+	"strings"
+
+	"github.com/coreos/etcd/embed"
+	_ "github.com/thesues/aspira/xlog"
+	"github.com/urfave/cli/v2"
 )
 
 type ZeroConfig struct {
-	Name         string
-	Dir          string
-	ClientUrls   string
-	PeerUrls     string
-	AdvertisePeerUrls string
+	Name                string
+	Dir                 string
+	ClientUrls          string
+	PeerUrls            string
+	AdvertisePeerUrls   string
 	AdvertiseClientUrls string
 	InitialCluster      string
 	InitialClusterState string
-	ClusterToken string
+	ClusterToken        string
+	GrpcUrl             string
 }
 
 func parseUrls(s string) (ret []url.URL, err error) {
@@ -65,7 +67,6 @@ func (config *ZeroConfig) GetEmbedConfig() (*embed.Config, error) {
 	}
 	embedConfig.APUrls = apurls
 
-
 	return embedConfig, nil
 }
 
@@ -76,49 +77,54 @@ func NewConfig() *ZeroConfig {
 		HelpName: "zero",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "name",
-				Usage: "human-readable name for etcd",
+				Name:        "name",
+				Usage:       "human-readable name for etcd",
 				Destination: &config.Name,
-				Required: true,
+				Required:    true,
 			},
 			&cli.StringFlag{
-				Name: "listen-client-urls",
-				Usage: "client url listen on",
+				Name:        "listen-client-urls",
+				Usage:       "client url listen on",
 				Destination: &config.ClientUrls,
-				Required: true,
+				Required:    true,
 			},
 			&cli.StringFlag{
-				Name: "advertise-client-urls",
-				Usage: "advertise url for client traffic",
+				Name:        "advertise-client-urls",
+				Usage:       "advertise url for client traffic",
 				Destination: &config.AdvertiseClientUrls,
-				Required: true,
+				Required:    true,
 			},
-			&cli.StringFlag{ 
-				Name : "listen-peer-urls",
-				Usage: "",
+			&cli.StringFlag{
+				Name:        "listen-peer-urls",
+				Usage:       "",
 				Destination: &config.PeerUrls,
-				Required: true,
+				Required:    true,
 			},
 			&cli.StringFlag{
-				Name : "advertise-peer-urls",
-				Usage: "",
+				Name:        "advertise-peer-urls",
+				Usage:       "",
 				Destination: &config.AdvertisePeerUrls,
-				Required: true,
+				Required:    true,
 			},
 			&cli.StringFlag{
-				Name : "initial-cluster",
-				Usage: "initial cluster configuration for bootstrapping",
+				Name:        "initial-cluster",
+				Usage:       "initial cluster configuration for bootstrapping",
 				Destination: &config.InitialCluster,
 			},
 			&cli.StringFlag{
-				Name : "initial-cluster-state",
-				Usage: "",
+				Name:        "initial-cluster-state",
+				Usage:       "",
 				Destination: &config.InitialClusterState,
 			},
 			&cli.StringFlag{
-				Name : "initial-cluster-token",
-				Usage: "",
+				Name:        "initial-cluster-token",
+				Usage:       "",
 				Destination: &config.ClusterToken,
+			},
+			&cli.StringFlag{
+				Name:        "listen-grpc",
+				Destination: &config.GrpcUrl,
+				Required:    true,
 			},
 		},
 	}
@@ -127,9 +133,7 @@ func NewConfig() *ZeroConfig {
 		panic(fmt.Sprintf("%v", err))
 	}
 	fmt.Printf("%+v\n", config)
-	
+
 	//xlog.Logger.Infof("%+v", config)
 	return &config
 }
-
-

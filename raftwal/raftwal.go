@@ -617,14 +617,10 @@ func (wal *WAL) DB() (db *cannyls.Storage) {
 	return (*cannyls.Storage)(v)
 }
 func (wal *WAL) SetDB(db *cannyls.Storage) {
-	wal.dbLock.Lock()
-	defer wal.dbLock.Unlock()
 	atomic.StorePointer(&wal.p, unsafe.Pointer(db))
 }
 
 func (wal *WAL) CloseDB() {
-	wal.dbLock.Lock()
-	defer wal.dbLock.Unlock()
 	wal.DB().Close()
 	wal.cache.Delete(_snapshotKey)
 	wal.entryCache.Purge()

@@ -267,7 +267,7 @@ func (as *AspiraServer) Run() {
 
 			synced := false
 			if createSnapshot {
-				synced = as.trySnapshot(1000)
+				synced = as.trySnapshot(10)
 			}
 
 			if rd.MustSync && !synced {

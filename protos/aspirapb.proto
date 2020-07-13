@@ -96,15 +96,39 @@ message AspiraProposal {
 	bytes data = 5;
 }
 
-
+//raft intenal service
 service Raft {
 	rpc Heartbeat (Payload)        returns (stream Payload) {}
 	rpc RaftMessage (stream RaftBatch) returns (Payload) {}
 	rpc JoinCluster (RaftContext)      returns (Payload) {}
 }
 
-
+//aspira service
 service AspiraGRPC {
 	rpc StreamSnapshot (RaftContext) returns (stream Payload) {}
 	//TODO grpc interface for put/Get
+}
+
+
+
+
+//zero service
+message AllocIDRequest{
+	//header 
+}
+
+message AllocIDResponse {
+	uint64 ID = 1;
+}
+
+message LeaderReportRequest {
+
+}
+message LeaderReportReponse {
+
+}
+//zero service
+service ZeroGRPC {
+	rpc LeaderReport(stream LeaderReportRequest) returns (LeaderReportReponse){}
+	rpc AllocID(AllocIDRequest) returns (AllocIDResponse){}
 }

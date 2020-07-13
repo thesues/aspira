@@ -34,7 +34,8 @@ var (
 	ErrNoConnection = errors.New("No connection exists")
 	// ErrUnhealthyConnection indicates the connection to a node is unhealthy.
 	ErrUnhealthyConnection = errors.New("Unhealthy connection")
-	echoDuration           = 500 * time.Millisecond
+	//echoDuration           = 500 * time.Millisecond
+	echoDuration = 2 * time.Second
 )
 
 // Pool is used to manage the grpc client connection(s) for communicating with other
