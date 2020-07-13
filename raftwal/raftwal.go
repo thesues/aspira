@@ -61,7 +61,7 @@ var (
 )
 
 func Init(db *cannyls.Storage) *WAL {
-	cache, err := lru.New(1000)
+	cache, err := lru.New(16)
 	if err != nil {
 		xlog.Logger.Errorf("can not create LRU %+v", err)
 	}
@@ -279,7 +279,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 					entryMeta.AssociateKey = proposal.AssociateKey
 					wal.ab.Resize(uint32(len(proposal.Data)))
 					copy(wal.ab.AsBytes(), proposal.Data)
-					fmt.Printf("Wrote Ext data %x\n\n", wal.ExtKey(entryMeta.Index).U64())
+					xlog.Logger.Debugf("Wrote Ext data %x\n\n", wal.ExtKey(entryMeta.Index).U64())
 					_, err := wal.DB().Put(wal.ExtKey(entryMeta.Index), lump.NewLumpDataWithAb(wal.ab))
 					if err != nil {
 						return err

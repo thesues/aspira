@@ -1,18 +1,26 @@
 package xlog
 
 import (
+	"fmt"
+
 	"go.uber.org/zap"
 )
 
 var (
-	Logger *zap.SugaredLogger
+	Logger    *zap.SugaredLogger
+	ZapLogger *zap.Logger
 )
 
-func init() {
+func InitLog(id uint64) {
 	cfg := zap.NewDevelopmentConfig()
+	fileName := fmt.Sprintf("%d.log", id)
+	cfg.OutputPaths = []string{fileName}
 	cfg.Level.SetLevel(zap.InfoLevel)
-	lg, _ := cfg.Build()
-	Logger = lg.Sugar()
+	ZapLogger, err := cfg.Build()
+	if err != nil {
+		panic(err.Error())
+	}
+	Logger = ZapLogger.Sugar()
 }
 
 /*

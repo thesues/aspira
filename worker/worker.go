@@ -267,7 +267,7 @@ func (as *AspiraServer) Run() {
 
 			synced := false
 			if createSnapshot {
-				synced = as.trySnapshot(10)
+				synced = as.trySnapshot(500)
 			}
 
 			if rd.MustSync && !synced {
@@ -493,6 +493,8 @@ func main() {
 		otrace.RegisterExporter(je)
 		otrace.ApplyConfig(otrace.Config{DefaultSampler: trace.AlwaysSample()})
 	}
+
+	xlog.InitLog(*id)
 
 	xlog.Logger.Warnf("strict is %+v", *strict)
 	stringID := fmt.Sprintf("%d", *id)
