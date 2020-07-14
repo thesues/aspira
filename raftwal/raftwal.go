@@ -61,7 +61,7 @@ var (
 
 func Init(db *cannyls.Storage) *WAL {
 
-	entryCache, err := lru.New(64)
+	entryCache, err := lru.New(4)
 	if err != nil {
 		xlog.Logger.Errorf("can not create LRU %+v", err)
 		return nil
@@ -439,6 +439,7 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 
 func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 
+	maxSize = 128 << 20
 	xlog.Logger.Debugf("search entries %d=>%d\n", lo, hi)
 	first, err := wal.FirstIndex()
 	if err != nil {

@@ -505,7 +505,10 @@ func main() {
 
 	stringID := fmt.Sprintf("%d", *id)
 	var x *AspiraServer
-	x, _ = NewAspiraServer(*id, *addr, stringID+".lusf", true)
+	x, err := NewAspiraServer(*id, *addr, stringID+".lusf", true)
+	if err != nil {
+		panic(err.Error())
+	}
 
 	utils.Check(x.ServeGRPC())
 	go func() {
