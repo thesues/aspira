@@ -53,7 +53,7 @@ type AspiraServer struct {
 	store       *raftwal.WAL
 	addr        string
 	stopper     *utils.Stopper
-	state       *aspirapb.MembershipState
+	state       *aspirapb.MembershipState //saved in local storage.
 	hasDirectIO bool
 }
 

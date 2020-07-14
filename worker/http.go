@@ -8,12 +8,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/thesues/aspira/protos/aspirapb"
 	_ "github.com/thesues/aspira/worker/docs"
 	"github.com/thesues/aspira/xlog"
+	cannylsMerics "github.com/thesues/cannyls-go/metrics"
 )
 
 // @Summary Delete an object
@@ -127,10 +129,19 @@ func (as *AspiraServer) get(c *gin.Context) {
 func (as *AspiraServer) ServeHTTP() {
 	r := gin.Default()
 
+	//go tool pprof
+	pprof.Register(r)
+
 	r.POST("/del/:id", as.del)
 	r.POST("/put/", as.put)
 	r.GET("/get/:id", as.get)
+
+	//http api docs
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	r.GET("/metrics", func(c *gin.Context) {
+		cannylsMerics.PrometheusHandler.ServeHTTP(c.Writer, c.Request)
+	})
 
 	stringID := fmt.Sprintf("%d", as.node.Id)
 	srv := &http.Server{

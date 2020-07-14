@@ -121,14 +121,33 @@ message AllocIDResponse {
 	uint64 ID = 1;
 }
 
-message LeaderReportRequest {
+//I do not want to import raft's proto.
+//the progress should be the same
+
+message WorkerHeartbeatRequest {
+	enum ProgressType {
+		Probe = 0;
+		Replicate = 1;
+		Snapshot = 2;
+	}
+	MembershipState state = 1;
+	map<uint64,ProgressType> progress = 2;
+	RaftContext rd = 3;
+}
+
+message WorkerHeartbeatResponse {
+}
+
+message ZeroStatusRequest {
 
 }
-message LeaderReportReponse {
+
+message ZeroStatusResponse {
 
 }
 //zero service
 service ZeroGRPC {
-	rpc LeaderReport(stream LeaderReportRequest) returns (LeaderReportReponse){}
+	rpc WorkerHeartbeat( WorkerHeartbeatRequest) returns ( WorkerHeartbeatResponse){}
 	rpc AllocID(AllocIDRequest) returns (AllocIDResponse){}
+	rpc ZeroStatus(ZeroStatusRequest) returns (ZeroStatusResponse){}
 }

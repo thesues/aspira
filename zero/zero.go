@@ -6,15 +6,17 @@ import (
 	"net"
 	"sync"
 
+	"sync/atomic"
+	"time"
+
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
 	_ "github.com/thesues/aspira/utils"
 	"github.com/thesues/aspira/xlog"
+	"github.com/thesues/cannyls-go/util"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-
-	"time"
 
 	"github.com/coreos/etcd/embed"
 )
@@ -28,8 +30,10 @@ type Zero struct {
 	Id        uint64
 	EmbedEted *embed.Etcd
 
-	Cfg    *ZeroConfig
-	idLock sync.Mutex
+	Cfg          *ZeroConfig
+	idLock       sync.Mutex
+	isLeader     int32
+	auditStopper *util.Stopper
 }
 
 //interface to etcd
@@ -73,6 +77,38 @@ func (z *Zero) Report() {
 	}
 }
 
+func (z *Zero) audit() {
+	ticker := time.NewTicker(time.Second)
+	for {
+		select {
+		case <-z.auditStopper.ShouldStop():
+			return
+		case <-ticker.C:
+			xlog.Logger.Info("audit")
+		}
+	}
+}
+
+func (z *Zero) LeaderLoop() {
+	z.auditStopper = util.NewStopper()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if z.amLeader() && atomic.LoadInt32(&z.isLeader) == 0 {
+				z.auditStopper.RunWorker(z.audit)
+				atomic.StoreInt32(&z.isLeader, 1)
+			} else if !z.amLeader() && atomic.LoadInt32(&z.isLeader) == 1 {
+				//stop audit
+				z.auditStopper.Stop()
+				atomic.StoreInt32(&z.isLeader, 0)
+			}
+		}
+
+	}
+}
+
 func (z *Zero) ServGRPC() {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(1<<25),
@@ -91,16 +127,17 @@ func (z *Zero) ServGRPC() {
 	}()
 }
 
+func (z *Zero) ZeroStatus(context.Context, *aspirapb.ZeroStatusRequest) (*aspirapb.ZeroStatusResponse, error) {
+	return nil, nil
+}
+
 //grpc services
-func (z *Zero) LeaderReport(aspirapb.ZeroGRPC_LeaderReportServer) error {
-	return nil
+func (z *Zero) WorkerHeartbeat(context.Context, *aspirapb.WorkerHeartbeatRequest) (*aspirapb.WorkerHeartbeatResponse, error) {
+	return nil, nil
 }
 
 func (z *Zero) AllocID(context.Context, *aspirapb.AllocIDRequest) (*aspirapb.AllocIDResponse, error) {
 	var err error
-	if !z.amLeader() {
-		return nil, errors.Errorf("bad")
-	}
 	z.idLock.Lock()
 	defer z.idLock.Unlock()
 

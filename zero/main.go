@@ -21,6 +21,7 @@ func serve(config *ZeroConfig) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	xlog.InitLog(100)
 	defer e.Close()
 	select {
 	case <-e.Server.ReadyNotify():
@@ -42,8 +43,9 @@ func serve(config *ZeroConfig) {
 		EmbedEted: e,
 		Cfg:       config,
 	}
-	go zero.Report()
+	//go zero.Report()
 	zero.ServGRPC()
+	go zero.LeaderLoop()
 
 	//register zero as GRPC service
 	xlog.Logger.Fatal(<-e.Err())

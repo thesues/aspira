@@ -9,6 +9,7 @@ require (
 	github.com/coreos/etcd v3.3.22+incompatible
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
+	github.com/gin-contrib/pprof v1.3.0
 	github.com/gin-gonic/gin v1.6.3
 	github.com/golang/protobuf v1.3.3
 	github.com/golang/snappy v0.0.1
@@ -18,7 +19,7 @@ require (
 	github.com/swaggo/files v0.0.0-20190704085106-630677cd5c14
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.5.1
-	github.com/thesues/cannyls-go v0.2.1-0.20200708180613-28b62b64ebcf
+	github.com/thesues/cannyls-go v0.2.1-0.20200714012953-08712fef1c61
 	github.com/urfave/cli v1.20.0
 	github.com/urfave/cli/v2 v2.2.0
 	go.etcd.io/etcd v3.3.22+incompatible
