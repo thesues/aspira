@@ -90,8 +90,8 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 			ElectionTick:    20, // 2s if we call Tick() every 100 ms.
 			HeartbeatTick:   1,  // 100ms if we call Tick() every 100 ms.
 			Storage:         store,
-			MaxInflightMsgs: 4,
-			MaxSizePerMsg:   512 << 20, // 512 MB should allow more batching.
+			MaxInflightMsgs: 64,
+			MaxSizePerMsg:   32 << 20, // 512 MB should allow more batching.
 			//MaxCommittedSizePerReady: 64 << 20,  // Avoid loading entire Raft log into memory.
 			// We don't need lease based reads. They cause issues because they
 			// require CheckQuorum to be true, and that causes a lot of issues
@@ -347,12 +347,37 @@ func (n *Node) PastLife() (uint64, bool, error) {
 */
 
 const (
-	messageBatchSoftLimit = 128 << 20
+	messageBatchSoftLimit = 1e6
 )
 
 type stream struct {
 	msgCh chan []byte
 	alive int32
+}
+
+func (n *Node) doSendBlobMessage(sm sendmsg) error {
+	addr, has := n.Peer(sm.to)
+	if !has {
+		return errors.Errorf("Error: not connected yet")
+	}
+	pool, err := GetPools().Get(addr)
+	if err != nil {
+		return err
+	}
+	c := pb.NewRaftClient(pool.Get())
+	ctx, span := otrace.StartSpan(context.Background(),
+		fmt.Sprintf("RaftMessage-%d-to-%d", n.Id, sm.to))
+	defer span.End()
+
+	request := &pb.BlobRaftMessageRequest{
+		Context: n.RaftContext,
+		Payload: &pb.Payload{Data: sm.data},
+	}
+	if _, err := c.BlobRaftMessage(ctx, request); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // BatchAndSendMessages sends messages in batches.
@@ -369,6 +394,11 @@ func (n *Node) BatchAndSendMessages(stopper *utils.Stopper) {
 			return
 		case sm := <-n.messages:
 			totalSize := 0
+			//if data itself is bigger than 1M, send it to BlobRaftMessage
+			if len(sm.data) >= (1 << 20) {
+				n.doSendBlobMessage(sm)
+				break
+			}
 		slurp_loop:
 			for {
 				var buf *bytes.Buffer

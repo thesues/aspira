@@ -26,6 +26,7 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"github.com/thesues/aspira/protos/aspirapb"
 	pb "github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/xlog"
 
@@ -190,6 +191,33 @@ func (w *RaftServer) JoinCluster(ctx context.Context,
 	}
 
 	return node.joinCluster(ctx, rc)
+}
+
+func (w *RaftServer) BlobRaftMessage(ctx context.Context, request *aspirapb.BlobRaftMessageRequest) (*aspirapb.BlobRaftMessageResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	span := otrace.FromContext(ctx)
+
+	node := w.node
+	if node == nil || node.Raft() == nil {
+		return nil, ErrNoNode
+	}
+	span.Annotatef(nil, "BlobStream server is node %#x", node.Id)
+	rc := request.Context
+	span.Annotatef(nil, "Stream from %#x", request.Context.GetId())
+	if rc != nil {
+		node.Connect(rc.Id, rc.Addr)
+	}
+	msg := raftpb.Message{}
+	msg.Unmarshal(request.Payload.Data)
+	if err := node.Raft().Step(ctx, msg); err != nil {
+		xlog.Logger.Warnf("Error while raft.Step from %#x: %v. Closing BloBRaftMessage stream.",
+			rc.GetId(), err)
+		return nil, errors.Wrapf(err, "error while raft.Step from %#x", rc.GetId())
+	}
+
+	return &aspirapb.BlobRaftMessageResponse{}, nil
 }
 
 // RaftMessage handles RAFT messages.

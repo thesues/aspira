@@ -155,8 +155,8 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 
 func (as *AspiraServer) ServeGRPC() (err error) {
 	s := grpc.NewServer(
-		grpc.MaxRecvMsgSize(256<<20),
-		grpc.MaxSendMsgSize(256<<20),
+		grpc.MaxRecvMsgSize(33<<20),
+		grpc.MaxSendMsgSize(33<<20),
 		grpc.MaxConcurrentStreams(1000),
 	)
 
@@ -210,6 +210,7 @@ func (as *AspiraServer) Run() {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	n := as.node
+	loop := uint64(0)
 	for {
 		select {
 		case <-ticker.C:
@@ -223,15 +224,17 @@ func (as *AspiraServer) Run() {
 			}
 
 			createSnapshot = true
+			loop++
 			if leader {
+				if loop%100 == 0 {
+					xlog.Logger.Infof("I am leader")
+				}
 				for i := range rd.Messages {
 					as.node.Send(&rd.Messages[i])
-
 					if !raft.IsEmptySnap(rd.Messages[i].Snapshot) {
 						createSnapshot = true
 						xlog.Logger.Warnf("from %d to %d, snap is %v", rd.Messages[i].From, rd.Messages[i].To, rd.Messages[i].Snapshot)
 					}
-
 				}
 
 				for _, progress := range n.Raft().Status().Progress {
@@ -267,7 +270,7 @@ func (as *AspiraServer) Run() {
 
 			synced := false
 			if createSnapshot {
-				synced = as.trySnapshot(500)
+				synced = as.trySnapshot(300)
 			}
 
 			if rd.MustSync && !synced {
@@ -409,6 +412,7 @@ func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.A
 		span.Annotatef(nil, "Proposing with key: %s. Timeout: %v", uniqKey, timeout)
 
 		data, err := proposal.Marshal()
+		proposal = nil //FIXME
 		if err != nil {
 			return 0, err
 		}

@@ -16,6 +16,7 @@
 
 syntax = "proto3";
 
+//import "raft.proto";
 
 package aspirapb;
 
@@ -96,17 +97,26 @@ message AspiraProposal {
 	bytes data = 5;
 }
 
+
+message BlobRaftMessageRequest {
+	RaftContext context = 1;
+	Payload payload = 2;
+}
+
+message BlobRaftMessageResponse {
+}
+
 //raft intenal service
 service Raft {
 	rpc Heartbeat (Payload)        returns (stream Payload) {}
 	rpc RaftMessage (stream RaftBatch) returns (Payload) {}
+	rpc BlobRaftMessage (BlobRaftMessageRequest) returns (BlobRaftMessageResponse) {}
 	rpc JoinCluster (RaftContext)      returns (Payload) {}
 }
 
 //aspira service
 service AspiraGRPC {
 	rpc StreamSnapshot (RaftContext) returns (stream Payload) {}
-	//TODO grpc interface for put/Get
 }
 
 

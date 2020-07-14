@@ -24,6 +24,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/utils"
@@ -39,6 +40,7 @@ type WAL struct {
 	cache      *sync.Map
 	dbLock     *sync.Mutex //protect readCounts
 	readCounts int
+	entryCache *lru.Cache
 }
 
 var (
@@ -59,11 +61,17 @@ var (
 
 func Init(db *cannyls.Storage) *WAL {
 
+	entryCache, err := lru.New(64)
+	if err != nil {
+		xlog.Logger.Errorf("can not create LRU %+v", err)
+		return nil
+	}
 	wal := &WAL{
 		ab:         block.NewAlignedBytes(512, block.Min()),
 		readCounts: 0,
 		dbLock:     new(sync.Mutex),
 		cache:      new(sync.Map),
+		entryCache: entryCache,
 	}
 	atomic.StorePointer(&wal.p, unsafe.Pointer(db))
 
@@ -258,8 +266,6 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 		}
 	}
 
-	xlog.Logger.Infof("running add Entries %d", len(entries))
-	defer xlog.Logger.Infof("end add entrires")
 	for _, e := range entries {
 		var entryMeta aspirapb.EntryMeta
 		entryMeta.Term = e.Term
@@ -279,7 +285,6 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 					if err != nil {
 						return err
 					}
-					//aspirapb.AspiraProposal_PutOffset
 				} else {
 					entryMeta.EntryType = aspirapb.EntryMeta_PutWithOffset
 					entryMeta.Data = e.Data
@@ -302,11 +307,11 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 		if _, err = wal.DB().PutEmbed(wal.EntryKey(entryMeta.Index), data); err != nil {
 			return err
 		}
-		//wal.entryCache.Add(e.Index, e)
+		xlog.Logger.Infof("cached %d", e.Index)
+		wal.entryCache.Add(e.Index, e)
 	}
 
 	laste := entries[len(entries)-1].Index
-	//wal.cache.Store(lastKey, laste)
 
 	if laste < last {
 		return wal.DeleteFrom(laste + 1)
@@ -359,59 +364,66 @@ func (wal *WAL) PastLife() bool {
 }
 
 func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
+
+	xlog.Logger.Infof("AllEntries from %d => %d, maxSize is %d", lo, hi, maxSize)
 	size := 0
 	for _, id := range wal.DB().ListRange(wal.EntryKey(lo), wal.EntryKey(hi), 100) {
-		//if lru then
-		//else
-		//from id to index
+		if v, ok := wal.entryCache.Get(id.U64() & keyMask); ok {
+			e := v.(raftpb.Entry)
+			es = append(es, e)
+			size += e.Size()
+			xlog.Logger.Infof("cache hit for %d", id.U64()&keyMask)
 
-		data, err := wal.DB().Get(id)
-		if err != nil {
-			xlog.Logger.Fatalf("failed to get id %+v, err is %+v", id, err)
-		}
-		var meta aspirapb.EntryMeta
-		var e raftpb.Entry
-		if err = meta.Unmarshal(data); err != nil {
-			xlog.Logger.Fatalf("Unmarshal data failed %+v", err)
-		}
-		switch meta.EntryType {
-		case aspirapb.EntryMeta_PutWithOffset:
-			e.Type = raftpb.EntryNormal
-			e.Data = meta.Data
-		case aspirapb.EntryMeta_Put:
-			//build data
-			e.Type = raftpb.EntryNormal
-			extData, err := wal.DB().Get(wal.ExtKey(id.U64() & keyMask))
+		} else {
+			xlog.Logger.Infof("cache missing for %d", id.U64()&keyMask)
+			data, err := wal.DB().Get(id)
 			if err != nil {
-				xlog.Logger.Fatalf("Get data failed %+v", err)
-
+				xlog.Logger.Fatalf("failed to get id %+v, err is %+v", id, err)
 			}
-			//restore the proposal data from EntryMeta
-			var proposal aspirapb.AspiraProposal
-			proposal.AssociateKey = meta.AssociateKey
-			proposal.Data = extData
-			data, err := proposal.Marshal()
-			utils.Check(err)
-			//if len(extData) > 0 {
-			e.Data = data
-			//}
-		case aspirapb.EntryMeta_LeaderCommit:
-			e.Type = raftpb.EntryNormal
-			e.Data = nil
-		case aspirapb.EntryMeta_ConfChange:
-			e.Type = raftpb.EntryConfChange
-			//if len(meta.Data) > 0 {
-			e.Data = meta.Data
-			//}
-		default:
-			xlog.Logger.Fatalf("unknow type read from %+v", id)
+			var meta aspirapb.EntryMeta
+			var e raftpb.Entry
+			if err = meta.Unmarshal(data); err != nil {
+				xlog.Logger.Fatalf("Unmarshal data failed %+v", err)
+			}
+			switch meta.EntryType {
+			case aspirapb.EntryMeta_PutWithOffset:
+				e.Type = raftpb.EntryNormal
+				e.Data = meta.Data
+			case aspirapb.EntryMeta_Put:
+				//build data
+				e.Type = raftpb.EntryNormal
+				extData, err := wal.DB().Get(wal.ExtKey(id.U64() & keyMask))
+				if err != nil {
+					xlog.Logger.Fatalf("Get data failed %+v", err)
+
+				}
+				//restore the proposal data from EntryMeta
+				var proposal aspirapb.AspiraProposal
+				proposal.AssociateKey = meta.AssociateKey
+				proposal.Data = extData
+				data, err := proposal.Marshal()
+				utils.Check(err)
+				//if len(extData) > 0 {
+				e.Data = data
+				//}
+			case aspirapb.EntryMeta_LeaderCommit:
+				e.Type = raftpb.EntryNormal
+				e.Data = nil
+			case aspirapb.EntryMeta_ConfChange:
+				e.Type = raftpb.EntryConfChange
+				//if len(meta.Data) > 0 {
+				e.Data = meta.Data
+				//}
+			default:
+				xlog.Logger.Fatalf("unknow type read from %+v", id)
+			}
+			e.Term = meta.Term
+			e.Index = meta.Index
+
+			size += e.Size()
+			//wal.entryCache.Add(e.Index, e)
+			es = append(es, e)
 		}
-		e.Term = meta.Term
-		e.Index = meta.Index
-
-		size += e.Size()
-		es = append(es, e)
-
 		//if maxSize is 0, we still want to return at lease one entry
 		if uint64(size) > maxSize {
 			n := len(es)
@@ -420,6 +432,7 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 			}
 			break
 		}
+
 	}
 	return es, nil
 }
@@ -529,6 +542,7 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (cr
 	//TODO: if wal.DB() had a snapshot, delete it, FIXME
 
 	wal.DB().Sync()
+	wal.entryCache.Purge()
 	if _, err = wal.DB().PutEmbed(wal.snapshotKey(), data); err != nil {
 		return
 	}
@@ -614,5 +628,6 @@ func (wal *WAL) SetDB(db *cannyls.Storage) {
 
 func (wal *WAL) CloseDB() {
 	wal.DB().Close()
+	wal.entryCache.Purge()
 	wal.cache.Delete(_snapshotKey)
 }

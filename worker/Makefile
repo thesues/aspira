@@ -4,5 +4,6 @@ all:
 	go build
 clean:
 	rm *.lusf
+	rm *.log
 	killall -9 worker
 
