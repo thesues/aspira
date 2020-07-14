@@ -90,7 +90,7 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 			ElectionTick:    20, // 2s if we call Tick() every 100 ms.
 			HeartbeatTick:   1,  // 100ms if we call Tick() every 100 ms.
 			Storage:         store,
-			MaxInflightMsgs: 32,
+			MaxInflightMsgs: 4,
 			MaxSizePerMsg:   512 << 20, // 512 MB should allow more batching.
 			//MaxCommittedSizePerReady: 64 << 20,  // Avoid loading entire Raft log into memory.
 			// We don't need lease based reads. They cause issues because they
