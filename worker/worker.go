@@ -92,7 +92,7 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 	if restart {
 		snap, err := as.store.Snapshot()
 		utils.Check(err)
-		fmt.Printf("RESTART\n")
+		xlog.Logger.Info("RESTART")
 
 		if !raft.IsEmptySnap(snap) {
 			as.node.SetConfState(&snap.Metadata.ConfState) //for future snapshot
@@ -106,7 +106,7 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 		}
 		as.node.SetRaft(raft.RestartNode(as.node.Cfg))
 	} else if len(clusterAddr) == 0 {
-		fmt.Printf("START\n")
+		xlog.Logger.Info("START")
 		rpeers := make([]raft.Peer, 1)
 		data, err := as.node.RaftContext.Marshal()
 		utils.Check(err)
@@ -226,7 +226,7 @@ func (as *AspiraServer) Run() {
 			createSnapshot = true
 			loop++
 			if leader {
-				if loop%100 == 0 {
+				if loop%1000 == 0 {
 					xlog.Logger.Infof("I am leader")
 				}
 				for i := range rd.Messages {
@@ -412,7 +412,6 @@ func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.A
 		span.Annotatef(nil, "Proposing with key: %s. Timeout: %v", uniqKey, timeout)
 
 		data, err := proposal.Marshal()
-		proposal = nil //FIXME
 		if err != nil {
 			return 0, err
 		}
@@ -449,8 +448,6 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 
 	var cc raftpb.ConfChange
 	utils.Check(cc.Unmarshal(e.Data))
-	//fmt.Printf("applyConfChange: %+v\n", e.String())
-	fmt.Printf("applyConfChange: %+v\n", cc)
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
 		if len(cc.Context) > 0 {
@@ -462,7 +459,7 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 		}
 
 		xx := as.node.Raft().ApplyConfChange(cc)
-		fmt.Printf("Apply CC %+v\n", xx)
+		xlog.Logger.Infof("Apply CC %+v\n", xx)
 		as.node.SetConfState(xx)
 		as.node.DoneConfChange(cc.ID, nil)
 	case raftpb.ConfChangeRemoveNode:
@@ -499,10 +496,9 @@ func main() {
 		otrace.ApplyConfig(otrace.Config{DefaultSampler: trace.AlwaysSample()})
 	}
 
-	xlog.InitLog(*id)
+	xlog.InitLog(fmt.Sprintf("%d", *id))
 
 	xlog.Logger.Infof("strict is %+v", *strict)
-
 	stringID := fmt.Sprintf("%d", *id)
 	var x *AspiraServer
 	x, err := NewAspiraServer(*id, *addr, stringID+".lusf", true)
@@ -511,9 +507,7 @@ func main() {
 	}
 
 	utils.Check(x.ServeGRPC())
-	go func() {
-		x.ServeHTTP()
-	}()
+	go x.ServeHTTP()
 
 	x.InitAndStart(*id, *join)
 }

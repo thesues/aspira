@@ -194,9 +194,11 @@ func (w *RaftServer) JoinCluster(ctx context.Context,
 }
 
 func (w *RaftServer) BlobRaftMessage(ctx context.Context, request *aspirapb.BlobRaftMessageRequest) (*aspirapb.BlobRaftMessageResponse, error) {
+
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
 	span := otrace.FromContext(ctx)
 
 	node := w.node

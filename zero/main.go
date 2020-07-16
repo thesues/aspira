@@ -18,10 +18,10 @@ func serve(config *ZeroConfig) {
 		xlog.Logger.Fatal(err)
 	}
 	e, err := embed.StartEtcd(cfg)
+	xlog.InitLog(cfg.Name)
 	if err != nil {
 		log.Fatal(err)
 	}
-	xlog.InitLog(100)
 	defer e.Close()
 	select {
 	case <-e.Server.ReadyNotify():

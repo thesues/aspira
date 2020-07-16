@@ -2,39 +2,38 @@ package xlog
 
 import (
 	"fmt"
+	"os"
 
 	"go.uber.org/zap"
 )
 
 var (
-	Logger    *zap.SugaredLogger
 	ZapLogger *zap.Logger
+	Logger    *sugaredZap
 )
 
-func InitLog(id uint64) {
+func InitLog(id string) {
+	var err error
 	cfg := zap.NewDevelopmentConfig()
-	fileName := fmt.Sprintf("%d.log", id)
-	cfg.OutputPaths = []string{fileName}
-	//cfg.OutputPaths = []string{os.Stderr.Name()}
+	fileName := fmt.Sprintf("%s.log", id)
+	cfg.OutputPaths = []string{fileName, os.Stdout.Name()}
 	cfg.Level.SetLevel(zap.InfoLevel)
-	ZapLogger, err := cfg.Build()
+	ZapLogger, err = cfg.Build()
 	if err != nil {
 		panic(err.Error())
 	}
-	Logger = ZapLogger.Sugar()
+	Logger = &sugaredZap{ZapLogger.Sugar()}
 }
 
-/*
-func Debug(v ...interface{})                 { Logger.Info(v...) }
-func Debugf(format string, v ...interface{}) { Logger.Infof(format, v...) }
-func Error(v ...interface{})                 { Logger.Error(v...) }
-func Errorf(format string, v ...interface{}) { Logger.Errorf(format, v...) }
-func Info(v ...interface{})                  { Logger.Info(v...) }
-func Infof(format string, v ...interface{})  { Logger.Infof(format, v...) }
-func Warn(v ...interface{})                  { Logger.Warn(v...) }
-func Warnf(format string, v ...interface{})  { Logger.Warnf(format, v...) }
-func Fatal(v ...interface{})                 { Logger.Fatal(v...) }
-func Fatalf(format string, v ...interface{}) { Logger.Fatalf(format, v...) }
-func Panic(v ...interface{})                 { Logger.Panic(v...) }
-func Panicf(format string, v ...interface{}) { Logger.Panicf(format, v...) }
-*/
+//etcd raft library requires Warning and Warningf
+type sugaredZap struct {
+	*zap.SugaredLogger
+}
+
+func (logger *sugaredZap) Warning(v ...interface{}) {
+	logger.Warn(v...)
+
+}
+func (logger *sugaredZap) Warningf(format string, v ...interface{}) {
+	logger.Warnf(format, v...)
+}

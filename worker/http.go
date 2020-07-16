@@ -16,6 +16,7 @@ import (
 	_ "github.com/thesues/aspira/worker/docs"
 	"github.com/thesues/aspira/xlog"
 	cannylsMerics "github.com/thesues/cannyls-go/metrics"
+	"go.uber.org/zap"
 )
 
 // @Summary Delete an object
@@ -127,10 +128,21 @@ func (as *AspiraServer) get(c *gin.Context) {
 }
 
 func (as *AspiraServer) ServeHTTP() {
-	r := gin.Default()
+	gin.SetMode(gin.ReleaseMode)
+
+	r := gin.New()
 
 	//go tool pprof
 	pprof.Register(r)
+
+	/*
+		r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
+			Output: os.Stdout,
+		}))
+	*/
+
+	r.Use(gin.Recovery())
+	r.Use(logToZap)
 
 	r.POST("/del/:id", as.del)
 	r.POST("/put/", as.put)
@@ -166,5 +178,33 @@ func (as *AspiraServer) ServeHTTP() {
 			panic("Server Shutdown failed")
 		}
 		return
+	}
+}
+
+func logToZap(c *gin.Context) {
+	start := time.Now()
+	// some evil middlewares modify this values
+	path := c.Request.URL.Path
+	query := c.Request.URL.RawQuery
+	c.Next()
+
+	latency := time.Now().Sub(start)
+
+	if len(c.Errors) > 0 {
+		// Append error field if this is an erroneous request.
+		for _, e := range c.Errors.Errors() {
+			xlog.ZapLogger.Error(e)
+		}
+	} else {
+		xlog.ZapLogger.Info(path,
+			zap.Int("status", c.Writer.Status()),
+			zap.String("method", c.Request.Method),
+			zap.String("path", path),
+			zap.String("query", query),
+			zap.String("ip", c.ClientIP()),
+			zap.String("user-agent", c.Request.UserAgent()),
+			zap.String("time", start.Format(time.RFC3339)),
+			zap.Duration("latency", latency),
+		)
 	}
 }

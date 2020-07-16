@@ -125,7 +125,7 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 
 			//CheckQuorum: true,
 
-			//	Logger: &x.ToGlog{},
+			Logger: xlog.Logger,
 		},
 		// processConfChange etc are not throttled so some extra delta, so that we don't
 		// block tick when applyCh is full
@@ -365,7 +365,9 @@ func (n *Node) doSendBlobMessage(sm sendmsg) error {
 		return err
 	}
 	c := pb.NewRaftClient(pool.Get())
-	ctx, span := otrace.StartSpan(context.Background(),
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	ctx, span := otrace.StartSpan(ctx,
 		fmt.Sprintf("RaftMessage-%d-to-%d", n.Id, sm.to))
 	defer span.End()
 
@@ -396,9 +398,10 @@ func (n *Node) BatchAndSendMessages(stopper *utils.Stopper) {
 			totalSize := 0
 			//if data itself is bigger than 1M, send it to BlobRaftMessage
 			if len(sm.data) >= (1 << 20) {
-				n.doSendBlobMessage(sm)
+				go n.doSendBlobMessage(sm)
 				break
 			}
+
 		slurp_loop:
 			for {
 				var buf *bytes.Buffer
