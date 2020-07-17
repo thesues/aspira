@@ -88,6 +88,7 @@ func NewAspiraServer(id uint64, addr string, path string, hasDirectIO bool) (as 
 }
 
 func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
+
 	restart := as.store.PastLife()
 	if restart {
 		snap, err := as.store.Snapshot()
@@ -119,6 +120,13 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 		if p == nil {
 			panic(fmt.Sprintf("Unhealthy connection to %v", clusterAddr))
 		}
+
+		err := as.populateSnapshot(raftpb.Snapshot{}, p)
+		if err != nil {
+			xlog.Logger.Fatalf(err.Error())
+		}
+
+		//download snapshot first
 		c := aspirapb.NewRaftClient(p.Get())
 		for {
 			timeout := 8 * time.Second
@@ -127,6 +135,7 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 			// if it has pending configuration.
 			_, err := c.JoinCluster(ctx, as.node.RaftContext)
 			if err == nil {
+				xlog.Logger.Infof("Success to joining cluster: %v\n")
 				cancel()
 				break
 			}
@@ -134,7 +143,7 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 				cancel()
 				log.Fatalf("Error while joining cluster: %v", err)
 			}
-			xlog.Logger.Errorf("Error while joining cluster: %v\n", err)
+			xlog.Logger.Errorf("Error while joining cluster: %v\n, try again", err)
 			timeout *= 2
 			if timeout > 32*time.Second {
 				timeout = 32 * time.Second
@@ -148,9 +157,12 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 	as.stopper.RunWorker(func() {
 		as.node.BatchAndSendMessages(as.stopper)
 	})
-	as.stopper.RunWorker(func() {
-		as.node.ReportRaftComms(as.stopper)
-	})
+	/*
+		as.stopper.RunWorker(func() {
+			as.node.ReportRaftComms(as.stopper)
+		})
+	*/
+
 	as.Run()
 }
 
@@ -578,6 +590,7 @@ func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 		} else {
 			break
 		}
+		xlog.Logger.Infof("recevied data %d", len(payload.Data))
 	}
 	xlog.Logger.Infof("End to receive data")
 

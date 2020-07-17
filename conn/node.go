@@ -147,7 +147,6 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 
 // ReportRaftComms periodically prints the state of the node (heartbeats in and out).
 func (n *Node) ReportRaftComms(stopper *utils.Stopper) {
-	return
 	/*
 		if !xlog.Logger.V(3) {
 			return

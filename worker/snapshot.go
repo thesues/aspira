@@ -7,6 +7,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
+	"github.com/thesues/aspira/xlog"
 )
 
 //stream snapshot API
@@ -15,6 +16,8 @@ func (as *AspiraServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb
 	if !as.AmLeader() {
 		return errors.Errorf("I am not leader, try next...")
 	}
+
+	defer xlog.Logger.Infof("StreamSnasphot done")
 
 	reader, err := as.store.GetStreamReader()
 	if err != nil {
