@@ -15,6 +15,7 @@ import (
 	_ "github.com/thesues/aspira/utils"
 	"github.com/thesues/aspira/xlog"
 	"github.com/thesues/cannyls-go/util"
+	"go.etcd.io/etcd/raft"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -34,6 +35,9 @@ type Zero struct {
 	idLock       sync.Mutex
 	isLeader     int32
 	auditStopper *util.Stopper
+
+	memberProgress map[uint64]raft.ProgressStateType
+	memberState    aspirapb.MembershipState
 }
 
 //interface to etcd
@@ -64,6 +68,7 @@ func (z *Zero) amLeader() bool {
 	return z.Id == z.getCurrentLeader()
 }
 
+/*
 func (z *Zero) Report() {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
@@ -76,6 +81,7 @@ func (z *Zero) Report() {
 		}
 	}
 }
+*/
 
 func (z *Zero) audit() {
 	ticker := time.NewTicker(time.Second)
@@ -111,8 +117,8 @@ func (z *Zero) LeaderLoop() {
 
 func (z *Zero) ServGRPC() {
 	s := grpc.NewServer(
-		grpc.MaxRecvMsgSize(1<<25),
-		grpc.MaxSendMsgSize(1<<25),
+		grpc.MaxRecvMsgSize(4<<20),
+		grpc.MaxSendMsgSize(4<<20),
 		grpc.MaxConcurrentStreams(1000),
 	)
 

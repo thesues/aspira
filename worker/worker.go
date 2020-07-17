@@ -114,6 +114,7 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 		as.node.SetRaft(raft.StartNode(as.node.Cfg, rpeers))
 	} else {
 		//join remote cluster
+		xlog.Logger.Info("Join remote cluster")
 		p := conn.GetPools().Connect(clusterAddr)
 		if p == nil {
 			panic(fmt.Sprintf("Unhealthy connection to %v", clusterAddr))
@@ -233,11 +234,18 @@ func (as *AspiraServer) Run() {
 					as.node.Send(&rd.Messages[i])
 					if !raft.IsEmptySnap(rd.Messages[i].Snapshot) {
 						createSnapshot = true
-						xlog.Logger.Warnf("from %d to %d, snap is %v", rd.Messages[i].From, rd.Messages[i].To, rd.Messages[i].Snapshot)
+						//xlog.Logger.Warnf("from %d to %d, snap is %v", rd.Messages[i].From, rd.Messages[i].To, rd.Messages[i].Snapshot)
 					}
 				}
 
 				for _, progress := range n.Raft().Status().Progress {
+					/*
+						if id == n.Id {
+							xlog.Logger.Infof("%d is now %+v", id, true)
+							continue
+						}
+						xlog.Logger.Infof("%d is now %+v", id, progress.RecentActive)
+					*/
 					if progress.State == raft.ProgressStateSnapshot {
 						createSnapshot = false
 					}
@@ -246,7 +254,7 @@ func (as *AspiraServer) Run() {
 			if !raft.IsEmptySnap(rd.Snapshot) {
 
 				//drain the applied messages
-				xlog.Logger.Info("I Got snapshot %+v", rd.Snapshot.Metadata)
+				xlog.Logger.Infof("I Got snapshot %+v", rd.Snapshot.Metadata)
 				err := as.receiveSnapshot(rd.Snapshot)
 				if err != nil {
 					xlog.Logger.Fatalf("can not receive remote snapshot %+v", err)
@@ -459,7 +467,7 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 		}
 
 		xx := as.node.Raft().ApplyConfChange(cc)
-		xlog.Logger.Infof("Apply CC %+v\n", xx)
+		xlog.Logger.Infof("Apply CC %+v at index \n", e.Index, xx)
 		as.node.SetConfState(xx)
 		as.node.DoneConfChange(cc.ID, nil)
 	case raftpb.ConfChangeRemoveNode:

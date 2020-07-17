@@ -4,6 +4,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
 )
@@ -30,6 +31,7 @@ func (as *AspiraServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb
 			break
 		}
 		if err = stream.Send(&aspirapb.Payload{Data: buf[:n]}); err != nil {
+			as.node.Raft().ReportSnapshot(in.Id, raft.SnapshotFailure)
 			return err
 		}
 		time.Sleep(1 * time.Millisecond)

@@ -8,6 +8,7 @@ import (
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
+	"github.com/thesues/aspira/xlog"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/storage"
 )
@@ -74,6 +75,7 @@ func main() {
 	store, err := storage.OpenCannylsStorage(*path)
 	utils.Check(err)
 
+	xlog.InitLog("dumpwal")
 	//snapshot key
 	fmt.Printf("SNAPSHOT : ")
 	data, err := store.Get(snapshotKey())
@@ -106,22 +108,28 @@ func main() {
 	fmt.Printf("FirstIndex : %d\n", first)
 	last, err := wal.LastIndex()
 	fmt.Printf("LastIndex  : %d\n", last)
-
-	es, err := wal.AllEntries(first, (^uint64(0) >> 2), 10<<20)
-	if err != nil {
-		panic(err.Error())
-	}
-	for i := range es {
-		switch es[i].Type {
-		case raftpb.EntryConfChange:
-			var cc raftpb.ConfChange
-			cc.Unmarshal(es[i].Data)
-			fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, cc)
-		default:
-			var p aspirapb.AspiraProposal
-			p.Unmarshal(es[i].Data)
-			fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, p.ProposalType)
+	for {
+		es, err := wal.AllEntries(first, (^uint64(0) >> 2), 10<<20)
+		if err != nil {
+			panic(err.Error())
 		}
+		for i := range es {
+			switch es[i].Type {
+			case raftpb.EntryConfChange:
+				var cc raftpb.ConfChange
+				cc.Unmarshal(es[i].Data)
+				fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, cc)
+			default:
+				var p aspirapb.AspiraProposal
+				p.Unmarshal(es[i].Data)
+				fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, p.ProposalType)
+			}
+
+		}
+		if last == es[len(es)-1].Index {
+			break
+		}
+		first = es[len(es)-1].Index + 1
 
 	}
 

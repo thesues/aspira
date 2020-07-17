@@ -355,11 +355,14 @@ func (wal *WAL) PastLife() bool {
 	if !raft.IsEmptySnap(snap) {
 		return true
 	}
-	hs, err := wal.hardState()
+	_, err := wal.hardState()
 	if err != nil {
 		return false
 	}
-	return !raft.IsEmptyHardState(hs)
+	first, _ := wal.FirstIndex()
+	last, _ := wal.LastIndex()
+
+	return last >= first
 
 }
 

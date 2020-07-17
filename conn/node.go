@@ -123,7 +123,7 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 			// snapshot.
 			Applied: snap.Metadata.Index,
 
-			//CheckQuorum: true,
+			CheckQuorum: true,
 
 			Logger: xlog.Logger,
 		},
@@ -376,6 +376,8 @@ func (n *Node) doSendBlobMessage(sm sendmsg) error {
 		Payload: &pb.Payload{Data: sm.data},
 	}
 	if _, err := c.BlobRaftMessage(ctx, request); err != nil {
+		n.Raft().ReportUnreachable(sm.to)
+		pool.SetUnhealthy()
 		return err
 	}
 
