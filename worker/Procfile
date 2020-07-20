@@ -1,0 +1,3 @@
+worker1: ./worker -id 1 -addr 127.0.0.1:3301
+worker2: ./worker -id 2 -addr 127.0.0.1:3302 -join 127.0.0.1:3301
+worker3: ./worker -id 3 -addr 127.0.0.1:3303 -join 127.0.0.1:3301

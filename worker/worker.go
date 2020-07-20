@@ -121,11 +121,15 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 			panic(fmt.Sprintf("Unhealthy connection to %v", clusterAddr))
 		}
 
-		err := as.populateSnapshot(raftpb.Snapshot{}, p)
-		if err != nil {
-			xlog.Logger.Fatalf(err.Error())
+		for {
+			err := as.populateSnapshot(raftpb.Snapshot{}, p)
+			if err != nil {
+				xlog.Logger.Error(err.Error())
+			} else {
+				break
+			}
+			time.Sleep(time.Second)
 		}
-
 		//download snapshot first
 		c := aspirapb.NewRaftClient(p.Get())
 		for {
