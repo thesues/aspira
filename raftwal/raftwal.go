@@ -471,7 +471,14 @@ func (wal *WAL) reset(es []raftpb.Entry) error {
 
 func (wal *WAL) deleteUntil(until uint64) error {
 	//TODO delete LRU??
-	return wal.DB().DeleteRange(wal.EntryKey(0), wal.EntryKey(until), true)
+	if err := wal.DB().DeleteRange(wal.EntryKey(0), wal.EntryKey(until), true); err != nil {
+		return err
+	}
+	if err := wal.DB().DeleteRange(wal.ExtKey(0), wal.ExtKey(until), true); err != nil {
+		return err
+	}
+	return nil
+
 }
 
 /*
