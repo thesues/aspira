@@ -118,7 +118,10 @@ func main() {
 			case raftpb.EntryConfChange:
 				var cc raftpb.ConfChange
 				cc.Unmarshal(es[i].Data)
-				fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, cc)
+				var ctx aspirapb.RaftContext
+				ctx.Unmarshal(cc.Context)
+
+				fmt.Printf("CONFCHANGE: index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, ctx)
 			default:
 				var p aspirapb.AspiraProposal
 				p.Unmarshal(es[i].Data)

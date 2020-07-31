@@ -18,11 +18,9 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"os"
 	"time"
 
@@ -30,34 +28,30 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 
-	"contrib.go.opencensus.io/exporter/jaeger"
 	"github.com/thesues/aspira/conn"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
 	"github.com/thesues/aspira/xlog"
 	cannyls "github.com/thesues/cannyls-go/storage"
-	"go.opencensus.io/trace"
 	otrace "go.opencensus.io/trace"
-	"google.golang.org/grpc"
 )
 
 const (
 	SmallKeySize = 32 << 10
 )
 
-type AspiraServer struct {
-	node        *conn.Node
-	raftServer  *conn.RaftServer //internal comms
-	grpcServer  *grpc.Server     //internal comms, raftServer is registered on grpcServer
-	store       *raftwal.WAL
-	addr        string
-	stopper     *utils.Stopper
-	state       *aspirapb.MembershipState //saved in local storage.
-	hasDirectIO bool
+type AspiraWorker struct {
+	Node *conn.Node
+	/*
+		raftServer *conn.RaftServer //internal comms
+		grpcServer *grpc.Server     //internal comms, raftServer is registered on grpcServer
+	*/
+	store   *raftwal.WAL
+	stopper *utils.Stopper
 }
 
-func NewAspiraServer(id uint64, addr string, path string, hasDirectIO bool) (as *AspiraServer, err error) {
+func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker, err error) {
 
 	var db *cannyls.Storage
 
@@ -73,56 +67,58 @@ func NewAspiraServer(id uint64, addr string, path string, hasDirectIO bool) (as 
 	}
 
 	store := raftwal.Init(db)
-	node := conn.NewNode(&aspirapb.RaftContext{Id: id, Addr: addr}, store)
-	raftServer := conn.NewRaftServer(node)
+	node := conn.NewNode(&aspirapb.RaftContext{Id: id, Gid: gid, Addr: addr}, store)
+	//raftServer := conn.NewRaftServer(node)
 
-	as = &AspiraServer{
-		node:       node,
-		raftServer: raftServer,
-		addr:       addr,
-		stopper:    utils.NewStopper(),
-		store:      store,
-		state:      &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
+	as = &AspiraWorker{
+		Node: node,
+		//raftServer: raftServer,
+		//addr:    addr,
+		stopper: utils.NewStopper(),
+		store:   store,
+		//state:      &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
 	}
 	return as, nil
 }
 
-func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
+func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
 
-	restart := as.store.PastLife()
+	restart := aw.store.PastLife()
 	if restart {
-		snap, err := as.store.Snapshot()
+		snap, err := aw.store.Snapshot()
 		utils.Check(err)
 		xlog.Logger.Info("RESTART")
 
 		if !raft.IsEmptySnap(snap) {
-			as.node.SetConfState(&snap.Metadata.ConfState) //for future snapshot
+			aw.Node.SetConfState(&snap.Metadata.ConfState) //for future snapshot
 
 			var state aspirapb.MembershipState
 			utils.Check(state.Unmarshal(snap.Data))
-			as.state = &state
+			aw.Node.Lock()
+			aw.Node.State = &state
+			aw.Node.Unlock()
 			for _, id := range snap.Metadata.ConfState.Nodes {
-				as.node.Connect(id, state.Nodes[id])
+				aw.Node.Connect(id, state.Nodes[id])
 			}
 		}
-		as.node.SetRaft(raft.RestartNode(as.node.Cfg))
-	} else if len(clusterAddr) == 0 {
+		aw.Node.SetRaft(raft.RestartNode(aw.Node.Cfg))
+	} else if len(joinClusterAddr) == 0 {
 		xlog.Logger.Info("START")
 		rpeers := make([]raft.Peer, 1)
-		data, err := as.node.RaftContext.Marshal()
+		data, err := aw.Node.RaftContext.Marshal()
 		utils.Check(err)
-		rpeers[0] = raft.Peer{ID: as.node.Id, Context: data}
-		as.node.SetRaft(raft.StartNode(as.node.Cfg, rpeers))
+		rpeers[0] = raft.Peer{ID: aw.Node.Id, Context: data}
+		aw.Node.SetRaft(raft.StartNode(aw.Node.Cfg, rpeers))
 	} else {
 		//join remote cluster
 		xlog.Logger.Info("Join remote cluster")
-		p := conn.GetPools().Connect(clusterAddr)
+		p := conn.GetPools().Connect(joinClusterAddr)
 		if p == nil {
-			panic(fmt.Sprintf("Unhealthy connection to %v", clusterAddr))
+			panic(fmt.Sprintf("Unhealthy connection to %v", joinClusterAddr))
 		}
 
 		for {
-			err := as.populateSnapshot(raftpb.Snapshot{}, p)
+			err := aw.populateSnapshot(raftpb.Snapshot{}, p)
 			if err != nil {
 				xlog.Logger.Error(err.Error())
 			} else {
@@ -137,7 +133,7 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			// JoinCluster can block indefinitely, raft ignores conf change proposal
 			// if it has pending configuration.
-			_, err := c.JoinCluster(ctx, as.node.RaftContext)
+			_, err := c.JoinCluster(ctx, aw.Node.RaftContext)
 			if err == nil {
 				xlog.Logger.Infof("Success to joining cluster: %v\n")
 				cancel()
@@ -155,22 +151,22 @@ func (as *AspiraServer) InitAndStart(id uint64, clusterAddr string) {
 			time.Sleep(timeout) // This is useful because JoinCluster can exit immediately.
 			cancel()
 		}
-		as.node.SetRaft(raft.StartNode(as.node.Cfg, nil))
+		aw.Node.SetRaft(raft.StartNode(aw.Node.Cfg, nil))
 	}
 
-	as.stopper.RunWorker(func() {
-		as.node.BatchAndSendMessages(as.stopper)
+	aw.stopper.RunWorker(func() {
+		aw.Node.BatchAndSendMessages(aw.stopper)
 	})
 	/*
 		as.stopper.RunWorker(func() {
 			as.node.ReportRaftComms(as.stopper)
 		})
 	*/
-
-	as.Run()
+	aw.stopper.RunWorker(aw.Run)
 }
 
-func (as *AspiraServer) ServeGRPC() (err error) {
+/*
+func (as *AspiraWorker) ServeGRPC() (err error) {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(33<<20),
 		grpc.MaxSendMsgSize(33<<20),
@@ -192,10 +188,11 @@ func (as *AspiraServer) ServeGRPC() (err error) {
 	as.grpcServer = s
 	return nil
 }
+*/
 
 var errInvalidProposal = errors.New("Invalid group proposal")
 
-func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
+func (aw *AspiraWorker) applyProposal(e raftpb.Entry) (string, error) {
 	var p aspirapb.AspiraProposal
 	xlog.Logger.Infof("apply commit %d: data is %d", e.Index, e.Size())
 	//leader's first commit
@@ -209,9 +206,9 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 	var err error
 	switch p.ProposalType {
 	case aspirapb.AspiraProposal_Put:
-		err = as.store.ApplyPut(e.Index)
+		err = aw.store.ApplyPut(e.Index)
 	case aspirapb.AspiraProposal_Delete:
-		err = as.store.Delete(p.Key)
+		err = aw.store.Delete(p.Key)
 	case aspirapb.AspiraProposal_PutWithOffset:
 		panic("to be implemented")
 	default:
@@ -220,16 +217,18 @@ func (as *AspiraServer) applyProposal(e raftpb.Entry) (string, error) {
 	return p.AssociateKey, err
 }
 
-func (as *AspiraServer) Run() {
+func (aw *AspiraWorker) Run() {
 	var leader bool
 	ctx := context.Background()
 	var createSnapshot bool = true
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
-	n := as.node
+	n := aw.Node
 	loop := uint64(0)
 	for {
 		select {
+		case <-aw.stopper.ShouldStop():
+			return
 		case <-ticker.C:
 			n.Raft().Tick()
 		case rd := <-n.Raft().Ready():
@@ -247,7 +246,7 @@ func (as *AspiraServer) Run() {
 					xlog.Logger.Infof("I am leader")
 				}
 				for i := range rd.Messages {
-					as.node.Send(&rd.Messages[i])
+					aw.Node.Send(&rd.Messages[i])
 					if !raft.IsEmptySnap(rd.Messages[i].Snapshot) {
 						createSnapshot = true
 						//xlog.Logger.Warnf("from %d to %d, snap is %v", rd.Messages[i].From, rd.Messages[i].To, rd.Messages[i].Snapshot)
@@ -271,21 +270,21 @@ func (as *AspiraServer) Run() {
 
 				//drain the applied messages
 				xlog.Logger.Infof("I Got snapshot %+v", rd.Snapshot.Metadata)
-				err := as.receiveSnapshot(rd.Snapshot)
+				err := aw.receiveSnapshot(rd.Snapshot)
 				if err != nil {
 					xlog.Logger.Fatalf("can not receive remote snapshot %+v", err)
 				}
 
 				xlog.Logger.Infof("---> SNAPSHOT: %+v. DONE.\n", rd.Snapshot)
 
-				snapOnDisk, _ := as.store.Snapshot()
+				snapOnDisk, _ := aw.store.Snapshot()
 
 				if snapOnDisk.Metadata.Index != rd.Snapshot.Metadata.Index || snapOnDisk.Metadata.Term != rd.Snapshot.Metadata.Term {
 					panic("for loop, try again")
 				}
 
-				as.store.DeleteFrom(rd.Snapshot.Metadata.Index + 1)
-				as.node.SetConfState(&rd.Snapshot.Metadata.ConfState)
+				aw.store.DeleteFrom(rd.Snapshot.Metadata.Index + 1)
+				aw.Node.SetConfState(&rd.Snapshot.Metadata.ConfState)
 			}
 
 			n.SaveToStorage(rd.HardState, rd.Entries)
@@ -294,7 +293,7 @@ func (as *AspiraServer) Run() {
 
 			synced := false
 			if createSnapshot {
-				synced = as.trySnapshot(300)
+				synced = aw.trySnapshot(300)
 			}
 
 			if rd.MustSync && !synced {
@@ -312,9 +311,9 @@ func (as *AspiraServer) Run() {
 				n.Applied.Begin(entry.Index)
 				switch {
 				case entry.Type == raftpb.EntryConfChange:
-					as.applyConfChange(entry)
+					aw.applyConfChange(entry)
 				case entry.Type == raftpb.EntryNormal:
-					uniqKey, err := as.applyProposal(entry)
+					uniqKey, err := aw.applyProposal(entry)
 					if err != nil {
 						xlog.Logger.Errorf("While applying proposal: %v\n", err)
 					}
@@ -329,7 +328,7 @@ func (as *AspiraServer) Run() {
 
 			if !leader {
 				for i := range rd.Messages {
-					as.node.Send(&rd.Messages[i])
+					aw.Node.Send(&rd.Messages[i])
 				}
 			}
 			span.Annotate(nil, "Sent messages")
@@ -341,40 +340,33 @@ func (as *AspiraServer) Run() {
 	}
 }
 
-func (as *AspiraServer) trySnapshot(skip uint64) (created bool) {
-	existing, err := as.node.Store.Snapshot()
+func (aw *AspiraWorker) trySnapshot(skip uint64) (created bool) {
+	existing, err := aw.Node.Store.Snapshot()
 	utils.Check(err)
 	si := existing.Metadata.Index
-	doneUntil := as.node.Applied.DoneUntil()
+	doneUntil := aw.Node.Applied.DoneUntil()
 
 	if doneUntil < si+skip {
 		return
 	}
-	data, err := as.state.Marshal()
+	data, err := aw.Node.State.Marshal()
 	utils.Check(err)
 	xlog.Logger.Infof("Writing snapshot at index:%d\n", doneUntil-skip/2)
-	created, err = as.store.CreateSnapshot(doneUntil-skip/2, as.node.ConfState(), data)
+	created, err = aw.store.CreateSnapshot(doneUntil-skip/2, aw.Node.ConfState(), data)
 	if err != nil {
 		xlog.Logger.Warnf("trySnapshot have error %+v", err)
 	}
 	return created
 }
 
-func (as *AspiraServer) AmLeader() bool {
-	if as.node.Raft() == nil {
-		return false
-	}
-	r := as.node.Raft()
-	if r.Status().Lead != r.Status().ID {
-		return false
-	}
-	return true
+func (aw *AspiraWorker) AmLeader() bool {
+	return aw.Node.AmLeader()
 }
 
 var errInternalRetry = errors.New("Retry Raft proposal internally")
 
-func (as *AspiraServer) getAndWait(ctx context.Context, index uint64) ([]byte, error) {
-	n := as.node
+func (aw *AspiraWorker) getAndWait(ctx context.Context, index uint64) ([]byte, error) {
+	n := aw.Node
 	switch {
 	case n.Raft() == nil:
 		return nil, errors.Errorf("Raft isn't initialized yet.")
@@ -388,7 +380,7 @@ func (as *AspiraServer) getAndWait(ctx context.Context, index uint64) ([]byte, e
 
 	ch := make(chan result, 1)
 	go func() {
-		data, err := as.store.GetData(index)
+		data, err := aw.store.GetData(index)
 		ch <- result{data: data, err: err}
 	}()
 
@@ -400,8 +392,8 @@ func (as *AspiraServer) getAndWait(ctx context.Context, index uint64) ([]byte, e
 	}
 }
 
-func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.AspiraProposal) (uint64, error) {
-	n := as.node
+func (aw *AspiraWorker) proposeAndWait(ctx context.Context, proposal *aspirapb.AspiraProposal) (uint64, error) {
+	n := aw.Node
 	switch {
 	case n.Raft() == nil:
 		return 0, errors.Errorf("Raft isn't initialized yet.")
@@ -468,7 +460,7 @@ func (as *AspiraServer) proposeAndWait(ctx context.Context, proposal *aspirapb.A
 	return index, err
 }
 
-func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
+func (aw *AspiraWorker) applyConfChange(e raftpb.Entry) {
 
 	var cc raftpb.ConfChange
 	utils.Check(cc.Unmarshal(e.Data))
@@ -477,35 +469,30 @@ func (as *AspiraServer) applyConfChange(e raftpb.Entry) {
 		if len(cc.Context) > 0 {
 			var ctx aspirapb.RaftContext
 			utils.Check(ctx.Unmarshal(cc.Context))
-			as.node.Connect(ctx.Id, ctx.Addr)
+			aw.Node.Connect(ctx.Id, ctx.Addr)
 			//update state
-			as.state.Nodes[ctx.Id] = ctx.Addr
+			aw.Node.Lock()
+			aw.Node.State.Nodes[ctx.Id] = ctx.Addr
+			aw.Node.Unlock()
 		}
 
-		xx := as.node.Raft().ApplyConfChange(cc)
+		xx := aw.Node.Raft().ApplyConfChange(cc)
 		xlog.Logger.Infof("Apply CC %+v at index \n", e.Index, xx)
-		as.node.SetConfState(xx)
-		as.node.DoneConfChange(cc.ID, nil)
+		aw.Node.SetConfState(xx)
+		aw.Node.DoneConfChange(cc.ID, nil)
 	case raftpb.ConfChangeRemoveNode:
 	case raftpb.ConfChangeUpdateNode:
 	}
 
 }
 
-var (
-	id        = flag.Uint64("id", 0, "id")
-	join      = flag.String("join", "", "remote addr")
-	hasJaeger = flag.Bool("jaeger", false, "connect to jaeger")
-	strict    = flag.Bool("strict", false, "strict sync every entry")
-	addr      = flag.String("addr", "", "")
-)
-
-func (as *AspiraServer) Stop() {
-	as.node.Raft().Stop()
-	as.stopper.Close() //HTTP, createSnapshot
-	as.grpcServer.Stop()
+func (aw *AspiraWorker) Stop() {
+	aw.Node.Raft().Stop()
+	aw.stopper.Close()
+	//as.grpcServer.Stop()
 }
 
+/*
 func main() {
 	//1 => 127.0.0.1:3301
 	//2 => 127.0.0.1:3302
@@ -524,8 +511,8 @@ func main() {
 
 	xlog.Logger.Infof("strict is %+v", *strict)
 	stringID := fmt.Sprintf("%d", *id)
-	var x *AspiraServer
-	x, err := NewAspiraServer(*id, *addr, stringID+".lusf", true)
+	var x *AspiraWorker
+	x, err := NewAspiraWorker(*id, *addr, stringID+".lusf")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -535,8 +522,9 @@ func main() {
 
 	x.InitAndStart(*id, *join)
 }
+*/
 
-func (as *AspiraServer) receiveSnapshot(snap raftpb.Snapshot) (err error) {
+func (as *AspiraWorker) receiveSnapshot(snap raftpb.Snapshot) (err error) {
 	//close and delete current store
 	var memberStat aspirapb.MembershipState
 	utils.Check(memberStat.Unmarshal(snap.Data))
@@ -554,11 +542,11 @@ func (as *AspiraServer) receiveSnapshot(snap raftpb.Snapshot) (err error) {
 	return
 }
 
-func (as *AspiraServer) getPeerPool(peer uint64) *conn.Pool {
-	if peer == as.node.RaftContext.Id {
+func (as *AspiraWorker) getPeerPool(peer uint64) *conn.Pool {
+	if peer == as.Node.RaftContext.Id {
 		return nil
 	}
-	addr, ok := as.node.Peer(peer)
+	addr, ok := as.Node.Peer(peer)
 	if !ok {
 		return nil
 	}
@@ -569,16 +557,17 @@ func (as *AspiraServer) getPeerPool(peer uint64) *conn.Pool {
 	return p
 }
 
-func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (err error) {
+func (as *AspiraWorker) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (err error) {
 	conn := pl.Get()
-	c := aspirapb.NewAspiraGRPCClient(conn)
+	c := aspirapb.NewRaftClient(conn)
+	//c := aspirapb.NewAspiraGRPCClient(conn)
 	xlog.Logger.Infof("know snapshot %d", snap.Metadata.Index)
-	stream, err := c.StreamSnapshot(context.Background(), as.node.RaftContext)
+	stream, err := c.StreamSnapshot(context.Background(), as.Node.RaftContext)
 	if err != nil {
 		return
 	}
 
-	backupName := fmt.Sprintf("backup-%d", as.node.RaftContext.Id)
+	backupName := fmt.Sprintf("backup-%d", as.Node.RaftContext.Id)
 	file, err := os.OpenFile(backupName, os.O_CREATE|os.O_RDWR, 0644)
 
 	defer file.Close()
@@ -599,7 +588,7 @@ func (as *AspiraServer) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 	xlog.Logger.Infof("End to receive data")
 
 	as.store.CloseDB()
-	name := fmt.Sprintf("%d.lusf", as.node.RaftContext.Id)
+	name := fmt.Sprintf("%d.lusf", as.Node.RaftContext.Id)
 	os.Remove(name)
 
 	os.Rename(backupName, name)

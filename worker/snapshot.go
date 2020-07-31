@@ -6,24 +6,30 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
+	"github.com/thesues/aspira/conn"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/xlog"
 )
 
 //stream snapshot API
-func (as *AspiraServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb.AspiraGRPC_StreamSnapshotServer) error {
 
-	if !as.AmLeader() {
+func (w *RaftServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb.Raft_StreamSnapshotServer) error {
+
+	node := w.store.GetNode(in.Gid)
+	if node == nil {
+		return conn.ErrNoNode
+	}
+	if !node.AmLeader() {
 		return errors.Errorf("I am not leader, try next...")
 	}
 
 	defer xlog.Logger.Infof("StreamSnasphot done")
-
-	reader, err := as.store.GetStreamReader()
+	worker := w.store.GetWorker(in.Gid)
+	reader, err := worker.store.GetStreamReader()
 	if err != nil {
 		return err
 	}
-	defer as.store.FreeStreamReader()
+	defer worker.store.FreeStreamReader()
 	buf := make([]byte, 512<<10)
 	for {
 		n, err := reader.Read(buf)
@@ -34,7 +40,7 @@ func (as *AspiraServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb
 			break
 		}
 		if err = stream.Send(&aspirapb.Payload{Data: buf[:n]}); err != nil {
-			as.node.Raft().ReportSnapshot(in.Id, raft.SnapshotFailure)
+			node.Raft().ReportSnapshot(in.Id, raft.SnapshotFailure)
 			return err
 		}
 		time.Sleep(1 * time.Millisecond)

@@ -1,31 +1,17 @@
-/*
- * Copyright 2018 Dgraph Labs, Inc. and Contributors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-package conn
+package main
 
 import (
 	"context"
 	"encoding/binary"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"github.com/thesues/aspira/conn"
 	"github.com/thesues/aspira/protos/aspirapb"
 	pb "github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/xlog"
@@ -33,104 +19,11 @@ import (
 	otrace "go.opencensus.io/trace"
 )
 
-type sendmsg struct {
-	to   uint64
-	data []byte
-}
-
-type lockedSource struct {
-	lk  sync.Mutex
-	src rand.Source
-}
-
-func (r *lockedSource) Int63() int64 {
-	r.lk.Lock()
-	defer r.lk.Unlock()
-	return r.src.Int63()
-}
-
-func (r *lockedSource) Seed(seed int64) {
-	r.lk.Lock()
-	defer r.lk.Unlock()
-	r.src.Seed(seed)
-}
-
-type ProposalResult struct {
-	Err   error
-	Index uint64
-}
-
-// ProposalCtx stores the context for a proposal with extra information.
-type ProposalCtx struct {
-	Found    uint32
-	ResultCh chan ProposalResult
-	Ctx      context.Context
-}
-
-type proposals struct {
-	sync.RWMutex
-	all map[string]*ProposalCtx
-}
-
-func (p *proposals) Store(key string, pctx *ProposalCtx) bool {
-	if len(key) == 0 {
-		return false
-	}
-	p.Lock()
-	defer p.Unlock()
-	if p.all == nil {
-		p.all = make(map[string]*ProposalCtx)
-	}
-	if _, has := p.all[key]; has {
-		return false
-	}
-	p.all[key] = pctx
-	return true
-}
-
-func (p *proposals) Ctx(key string) context.Context {
-	if pctx := p.Get(key); pctx != nil {
-		return pctx.Ctx
-	}
-	return context.Background()
-}
-
-func (p *proposals) Get(key string) *ProposalCtx {
-	p.RLock()
-	defer p.RUnlock()
-	return p.all[key]
-}
-
-func (p *proposals) Delete(key string) {
-	if len(key) == 0 {
-		return
-	}
-	p.Lock()
-	defer p.Unlock()
-	delete(p.all, key)
-}
-
-func (p *proposals) Done(key string, index uint64, err error) {
-	if len(key) == 0 {
-		return
-	}
-	p.Lock()
-	defer p.Unlock()
-	pd, has := p.all[key]
-	if !has {
-		// If we assert here, there would be a race condition between a context
-		// timing out, and a proposal getting applied immediately after. That
-		// would cause assert to fail. So, don't assert.
-		return
-	}
-	delete(p.all, key)
-	pd.ResultCh <- ProposalResult{Index: index, Err: err}
-}
-
 // RaftServer is a wrapper around node that implements the Raft service.
 type RaftServer struct {
-	m    sync.RWMutex
-	node *Node
+	m     sync.RWMutex
+	store *AspiraStore
+	//node *Node
 }
 
 // UpdateNode safely updates the node.
@@ -150,8 +43,8 @@ func (w *RaftServer) GetNode() *Node {
 */
 
 // NewRaftServer returns a pointer to a new RaftServer instance.
-func NewRaftServer(n *Node) *RaftServer {
-	return &RaftServer{node: n}
+func NewRaftServer(store *AspiraStore) *RaftServer {
+	return &RaftServer{store: store}
 }
 
 // IsPeer checks whether this node is a peer of the node sending the request.
@@ -185,12 +78,13 @@ func (w *RaftServer) JoinCluster(ctx context.Context,
 		return &pb.Payload{}, ctx.Err()
 	}
 
-	node := w.node
+	node := w.store.GetNode(rc.Gid)
+
 	if node == nil || node.Raft() == nil {
-		return nil, ErrNoNode
+		return nil, conn.ErrNoNode
 	}
 
-	return node.joinCluster(ctx, rc)
+	return node.JoinCluster(ctx, rc)
 }
 
 func (w *RaftServer) BlobRaftMessage(ctx context.Context, request *aspirapb.BlobRaftMessageRequest) (*aspirapb.BlobRaftMessageResponse, error) {
@@ -201,9 +95,9 @@ func (w *RaftServer) BlobRaftMessage(ctx context.Context, request *aspirapb.Blob
 
 	span := otrace.FromContext(ctx)
 
-	node := w.node
+	node := w.store.GetNode(request.Context.Gid)
 	if node == nil || node.Raft() == nil {
-		return nil, ErrNoNode
+		return nil, conn.ErrNoNode
 	}
 	span.Annotatef(nil, "BlobStream server is node %#x", node.Id)
 	rc := request.Context
@@ -231,14 +125,18 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 	}
 	span := otrace.FromContext(ctx)
 
-	node := w.node
-	if node == nil || node.Raft() == nil {
-		return ErrNoNode
-	}
-	span.Annotatef(nil, "Stream server is node %#x", node.Id)
+	/*
+		node := w.node
+		if node == nil || node.Raft() == nil {
+			return ErrNoNode
+		}
+		span.Annotatef(nil, "Stream server is node %#x", node.Id)
+		raft := node.Raft()
+	*/
 
 	var rc *pb.RaftContext
-	raft := node.Raft()
+	var node *conn.Node
+	var raft raft.Node
 	step := func(data []byte) error {
 		ctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
@@ -265,7 +163,7 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 			// So, add a context with timeout to allow it to get out of the blockage.
 			switch msg.Type {
 			case raftpb.MsgHeartbeat, raftpb.MsgHeartbeatResp:
-				atomic.AddInt64(&node.heartbeatsIn, 1)
+				atomic.AddInt64(&node.HeartbeatsIn, 1)
 			case raftpb.MsgReadIndex, raftpb.MsgReadIndexResp:
 				/*
 					case raftpb.MsgApp, raftpb.MsgAppResp:
@@ -296,6 +194,13 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 		if loop == 1 {
 			rc = batch.GetContext()
 			span.Annotatef(nil, "Stream from %#x", rc.GetId())
+
+			node := w.store.GetNode(rc.Gid)
+			if node == nil || node.Raft() == nil {
+				return conn.ErrNoNode
+			}
+			span.Annotatef(nil, "Stream server is node %#x", node.Id)
+			raft = node.Raft()
 			if rc != nil {
 				node.Connect(rc.Id, rc.Addr)
 			}
@@ -313,7 +218,7 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 // Heartbeat rpc call is used to check connection with other workers after worker
 // tcp server for this instance starts.
 func (w *RaftServer) Heartbeat(in *pb.Payload, stream pb.Raft_HeartbeatServer) error {
-	ticker := time.NewTicker(echoDuration)
+	ticker := time.NewTicker(conn.EchoDuration)
 	defer ticker.Stop()
 
 	ctx := stream.Context()

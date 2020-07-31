@@ -1,6 +1,6 @@
 .PHONY: clean
 all:
-	swag init -g http.go
+	swag init -g http_server.go
 	go build
 clean:
 	rm *.lusf

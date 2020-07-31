@@ -5,14 +5,68 @@
         "license": {}
     },
     "paths": {
-        "/del/{id}": {
+        "/addworker/": {
             "post": {
+                "summary": "add new worker",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "raft ID",
+                        "name": "id",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "gid",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "remote cluster addr",
+                        "name": "joinCluster",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "body"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/del/{gid}/{oid}": {
+            "delete": {
                 "summary": "Delete an object",
                 "parameters": [
                     {
                         "type": "integer",
                         "description": "Object ID",
-                        "name": "id",
+                        "name": "oid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "gid",
                         "in": "path",
                         "required": true
                     }
@@ -33,7 +87,7 @@
                 }
             }
         },
-        "/get/{id}": {
+        "/get/{gid}/{id}": {
             "get": {
                 "produces": [
                     "application/octet-stream",
@@ -47,7 +101,14 @@
                     {
                         "type": "integer",
                         "description": "Object ID",
-                        "name": "id",
+                        "name": "oid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "gid",
                         "in": "path",
                         "required": true
                     }
@@ -74,7 +135,38 @@
                 }
             }
         },
-        "/put/": {
+        "/list/": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "List all gid",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/put/{gid}/": {
             "post": {
                 "consumes": [
                     "multipart/form-data"
@@ -86,6 +178,13 @@
                         "description": "this is a test file",
                         "name": "file",
                         "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Group ID",
+                        "name": "gid",
+                        "in": "path",
                         "required": true
                     }
                 ],

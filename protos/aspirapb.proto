@@ -27,7 +27,8 @@ message Payload {
 
 message RaftContext {
 	fixed64 id = 1;
-	string addr = 2;
+	fixed64 gid = 2;
+	string addr = 3;
 }
 
 
@@ -112,15 +113,23 @@ service Raft {
 	rpc RaftMessage (stream RaftBatch) returns (Payload) {}
 	rpc BlobRaftMessage (BlobRaftMessageRequest) returns (BlobRaftMessageResponse) {}
 	rpc JoinCluster (RaftContext)      returns (Payload) {}
-}
-
-//aspira service
-service AspiraGRPC {
 	rpc StreamSnapshot (RaftContext) returns (stream Payload) {}
 }
 
 
 
+message AddWorkerRequest {
+	fixed64 gid = 1;
+ 	fixed64 id = 2;
+	string JoinCluster = 3;
+}
+
+message AddWorkerResponse {
+}
+
+service Store {
+	rpc AddWorker(AddWorkerRequest) returns (AddWorkerResponse) {}
+}
 
 //zero service
 message AllocIDRequest{

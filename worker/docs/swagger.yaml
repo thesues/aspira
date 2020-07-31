@@ -2,12 +2,48 @@ info:
   contact: {}
   license: {}
 paths:
-  /del/{id}:
+  /addworker/:
     post:
+      parameters:
+      - description: raft ID
+        in: formData
+        name: id
+        required: true
+        type: integer
+      - description: Group ID
+        in: formData
+        name: gid
+        required: true
+        type: integer
+      - description: remote cluster addr
+        in: formData
+        name: joinCluster
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: body
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: add new worker
+  /del/{gid}/{oid}:
+    delete:
       parameters:
       - description: Object ID
         in: path
-        name: id
+        name: oid
+        required: true
+        type: integer
+      - description: Group ID
+        in: path
+        name: gid
         required: true
         type: integer
       responses:
@@ -20,12 +56,17 @@ paths:
           schema:
             type: string
       summary: Delete an object
-  /get/{id}:
+  /get/{gid}/{id}:
     get:
       parameters:
       - description: Object ID
         in: path
-        name: id
+        name: oid
+        required: true
+        type: integer
+      - description: Group ID
+        in: path
+        name: gid
         required: true
         type: integer
       produces:
@@ -48,7 +89,27 @@ paths:
           schema:
             type: string
       summary: Get an object
-  /put/:
+  /list/:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: integer
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: List all gid
+  /put/{gid}/:
     post:
       consumes:
       - multipart/form-data
@@ -58,6 +119,11 @@ paths:
         name: file
         required: true
         type: file
+      - description: Group ID
+        in: path
+        name: gid
+        required: true
+        type: integer
       responses:
         "200":
           description: OK

@@ -29,6 +29,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"github.com/thesues/aspira/protos/aspirapb"
 	pb "github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
 	"github.com/thesues/aspira/utils"
@@ -60,6 +61,7 @@ type Node struct {
 	Cfg         *raft.Config
 	MyAddr      string
 	Id          uint64
+	Gid         uint64
 	peers       map[uint64]string
 	confChanges map[uint64]chan error
 	messages    chan sendmsg
@@ -73,8 +75,10 @@ type Node struct {
 	// applied (to PL) -> synced (to BadgerDB).
 	Applied WaterMark
 
-	heartbeatsOut int64
-	heartbeatsIn  int64
+	HeartbeatsOut int64
+	HeartbeatsIn  int64
+
+	State *aspirapb.MembershipState
 }
 
 // NewNode returns a new Node instance.
@@ -136,6 +140,7 @@ func NewNode(rc *pb.RaftContext, store *raftwal.WAL) *Node {
 		messages:    make(chan sendmsg, 100),
 		peers:       make(map[uint64]string),
 		requestCh:   make(chan linReadReq, 100),
+		State:       &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
 	}
 
 	n.Applied.Init(utils.NewStopper())
@@ -159,8 +164,8 @@ func (n *Node) ReportRaftComms(stopper *utils.Stopper) {
 		case <-stopper.ShouldStop():
 			return
 		case <-ticker.C:
-			out := atomic.SwapInt64(&n.heartbeatsOut, 0)
-			in := atomic.SwapInt64(&n.heartbeatsIn, 0)
+			out := atomic.SwapInt64(&n.HeartbeatsOut, 0)
+			in := atomic.SwapInt64(&n.HeartbeatsIn, 0)
 			xlog.Logger.Infof("RaftComm: [%#x] Heartbeats out: %d, in: %d", n.Id, out, in)
 		}
 	}
@@ -254,7 +259,7 @@ func (n *Node) Send(msg *raftpb.Message) {
 	switch msg.Type {
 
 	case raftpb.MsgHeartbeat, raftpb.MsgHeartbeatResp:
-		atomic.AddInt64(&n.heartbeatsOut, 1)
+		atomic.AddInt64(&n.HeartbeatsOut, 1)
 		/*
 			case raftpb.MsgReadIndex, raftpb.MsgReadIndexResp:
 			case raftpb.MsgApp, raftpb.MsgAppResp:
@@ -794,17 +799,29 @@ func (n *Node) RunReadIndexLoop(stopper *utils.Stopper, readStateCh <-chan raft.
 	}
 }
 
-func (n *Node) joinCluster(ctx context.Context, rc *pb.RaftContext) (*pb.Payload, error) {
+func (n *Node) AmLeader() bool {
+	if n.Raft() == nil {
+		return false
+	}
+	r := n.Raft()
+	if r.Status().Lead != r.Status().ID {
+		return false
+	}
+	return true
+
+}
+
+func (n *Node) JoinCluster(ctx context.Context, rc *pb.RaftContext) (*pb.Payload, error) {
 	// Only process one JoinCluster request at a time.
 	n.joinLock.Lock()
 	defer n.joinLock.Unlock()
 
 	// Check that the new node is from the same group as me.
-	/*
-		if rc.Group != n.RaftContext.Group {
-			return nil, errors.Errorf("Raft group mismatch")
-		}
-	*/
+
+	if rc.Gid != n.RaftContext.Gid {
+		return nil, errors.Errorf("Raft group mismatch")
+	}
+
 	// Also check that the new node is not me.
 	if rc.Id == n.RaftContext.Id {
 		return nil, errors.Errorf("REUSE_RAFTID: Raft ID duplicates mine: %+v", rc)

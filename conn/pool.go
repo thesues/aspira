@@ -34,8 +34,8 @@ var (
 	ErrNoConnection = errors.New("No connection exists")
 	// ErrUnhealthyConnection indicates the connection to a node is unhealthy.
 	ErrUnhealthyConnection = errors.New("Unhealthy connection")
-	//echoDuration           = 500 * time.Millisecond
-	echoDuration = 2 * time.Second
+	//EchoDuration           = 500 * time.Millisecond
+	EchoDuration = 2 * time.Second
 )
 
 // Pool is used to manage the grpc client connection(s) for communicating with other
@@ -217,7 +217,7 @@ func (p *Pool) MonitorHealth() {
 			}
 			lastErr = err
 			// Sleep for a bit before retrying.
-			time.Sleep(echoDuration)
+			time.Sleep(EchoDuration)
 		}
 	}
 }
@@ -229,5 +229,5 @@ func (p *Pool) IsHealthy() bool {
 	}
 	p.RLock()
 	defer p.RUnlock()
-	return time.Since(p.lastEcho) < 4*echoDuration
+	return time.Since(p.lastEcho) < 4*EchoDuration
 }

@@ -20,16 +20,27 @@ import (
 )
 
 // @Summary Delete an object
-// @Param id path integer true "Object ID"
+// @Param oid path integer true "Object ID"
+// @Param gid path int true "Group ID"
 // @Success 200 {string} string ""
 // @Failure 400 {string} string ""
-// @Router /del/{id} [post]
-func (as *AspiraServer) del(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+// @Router /del/{gid}/{oid} [delete]
+func (as *AspiraStore) del(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("oid"), 10, 64)
 	if err != nil {
 		c.String(400, err.Error())
 		return
 	}
+	gid, err := strconv.ParseUint(c.Param("gid"), 10, 64)
+	if err != nil {
+		c.String(400, err.Error())
+	}
+
+	w := as.GetWorker(gid)
+	if w == nil {
+		c.String(400, "can not find gid %d", gid)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var p aspirapb.AspiraProposal
@@ -38,7 +49,7 @@ func (as *AspiraServer) del(c *gin.Context) {
 	p.Key = id
 
 	start := time.Now()
-	_, err = as.proposeAndWait(ctx, &p)
+	_, err = w.proposeAndWait(ctx, &p)
 	if err != nil {
 		xlog.Logger.Errorf(err.Error())
 		c.String(400, err.Error())
@@ -57,16 +68,29 @@ func (as *AspiraServer) putWithOffset(c *gin.Context) {
 // @Summary Put an object
 // @Accept  multipart/form-data
 // @Param   file formData file true  "this is a test file"
+// @Param   gid path int true "Group ID"
 // @Success 200 {string} string ""
 // @Failure 400 {string} string ""
-// @Router /put/ [post]
-func (as *AspiraServer) put(c *gin.Context) {
+// @Router /put/{gid}/ [post]
+func (as *AspiraStore) put(c *gin.Context) {
 	readFile, header, err := c.Request.FormFile("file")
 	if err != nil {
 		c.String(400, err.Error())
 		return
 	}
-	if header.Size > as.store.ObjectMaxSize() {
+
+	gid, err := strconv.ParseUint(c.Param("gid"), 10, 64)
+	if err != nil {
+		c.String(400, err.Error())
+	}
+
+	w := as.GetWorker(gid)
+
+	if w == nil {
+		c.String(400, "can not find gid %d", gid)
+	}
+
+	if header.Size > (0xFFFF*(512) - 2) {
 		c.String(405, "size too big")
 		return
 	}
@@ -84,7 +108,7 @@ func (as *AspiraServer) put(c *gin.Context) {
 	p.ProposalType = aspirapb.AspiraProposal_Put
 
 	start := time.Now()
-	index, err := as.proposeAndWait(ctx, &p)
+	index, err := w.proposeAndWait(ctx, &p)
 	if err != nil {
 		xlog.Logger.Errorf(err.Error())
 		c.String(400, err.Error())
@@ -94,22 +118,65 @@ func (as *AspiraServer) put(c *gin.Context) {
 	c.String(200, "wrote to %d", index)
 }
 
-// @Summary Get an object
-// @Param id path integer true "Object ID"
-// @Produce octet-stream,png,jpeg,gif,plain
+// @Summary add new worker
+// @Param id  formData integer true "raft ID"
+// @Param gid formData integer true "Group ID"
+// @Param joinCluster formData string false "remote cluster addr"
 // @Success 200 {body} string ""
 // @Failure 400 {string} string ""
 // @Failure 500 {string} string ""
-// @Router /get/{id} [get]
-func (as *AspiraServer) get(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+// @Router /addworker/ [post]
+func (as *AspiraStore) add(c *gin.Context) {
+	id, err := strconv.ParseUint(c.PostForm("id"), 10, 64)
 	if err != nil {
 		c.String(400, err.Error())
 		return
 	}
+
+	gid, err := strconv.ParseUint(c.PostForm("id"), 10, 64)
+	if err != nil {
+		c.String(400, err.Error())
+	}
+
+	joinCluster := c.PostForm("joinCluster")
+
+	err = as.startNewWorker(id, gid, as.addr, joinCluster)
+	if err != nil {
+		c.String(200, "")
+		return
+	}
+	c.String(500, err.Error())
+	return
+}
+
+// @Summary Get an object
+// @Param oid path integer true "Object ID"
+// @Param gid path integer true "Group ID"
+// @Produce octet-stream,png,jpeg,gif,plain
+// @Success 200 {body} string ""
+// @Failure 400 {string} string ""
+// @Failure 500 {string} string ""
+// @Router /get/{gid}/{id} [get]
+func (as *AspiraStore) get(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("oid"), 10, 64)
+	if err != nil {
+		c.String(400, err.Error())
+		return
+	}
+
+	gid, err := strconv.ParseUint(c.Param("gid"), 10, 64)
+	if err != nil {
+		c.String(400, err.Error())
+	}
+
+	w := as.GetWorker(gid)
+	if w == nil {
+		c.String(400, "can not find gid %d", gid)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	data, err := as.getAndWait(ctx, id)
+	data, err := w.getAndWait(ctx, id)
 	if err != nil {
 		xlog.Logger.Errorf(err.Error())
 		c.String(500, err.Error())
@@ -127,7 +194,23 @@ func (as *AspiraServer) get(c *gin.Context) {
 	})
 }
 
-func (as *AspiraServer) ServeHTTP() {
+// @Summary List all gid
+// @Success 200 {array} uint64
+// @Produce json
+// @Failure 400 {string} string ""
+// @Failure 500 {string} string ""
+// @Router /list/ [get]
+func (as *AspiraStore) list(c *gin.Context) {
+	var gids []uint64
+	as.RLock()
+	for k := range as.workers {
+		gids = append(gids, k)
+	}
+	as.RUnlock()
+	c.JSON(200, gids)
+}
+
+func (as *AspiraStore) ServeHTTP() {
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
@@ -135,18 +218,14 @@ func (as *AspiraServer) ServeHTTP() {
 	//go tool pprof
 	pprof.Register(r)
 
-	/*
-		r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
-			Output: os.Stdout,
-		}))
-	*/
-
 	r.Use(gin.Recovery())
 	r.Use(logToZap)
 
-	r.POST("/del/:id", as.del)
-	r.POST("/put/", as.put)
-	r.GET("/get/:id", as.get)
+	r.DELETE("/del/:gid/:oid", as.del)
+	r.POST("/put/:gid/", as.put)
+	r.GET("/get/:gid/:oid", as.get)
+	r.GET("/list", as.list)
+	r.POST("/addworker", as.add)
 
 	//http api docs
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -155,30 +234,19 @@ func (as *AspiraServer) ServeHTTP() {
 		cannylsMerics.PrometheusHandler.ServeHTTP(c.Writer, c.Request)
 	})
 
-	stringID := fmt.Sprintf("%d", as.node.Id)
 	srv := &http.Server{
-		Addr:    ":808" + stringID,
+		Addr:    as.httpAddr,
 		Handler: r,
 	}
 
 	go func() {
-		defer func() {
-			xlog.Logger.Infof("HTTP return")
-		}()
+		defer xlog.Logger.Infof("HTTP return")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			panic("http server crashed")
 		}
 	}()
+	as.httpServer = srv
 
-	select {
-	case <-as.stopper.ShouldStop():
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
-			panic("Server Shutdown failed")
-		}
-		return
-	}
 }
 
 func logToZap(c *gin.Context) {
