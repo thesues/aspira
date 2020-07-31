@@ -12,12 +12,15 @@ var (
 	Logger    *sugaredZap
 )
 
-func InitLog(name string) {
+func InitLog(name string, printOnStdout bool) {
 	var err error
 	cfg := zap.NewDevelopmentConfig()
 	fileName := fmt.Sprintf("%s.log", name)
-	cfg.OutputPaths = []string{fileName, os.Stdout.Name()}
-	//cfg.OutputPaths = []string{fileName}
+	//cfg.OutputPaths = []string{fileName, os.Stdout.Name()}
+	cfg.OutputPaths = []string{fileName}
+	if printOnStdout {
+		cfg.OutputPaths = append(cfg.OutputPaths, os.Stdout.Name())
+	}
 
 	cfg.Level.SetLevel(zap.InfoLevel)
 	ZapLogger, err = cfg.Build()

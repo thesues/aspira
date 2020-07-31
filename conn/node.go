@@ -637,17 +637,12 @@ func (n *Node) SetStore(db *raftwal.WAL) {
 	n.Store = db
 }
 
-func (n *Node) addToCluster(ctx context.Context, pid uint64) error {
-	addr, ok := n.Peer(pid)
+func (n *Node) addToCluster(ctx context.Context, rc *pb.RaftContext) error {
+	addr, ok := n.Peer(rc.Id)
 	if ok == false {
 		panic("Unable to find conn pool for peer:")
 	}
 	//x.AssertTruef(ok, "Unable to find conn pool for peer: %#x", pid)
-	rc := &pb.RaftContext{
-		Addr: addr,
-		//Group: n.RaftContext.Group,
-		Id: pid,
-	}
 
 	rcBytes, err := rc.Marshal()
 	if err != nil {
@@ -657,12 +652,12 @@ func (n *Node) addToCluster(ctx context.Context, pid uint64) error {
 
 	cc := raftpb.ConfChange{
 		Type:    raftpb.ConfChangeAddNode,
-		NodeID:  pid,
+		NodeID:  rc.Id,
 		Context: rcBytes,
 	}
 	err = errInternalRetry
 	for err == errInternalRetry {
-		xlog.Logger.Infof("Trying to add %#x to cluster. Addr: %v\n", pid, addr)
+		xlog.Logger.Infof("Trying to add %#x to cluster. Addr: %v\n", rc.Id, addr)
 		xlog.Logger.Infof("Current confstate at %#x: %+v\n", n.Id, n.ConfState())
 		err = n.proposeConfChange(ctx, cc)
 	}
@@ -837,7 +832,7 @@ func (n *Node) JoinCluster(ctx context.Context, rc *pb.RaftContext) (*pb.Payload
 	}
 	n.Connect(rc.Id, rc.Addr)
 
-	err := n.addToCluster(context.Background(), rc.Id)
+	err := n.addToCluster(context.Background(), rc)
 	xlog.Logger.Infof("[%#x] Done joining cluster with err: %v", rc.Id, err)
 	return &pb.Payload{}, err
 }

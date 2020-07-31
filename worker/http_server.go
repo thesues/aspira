@@ -133,7 +133,7 @@ func (as *AspiraStore) add(c *gin.Context) {
 		return
 	}
 
-	gid, err := strconv.ParseUint(c.PostForm("id"), 10, 64)
+	gid, err := strconv.ParseUint(c.PostForm("gid"), 10, 64)
 	if err != nil {
 		c.String(400, err.Error())
 	}
@@ -142,10 +142,10 @@ func (as *AspiraStore) add(c *gin.Context) {
 
 	err = as.startNewWorker(id, gid, as.addr, joinCluster)
 	if err != nil {
-		c.String(200, "")
+		c.String(500, err.Error())
 		return
 	}
-	c.String(500, err.Error())
+	c.String(200, "")
 	return
 }
 
@@ -172,6 +172,7 @@ func (as *AspiraStore) get(c *gin.Context) {
 	w := as.GetWorker(gid)
 	if w == nil {
 		c.String(400, "can not find gid %d", gid)
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

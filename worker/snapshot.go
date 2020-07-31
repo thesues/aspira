@@ -15,6 +15,7 @@ import (
 
 func (w *RaftServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb.Raft_StreamSnapshotServer) error {
 
+	xlog.Logger.Infof("snapshot request for gid :%d ", in.Gid)
 	node := w.store.GetNode(in.Gid)
 	if node == nil {
 		return conn.ErrNoNode

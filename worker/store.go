@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,9 +51,8 @@ func (as *AspiraStore) Stop() {
 	for _, w := range as.workers {
 		w.Stop()
 	}
-	as.grpcServer.GracefulStop()
+	as.grpcServer.Stop()
 	as.httpServer.Close()
-	//as.stopper.Stop()
 }
 
 // Load from disk
@@ -78,7 +78,7 @@ func (s *AspiraStore) LoadAndRun() {
 					continue
 				}
 				path := fmt.Sprintf("%s/%s/%d.lusf", baseDirectory, workDir.Name(), id)
-				xlog.Logger.Infof("start gid: %d, id: %d, path: %d", gid, id, path)
+				xlog.Logger.Infof("start gid: %d, id: %d, path: %s", gid, id, path)
 				worker, err := NewAspiraWorker(id, gid, s.addr, path)
 				if err != nil {
 					xlog.Logger.Warnf("can not install worker, %v", err)
@@ -144,6 +144,9 @@ func (s *AspiraStore) startNewWorker(id, gid uint64, addr, joinAddress string) e
 		return errors.Errorf("can not put the same group[%d] into the same store", gid)
 	}
 	path := fmt.Sprintf("%s/worker_%d_%d/%d.lusf", s.name, gid, id, id)
+	if err := os.Mkdir(filepath.Dir(path), 0755); err != nil {
+		return nil
+	}
 	x, err := NewAspiraWorker(id, gid, addr, path)
 	if err != nil {
 		s.Unlock()
@@ -161,11 +164,12 @@ func (s *AspiraStore) StopWorker(id, gid uint64) error {
 }
 
 var (
-	hasJaeger = flag.Bool("jaeger", false, "connect to jaeger")
-	strict    = flag.Bool("strict", false, "strict sync every entry")
-	addr      = flag.String("addr", "", "")
-	httpAddr  = flag.String("http_addr", "", "")
-	name      = flag.String("name", "default", "")
+	hasJaeger   = flag.Bool("jaeger", false, "connect to jaeger")
+	strict      = flag.Bool("strict", false, "strict sync every entry")
+	addr        = flag.String("addr", "", "")
+	httpAddr    = flag.String("http_addr", "", "")
+	name        = flag.String("name", "default", "")
+	logToStdout = flag.Bool("stdout", false, "if log to stdout")
 )
 
 func main() {
@@ -181,7 +185,7 @@ func main() {
 		otrace.RegisterExporter(je)
 		otrace.ApplyConfig(otrace.Config{DefaultSampler: otrace.AlwaysSample()})
 	}
-	xlog.InitLog("store")
+	xlog.InitLog(*name, *logToStdout)
 
 	as := NewAspiraStore(*name, *addr, *httpAddr)
 	as.ServGRPC()

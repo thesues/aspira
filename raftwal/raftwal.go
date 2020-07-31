@@ -368,17 +368,17 @@ func (wal *WAL) PastLife() bool {
 
 func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 
-	xlog.Logger.Infof("AllEntries from %d => %d, maxSize is %d", lo, hi, maxSize)
+	xlog.Logger.Debugf("AllEntries from %d => %d, maxSize is %d", lo, hi, maxSize)
 	size := 0
 	for _, id := range wal.DB().ListRange(wal.EntryKey(lo), wal.EntryKey(hi), 100) {
 		if v, ok := wal.entryCache.Get(id.U64() & keyMask); ok {
 			e := v.(raftpb.Entry)
 			es = append(es, e)
 			size += e.Size()
-			xlog.Logger.Infof("cache hit for %d", id.U64()&keyMask)
+			xlog.Logger.Debugf("cache hit for %d", id.U64()&keyMask)
 
 		} else {
-			xlog.Logger.Infof("cache missing for %d", id.U64()&keyMask)
+			xlog.Logger.Debugf("cache missing for %d", id.U64()&keyMask)
 			data, err := wal.DB().Get(id)
 			if err != nil {
 				xlog.Logger.Fatalf("failed to get id %+v, err is %+v", id, err)

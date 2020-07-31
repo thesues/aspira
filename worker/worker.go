@@ -22,6 +22,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -47,8 +48,9 @@ type AspiraWorker struct {
 		raftServer *conn.RaftServer //internal comms
 		grpcServer *grpc.Server     //internal comms, raftServer is registered on grpcServer
 	*/
-	store   *raftwal.WAL
-	stopper *utils.Stopper
+	store     *raftwal.WAL
+	stopper   *utils.Stopper
+	storePath string
 }
 
 func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker, err error) {
@@ -74,8 +76,9 @@ func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker
 		Node: node,
 		//raftServer: raftServer,
 		//addr:    addr,
-		stopper: utils.NewStopper(),
-		store:   store,
+		stopper:   utils.NewStopper(),
+		store:     store,
+		storePath: path,
 		//state:      &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
 	}
 	return as, nil
@@ -117,6 +120,8 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
 			panic(fmt.Sprintf("Unhealthy connection to %v", joinClusterAddr))
 		}
 
+		//download snapshot first
+		retry := 1
 		for {
 			err := aw.populateSnapshot(raftpb.Snapshot{}, p)
 			if err != nil {
@@ -124,10 +129,16 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
 			} else {
 				break
 			}
-			time.Sleep(time.Second)
+			time.Sleep(time.Duration(retry) * time.Second)
+			retry++
+			if retry > 10 {
+				xlog.Logger.Errorf("can not download remote snapshot from %s, quit", joinClusterAddr)
+				return
+			}
 		}
-		//download snapshot first
+
 		c := aspirapb.NewRaftClient(p.Get())
+		retry = 1
 		for {
 			timeout := 8 * time.Second
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -144,6 +155,11 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
 				log.Fatalf("Error while joining cluster: %v", err)
 			}
 			xlog.Logger.Errorf("Error while joining cluster: %v\n, try again", err)
+			retry++
+			if retry > 10 {
+				xlog.Logger.Errorf("Error while join remote cluster %+v, quit...", err)
+				return
+			}
 			timeout *= 2
 			if timeout > 32*time.Second {
 				timeout = 32 * time.Second
@@ -477,7 +493,7 @@ func (aw *AspiraWorker) applyConfChange(e raftpb.Entry) {
 		}
 
 		xx := aw.Node.Raft().ApplyConfChange(cc)
-		xlog.Logger.Infof("Apply CC %+v at index \n", e.Index, xx)
+		xlog.Logger.Infof("Apply CC %+v at index %d\n", xx, e.Index)
 		aw.Node.SetConfState(xx)
 		aw.Node.DoneConfChange(cc.ID, nil)
 	case raftpb.ConfChangeRemoveNode:
@@ -557,17 +573,17 @@ func (as *AspiraWorker) getPeerPool(peer uint64) *conn.Pool {
 	return p
 }
 
-func (as *AspiraWorker) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (err error) {
+func (aw *AspiraWorker) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (err error) {
 	conn := pl.Get()
 	c := aspirapb.NewRaftClient(conn)
 	//c := aspirapb.NewAspiraGRPCClient(conn)
 	xlog.Logger.Infof("know snapshot %d", snap.Metadata.Index)
-	stream, err := c.StreamSnapshot(context.Background(), as.Node.RaftContext)
+	stream, err := c.StreamSnapshot(context.Background(), aw.Node.RaftContext)
 	if err != nil {
 		return
 	}
 
-	backupName := fmt.Sprintf("backup-%d", as.Node.RaftContext.Id)
+	backupName := fmt.Sprintf("%s/backup-%d", filepath.Dir(aw.storePath), aw.Node.RaftContext.Id)
 	file, err := os.OpenFile(backupName, os.O_CREATE|os.O_RDWR, 0644)
 
 	defer file.Close()
@@ -587,18 +603,17 @@ func (as *AspiraWorker) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 	}
 	xlog.Logger.Infof("End to receive data")
 
-	as.store.CloseDB()
-	name := fmt.Sprintf("%d.lusf", as.Node.RaftContext.Id)
-	os.Remove(name)
+	aw.store.CloseDB()
 
-	os.Rename(backupName, name)
+	os.Remove(aw.storePath)
+	os.Rename(backupName, aw.storePath)
 
-	db, err := cannyls.OpenCannylsStorage(name)
+	db, err := cannyls.OpenCannylsStorage(aw.storePath)
 	if err != nil {
 		panic("can not open downloaded cannylsdb")
 	}
-	as.store.SetDB(db)
-	sa, _ := as.store.Snapshot()
-	xlog.Logger.Warnf("get snapshot %d", sa.Metadata.Index)
+	aw.store.SetDB(db)
+	sa, _ := aw.store.Snapshot()
+	xlog.Logger.Infof("get snapshot %d", sa.Metadata.Index)
 	return nil
 }

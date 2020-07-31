@@ -7,8 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coreos/etcd/raft"
-
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/conn"
@@ -135,9 +133,15 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 	*/
 
 	var rc *pb.RaftContext
+
 	var node *conn.Node
-	var raft raft.Node
-	step := func(data []byte) error {
+	//var raft raft.Node
+
+	step := func(data []byte, node *conn.Node) error {
+
+		if node == nil {
+			panic("FUCK")
+		}
 		ctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
 
@@ -173,7 +177,7 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 					msg.To, msg.Type, msg.From)
 			}
 
-			if err := raft.Step(ctx, msg); err != nil {
+			if err := node.Raft().Step(ctx, msg); err != nil {
 				xlog.Logger.Warnf("Error while raft.Step from %#x: %v. Closing RaftMessage stream.",
 					rc.GetId(), err)
 				return errors.Wrapf(err, "error while raft.Step from %#x", rc.GetId())
@@ -195,12 +199,12 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 			rc = batch.GetContext()
 			span.Annotatef(nil, "Stream from %#x", rc.GetId())
 
-			node := w.store.GetNode(rc.Gid)
+			node = w.store.GetNode(rc.Gid)
 			if node == nil || node.Raft() == nil {
 				return conn.ErrNoNode
 			}
 			span.Annotatef(nil, "Stream server is node %#x", node.Id)
-			raft = node.Raft()
+			//raft = node.Raft()
 			if rc != nil {
 				node.Connect(rc.Id, rc.Addr)
 			}
@@ -209,7 +213,7 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 			continue
 		}
 		data := batch.Payload.Data
-		if err := step(data); err != nil {
+		if err := step(data, node); err != nil {
 			return err
 		}
 	}
