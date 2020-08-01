@@ -75,7 +75,7 @@ func main() {
 	store, err := storage.OpenCannylsStorage(*path)
 	utils.Check(err)
 
-	xlog.InitLog("dumpwal")
+	xlog.InitLog(nil)
 	//snapshot key
 	fmt.Printf("SNAPSHOT : ")
 	data, err := store.Get(snapshotKey())

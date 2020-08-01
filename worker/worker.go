@@ -38,16 +38,8 @@ import (
 	otrace "go.opencensus.io/trace"
 )
 
-const (
-	SmallKeySize = 32 << 10
-)
-
 type AspiraWorker struct {
-	Node *conn.Node
-	/*
-		raftServer *conn.RaftServer //internal comms
-		grpcServer *grpc.Server     //internal comms, raftServer is registered on grpcServer
-	*/
+	Node      *conn.Node
 	store     *raftwal.WAL
 	stopper   *utils.Stopper
 	storePath string

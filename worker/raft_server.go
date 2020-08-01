@@ -79,7 +79,7 @@ func (w *RaftServer) JoinCluster(ctx context.Context,
 	node := w.store.GetNode(rc.Gid)
 
 	if node == nil || node.Raft() == nil {
-		return nil, conn.ErrNoNode
+		return &pb.Payload{}, conn.ErrNoNode
 	}
 
 	return node.JoinCluster(ctx, rc)

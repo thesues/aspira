@@ -185,11 +185,15 @@ func main() {
 		otrace.RegisterExporter(je)
 		otrace.ApplyConfig(otrace.Config{DefaultSampler: otrace.AlwaysSample()})
 	}
-	xlog.InitLog(*name, *logToStdout)
+	logOutputs := []string{*name + ".log"}
+	if *logToStdout {
+		logOutputs = append(logOutputs, os.Stdout.Name())
+	}
+	xlog.InitLog(logOutputs)
 
 	as := NewAspiraStore(*name, *addr, *httpAddr)
 	as.ServGRPC()
-	as.ServeHTTP()
+	as.ServHTTP()
 
 	xlog.Logger.Info("LoadAndRun")
 

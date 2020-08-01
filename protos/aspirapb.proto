@@ -26,8 +26,8 @@ message Payload {
 }
 
 message RaftContext {
-	fixed64 id = 1;
-	fixed64 gid = 2;
+	uint64 id = 1;
+	uint64 gid = 2;
 	string addr = 3;
 }
 
@@ -119,16 +119,46 @@ service Raft {
 
 
 message AddWorkerRequest {
-	fixed64 gid = 1;
- 	fixed64 id = 2;
+	uint64 gid = 1;
+ 	uint64 id = 2;
 	string JoinCluster = 3;
 }
 
 message AddWorkerResponse {
 }
 
+
+message PutStreamRequest {
+	oneof data {
+		uint64 gid = 1;
+		Payload payload = 2;
+	}
+}
+
+message PutRequest {
+	uint64 gid = 1;
+	Payload payload = 2;
+}
+
+message PutResponse{
+	uint64 gid = 1;
+	uint64 oid = 2;
+}
+
+message GetRequest {
+	uint64 gid = 1;
+	uint64 oid = 2;
+}
+
 service Store {
 	rpc AddWorker(AddWorkerRequest) returns (AddWorkerResponse) {}
+	rpc PutStream(stream PutStreamRequest) returns (PutResponse){}
+	rpc Put(PutRequest) returns (PutResponse){}
+	rpc Get(GetRequest) returns (stream Payload){}
+	//rpc RemoveWorker
+	//rpc Put
+	//rpc Delete
+	//rpc Get
 }
 
 //zero service

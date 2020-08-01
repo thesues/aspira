@@ -18,7 +18,7 @@ func serve(config *ZeroConfig) {
 		xlog.Logger.Fatal(err)
 	}
 	e, err := embed.StartEtcd(cfg)
-	xlog.InitLog(cfg.Name)
+	xlog.InitLog([]string{cfg.Name + ".log"})
 	if err != nil {
 		log.Fatal(err)
 	}

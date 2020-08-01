@@ -31,10 +31,15 @@ import (
 
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
+	"github.com/thesues/aspira/xlog"
 
 	cannyls "github.com/thesues/cannyls-go/storage"
 	"golang.org/x/net/context"
 )
+
+func init() {
+	xlog.InitLog(nil)
+}
 
 func (n *Node) run(wg *sync.WaitGroup) {
 	ticker := time.NewTicker(20 * time.Millisecond)

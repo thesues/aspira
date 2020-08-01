@@ -1,9 +1,6 @@
 package xlog
 
 import (
-	"fmt"
-	"os"
-
 	"go.uber.org/zap"
 )
 
@@ -12,15 +9,11 @@ var (
 	Logger    *sugaredZap
 )
 
-func InitLog(name string, printOnStdout bool) {
+func InitLog(outputPath []string) {
 	var err error
 	cfg := zap.NewDevelopmentConfig()
-	fileName := fmt.Sprintf("%s.log", name)
 	//cfg.OutputPaths = []string{fileName, os.Stdout.Name()}
-	cfg.OutputPaths = []string{fileName}
-	if printOnStdout {
-		cfg.OutputPaths = append(cfg.OutputPaths, os.Stdout.Name())
-	}
+	cfg.OutputPaths = outputPath
 
 	cfg.Level.SetLevel(zap.InfoLevel)
 	ZapLogger, err = cfg.Build()

@@ -211,7 +211,7 @@ func (as *AspiraStore) list(c *gin.Context) {
 	c.JSON(200, gids)
 }
 
-func (as *AspiraStore) ServeHTTP() {
+func (as *AspiraStore) ServHTTP() {
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()

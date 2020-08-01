@@ -9,6 +9,13 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+func Min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func Check(err error) {
 	if err != nil {
 		xlog.Logger.Fatalf("%+v", errors.Wrap(err, ""))
