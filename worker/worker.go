@@ -236,6 +236,7 @@ func (aw *AspiraWorker) Run() {
 	for {
 		select {
 		case <-aw.stopper.ShouldStop():
+			xlog.Logger.Infof("worker %d quit", aw.Node.Id)
 			return
 		case <-ticker.C:
 			n.Raft().Tick()
@@ -576,7 +577,7 @@ func (aw *AspiraWorker) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 	}
 
 	backupName := fmt.Sprintf("%s/backup-%d", filepath.Dir(aw.storePath), aw.Node.RaftContext.Id)
-	file, err := os.OpenFile(backupName, os.O_CREATE|os.O_RDWR, 0644)
+	file, err := os.OpenFile(backupName, os.O_CREATE|os.O_RDWR, 0755)
 
 	defer file.Close()
 	xlog.Logger.Infof("Start to receive data")

@@ -4,6 +4,7 @@ all:
 	go build
 clean:
 	rm -rf store1 store2 store3
+	rm -rf db1 db2 db3
 	mkdir store1 store2 store3
 	rm -rf *.log
 	killall -9 worker

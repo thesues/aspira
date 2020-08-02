@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -17,28 +18,31 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Define the suite, and absorb the built-in basic suite
-// functionality from testify - including a T() method which
-// returns the current testing context
 type StoreTestSuite struct {
 	suite.Suite
-	conns []*grpc.ClientConn
+	conns  []*grpc.ClientConn
+	stores []*AspiraStore
 }
 
 func (suite *StoreTestSuite) TearDownSuite() {
+	for _, s := range suite.stores {
+		s.Stop()
+	}
 	for _, dir := range []string{"db1", "db2", "db3"} {
 		os.RemoveAll(dir)
 	}
 }
-func (suite *StoreTestSuite) SetupTest() {
-	xlog.InitLog(nil)
+func (suite *StoreTestSuite) SetupSuite() {
+
+	fmt.Println("SETUP SUITE")
+	xlog.InitLog([]string{"test.log"})
 	for _, dir := range []string{"db1", "db2", "db3"} {
 		os.Mkdir(dir, 0755)
 		//defer os.RemoveAll(dir)
 	}
-	s1 := NewAspiraStore("db1", "127.0.0.1:3301", "127.0.0.1:8081")
-	s2 := NewAspiraStore("db2", "127.0.0.1:3302", "127.0.0.1:8082")
-	s3 := NewAspiraStore("db3", "127.0.0.1:3303", "127.0.0.1:8083")
+	s1 := NewAspiraStore("db1", ":3301", ":8081")
+	s2 := NewAspiraStore("db2", ":3302", ":8082")
+	s3 := NewAspiraStore("db3", ":3303", ":8083")
 	ss := []*AspiraStore{s1, s2, s3}
 	for k := range ss {
 		ss[k].ServGRPC()
@@ -59,11 +63,14 @@ func (suite *StoreTestSuite) SetupTest() {
 	time.Sleep(2 * time.Second)
 	c2.AddWorker(context.Background(), &aspirapb.AddWorkerRequest{Gid: 200, Id: 2, JoinCluster: "127.0.0.1:3301"})
 	c3.AddWorker(context.Background(), &aspirapb.AddWorkerRequest{Gid: 200, Id: 3, JoinCluster: "127.0.0.1:3301"})
+	time.Sleep(10 * time.Second)
 	suite.conns = []*grpc.ClientConn{conn1, conn2, conn3}
+	suite.stores = []*AspiraStore{s1, s2, s3}
 
 }
 
 func (suite *StoreTestSuite) TestStorePutStreamGet() {
+
 	f, err := os.Open("store_test.go")
 	assert.Nil(suite.T(), err)
 	defer f.Close()
@@ -80,7 +87,6 @@ func (suite *StoreTestSuite) TestStorePutStreamGet() {
 			Gid: 200,
 		},
 	}
-
 	err = putStream.Send(&req)
 	assert.Nil(suite.T(), err)
 	n := 0
@@ -106,6 +112,7 @@ func (suite *StoreTestSuite) TestStorePutStreamGet() {
 	res, err := putStream.CloseAndRecv()
 	assert.Nil(suite.T(), err)
 
+	//read from c2
 	r := suite.readData(200, res.Oid, suite.conns[1])
 	assert.Equal(suite.T(), data, r)
 
@@ -133,7 +140,8 @@ func (suite *StoreTestSuite) readData(gid, oid uint64, conn *grpc.ClientConn) []
 	return result.Bytes()
 
 }
-func (suite *StoreTestSuite) TestStorePutGet() {
+
+func (suite *StoreTestSuite) TestPutGet() {
 
 	f, err := os.Open("store_test.go")
 	assert.Nil(suite.T(), err)
@@ -152,6 +160,7 @@ func (suite *StoreTestSuite) TestStorePutGet() {
 	//Read from c2
 	r := suite.readData(200, oid, suite.conns[1])
 	assert.Equal(suite.T(), data, r)
+
 }
 
 func TestStoreTestSuite(t *testing.T) {

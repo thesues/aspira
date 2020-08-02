@@ -1,8 +1,8 @@
 package main
 
 import (
-	"flag"
 	"fmt"
+	"os"
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/thesues/aspira/protos/aspirapb"
@@ -11,10 +11,6 @@ import (
 	"github.com/thesues/aspira/xlog"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/storage"
-)
-
-var (
-	path = flag.String("path", "", "path")
 )
 
 func snapshotKey() (ret lump.LumpId) {
@@ -71,8 +67,11 @@ func memberShipKey() (ret lump.LumpId) {
 }
 
 func main() {
-	flag.Parse()
-	store, err := storage.OpenCannylsStorage(*path)
+	if len(os.Args) < 2 {
+		fmt.Printf("Usage: dumpwal <example.lusf>")
+		return
+	}
+	store, err := storage.OpenCannylsStorage(os.Args[1])
 	utils.Check(err)
 
 	xlog.InitLog(nil)
