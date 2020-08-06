@@ -14,14 +14,14 @@ import (
 type ZeroConfig struct {
 	Name                string
 	Dir                 string
-	ClientUrls          string
-	PeerUrls            string
-	AdvertisePeerUrls   string
-	AdvertiseClientUrls string
-	InitialCluster      string
-	InitialClusterState string
+	ClientUrls          string // --listen-client-urls
+	PeerUrls            string // --listen-peer-urls
+	AdvertisePeerUrls   string // --advertise-peer-urls
+	AdvertiseClientUrls string // --advertise-client-urls
+	InitialCluster      string // --initial-cluster
+	InitialClusterState string // --initial-cluster-state
 	ClusterToken        string
-	GrpcUrl             string
+	GrpcUrl             string //--listen-grpc
 }
 
 func parseUrls(s string) (ret []url.URL, err error) {

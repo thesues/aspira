@@ -1028,24 +1028,26 @@ func (m *GetRequest) GetOid() uint64 {
 }
 
 //zero service
-type AllocIDRequest struct {
+type ZeroAllocIDRequest struct {
+	//header
+	Count                int32    `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *AllocIDRequest) Reset()         { *m = AllocIDRequest{} }
-func (m *AllocIDRequest) String() string { return proto.CompactTextString(m) }
-func (*AllocIDRequest) ProtoMessage()    {}
-func (*AllocIDRequest) Descriptor() ([]byte, []int) {
+func (m *ZeroAllocIDRequest) Reset()         { *m = ZeroAllocIDRequest{} }
+func (m *ZeroAllocIDRequest) String() string { return proto.CompactTextString(m) }
+func (*ZeroAllocIDRequest) ProtoMessage()    {}
+func (*ZeroAllocIDRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_978c3dd237f791ac, []int{15}
 }
-func (m *AllocIDRequest) XXX_Unmarshal(b []byte) error {
+func (m *ZeroAllocIDRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AllocIDRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ZeroAllocIDRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_AllocIDRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_ZeroAllocIDRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1055,37 +1057,46 @@ func (m *AllocIDRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, erro
 		return b[:n], nil
 	}
 }
-func (m *AllocIDRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AllocIDRequest.Merge(m, src)
+func (m *ZeroAllocIDRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ZeroAllocIDRequest.Merge(m, src)
 }
-func (m *AllocIDRequest) XXX_Size() int {
+func (m *ZeroAllocIDRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *AllocIDRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_AllocIDRequest.DiscardUnknown(m)
+func (m *ZeroAllocIDRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ZeroAllocIDRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_AllocIDRequest proto.InternalMessageInfo
+var xxx_messageInfo_ZeroAllocIDRequest proto.InternalMessageInfo
 
-type AllocIDResponse struct {
-	ID                   uint64   `protobuf:"varint,1,opt,name=ID,proto3" json:"ID,omitempty"`
+func (m *ZeroAllocIDRequest) GetCount() int32 {
+	if m != nil {
+		return m.Count
+	}
+	return 0
+}
+
+//allocID range from [start,end), half open
+type ZeroAllocIDResponse struct {
+	Start                uint64   `protobuf:"varint,1,opt,name=start,proto3" json:"start,omitempty"`
+	End                  uint64   `protobuf:"varint,2,opt,name=end,proto3" json:"end,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *AllocIDResponse) Reset()         { *m = AllocIDResponse{} }
-func (m *AllocIDResponse) String() string { return proto.CompactTextString(m) }
-func (*AllocIDResponse) ProtoMessage()    {}
-func (*AllocIDResponse) Descriptor() ([]byte, []int) {
+func (m *ZeroAllocIDResponse) Reset()         { *m = ZeroAllocIDResponse{} }
+func (m *ZeroAllocIDResponse) String() string { return proto.CompactTextString(m) }
+func (*ZeroAllocIDResponse) ProtoMessage()    {}
+func (*ZeroAllocIDResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_978c3dd237f791ac, []int{16}
 }
-func (m *AllocIDResponse) XXX_Unmarshal(b []byte) error {
+func (m *ZeroAllocIDResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AllocIDResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ZeroAllocIDResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_AllocIDResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_ZeroAllocIDResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1095,21 +1106,28 @@ func (m *AllocIDResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return b[:n], nil
 	}
 }
-func (m *AllocIDResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AllocIDResponse.Merge(m, src)
+func (m *ZeroAllocIDResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ZeroAllocIDResponse.Merge(m, src)
 }
-func (m *AllocIDResponse) XXX_Size() int {
+func (m *ZeroAllocIDResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *AllocIDResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_AllocIDResponse.DiscardUnknown(m)
+func (m *ZeroAllocIDResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ZeroAllocIDResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_AllocIDResponse proto.InternalMessageInfo
+var xxx_messageInfo_ZeroAllocIDResponse proto.InternalMessageInfo
 
-func (m *AllocIDResponse) GetID() uint64 {
+func (m *ZeroAllocIDResponse) GetStart() uint64 {
 	if m != nil {
-		return m.ID
+		return m.Start
+	}
+	return 0
+}
+
+func (m *ZeroAllocIDResponse) GetEnd() uint64 {
+	if m != nil {
+		return m.End
 	}
 	return 0
 }
@@ -1294,6 +1312,195 @@ func (m *ZeroStatusResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ZeroStatusResponse proto.InternalMessageInfo
 
+type ZeroRegistStoreRequest struct {
+	Address              string   `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	StoreId              uint64   `protobuf:"varint,2,opt,name=storeId,proto3" json:"storeId,omitempty"`
+	EmtpySlots           uint64   `protobuf:"varint,3,opt,name=emtpySlots,proto3" json:"emtpySlots,omitempty"`
+	Name                 string   `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ZeroRegistStoreRequest) Reset()         { *m = ZeroRegistStoreRequest{} }
+func (m *ZeroRegistStoreRequest) String() string { return proto.CompactTextString(m) }
+func (*ZeroRegistStoreRequest) ProtoMessage()    {}
+func (*ZeroRegistStoreRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_978c3dd237f791ac, []int{21}
+}
+func (m *ZeroRegistStoreRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ZeroRegistStoreRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ZeroRegistStoreRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ZeroRegistStoreRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ZeroRegistStoreRequest.Merge(m, src)
+}
+func (m *ZeroRegistStoreRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *ZeroRegistStoreRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ZeroRegistStoreRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ZeroRegistStoreRequest proto.InternalMessageInfo
+
+func (m *ZeroRegistStoreRequest) GetAddress() string {
+	if m != nil {
+		return m.Address
+	}
+	return ""
+}
+
+func (m *ZeroRegistStoreRequest) GetStoreId() uint64 {
+	if m != nil {
+		return m.StoreId
+	}
+	return 0
+}
+
+func (m *ZeroRegistStoreRequest) GetEmtpySlots() uint64 {
+	if m != nil {
+		return m.EmtpySlots
+	}
+	return 0
+}
+
+func (m *ZeroRegistStoreRequest) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+type ZeroRegistStoreResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ZeroRegistStoreResponse) Reset()         { *m = ZeroRegistStoreResponse{} }
+func (m *ZeroRegistStoreResponse) String() string { return proto.CompactTextString(m) }
+func (*ZeroRegistStoreResponse) ProtoMessage()    {}
+func (*ZeroRegistStoreResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_978c3dd237f791ac, []int{22}
+}
+func (m *ZeroRegistStoreResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ZeroRegistStoreResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ZeroRegistStoreResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ZeroRegistStoreResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ZeroRegistStoreResponse.Merge(m, src)
+}
+func (m *ZeroRegistStoreResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *ZeroRegistStoreResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ZeroRegistStoreResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ZeroRegistStoreResponse proto.InternalMessageInfo
+
+type ZeroStoreInfo struct {
+	Address              string   `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	StoreId              uint64   `protobuf:"varint,2,opt,name=storeId,proto3" json:"storeId,omitempty"`
+	EmtpySlots           uint64   `protobuf:"varint,3,opt,name=emtpySlots,proto3" json:"emtpySlots,omitempty"`
+	CurrentGid           []uint64 `protobuf:"varint,4,rep,packed,name=currentGid,proto3" json:"currentGid,omitempty"`
+	Name                 string   `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ZeroStoreInfo) Reset()         { *m = ZeroStoreInfo{} }
+func (m *ZeroStoreInfo) String() string { return proto.CompactTextString(m) }
+func (*ZeroStoreInfo) ProtoMessage()    {}
+func (*ZeroStoreInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_978c3dd237f791ac, []int{23}
+}
+func (m *ZeroStoreInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ZeroStoreInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ZeroStoreInfo.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ZeroStoreInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ZeroStoreInfo.Merge(m, src)
+}
+func (m *ZeroStoreInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *ZeroStoreInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_ZeroStoreInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ZeroStoreInfo proto.InternalMessageInfo
+
+func (m *ZeroStoreInfo) GetAddress() string {
+	if m != nil {
+		return m.Address
+	}
+	return ""
+}
+
+func (m *ZeroStoreInfo) GetStoreId() uint64 {
+	if m != nil {
+		return m.StoreId
+	}
+	return 0
+}
+
+func (m *ZeroStoreInfo) GetEmtpySlots() uint64 {
+	if m != nil {
+		return m.EmtpySlots
+	}
+	return 0
+}
+
+func (m *ZeroStoreInfo) GetCurrentGid() []uint64 {
+	if m != nil {
+		return m.CurrentGid
+	}
+	return nil
+}
+
+func (m *ZeroStoreInfo) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
 func init() {
 	proto.RegisterEnum("aspirapb.EntryMeta_Type", EntryMeta_Type_name, EntryMeta_Type_value)
 	proto.RegisterEnum("aspirapb.AspiraProposal_Type", AspiraProposal_Type_name, AspiraProposal_Type_value)
@@ -1314,87 +1521,96 @@ func init() {
 	proto.RegisterType((*PutRequest)(nil), "aspirapb.PutRequest")
 	proto.RegisterType((*PutResponse)(nil), "aspirapb.PutResponse")
 	proto.RegisterType((*GetRequest)(nil), "aspirapb.GetRequest")
-	proto.RegisterType((*AllocIDRequest)(nil), "aspirapb.AllocIDRequest")
-	proto.RegisterType((*AllocIDResponse)(nil), "aspirapb.AllocIDResponse")
+	proto.RegisterType((*ZeroAllocIDRequest)(nil), "aspirapb.ZeroAllocIDRequest")
+	proto.RegisterType((*ZeroAllocIDResponse)(nil), "aspirapb.ZeroAllocIDResponse")
 	proto.RegisterType((*WorkerHeartbeatRequest)(nil), "aspirapb.WorkerHeartbeatRequest")
 	proto.RegisterMapType((map[uint64]WorkerHeartbeatRequest_ProgressType)(nil), "aspirapb.WorkerHeartbeatRequest.ProgressEntry")
 	proto.RegisterType((*WorkerHeartbeatResponse)(nil), "aspirapb.WorkerHeartbeatResponse")
 	proto.RegisterType((*ZeroStatusRequest)(nil), "aspirapb.ZeroStatusRequest")
 	proto.RegisterType((*ZeroStatusResponse)(nil), "aspirapb.ZeroStatusResponse")
+	proto.RegisterType((*ZeroRegistStoreRequest)(nil), "aspirapb.ZeroRegistStoreRequest")
+	proto.RegisterType((*ZeroRegistStoreResponse)(nil), "aspirapb.ZeroRegistStoreResponse")
+	proto.RegisterType((*ZeroStoreInfo)(nil), "aspirapb.ZeroStoreInfo")
 }
 
 func init() { proto.RegisterFile("aspirapb.proto", fileDescriptor_978c3dd237f791ac) }
 
 var fileDescriptor_978c3dd237f791ac = []byte{
-	// 1080 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x56, 0xdd, 0x6e, 0x1b, 0x45,
-	0x14, 0xf6, 0xac, 0xed, 0xd8, 0x3e, 0x4e, 0x9d, 0xcd, 0x24, 0x4d, 0x1d, 0x43, 0x23, 0x77, 0x05,
-	0x92, 0x25, 0x54, 0x13, 0x0c, 0x54, 0xa5, 0x17, 0x88, 0xc4, 0x86, 0x24, 0x2d, 0x01, 0x6b, 0x13,
-	0x51, 0x84, 0x84, 0xd0, 0xd8, 0x7b, 0x92, 0x2c, 0x75, 0x76, 0x96, 0x9d, 0x71, 0xd5, 0x3c, 0x01,
-	0xaf, 0x00, 0x6f, 0xc4, 0x0d, 0x12, 0x8f, 0x50, 0x05, 0x71, 0xc5, 0x15, 0x0f, 0x80, 0x84, 0x66,
-	0xf6, 0xd7, 0xf6, 0x3a, 0x90, 0x0b, 0xee, 0x66, 0x66, 0xcf, 0xdf, 0x77, 0xce, 0x37, 0xdf, 0x2c,
-	0x34, 0x98, 0xf0, 0xdd, 0x80, 0xf9, 0xa3, 0xae, 0x1f, 0x70, 0xc9, 0x69, 0x35, 0xde, 0x5b, 0xf7,
-	0xa1, 0x32, 0x64, 0x57, 0x13, 0xce, 0x1c, 0x4a, 0xa1, 0x34, 0x60, 0x92, 0x35, 0x49, 0x9b, 0x74,
-	0x56, 0x6d, 0xbd, 0xb6, 0xfa, 0x50, 0xb7, 0xd9, 0x99, 0xec, 0x73, 0x4f, 0xe2, 0x2b, 0x49, 0x1b,
-	0x60, 0xb8, 0x8e, 0x36, 0x28, 0xd9, 0x86, 0xeb, 0x50, 0x13, 0x8a, 0xe7, 0xae, 0xd3, 0x34, 0xf4,
-	0x81, 0x5a, 0xaa, 0x20, 0xcc, 0x71, 0x82, 0x66, 0xb1, 0x4d, 0x3a, 0x35, 0x5b, 0xaf, 0xad, 0x1f,
-	0x09, 0xac, 0x1d, 0xe3, 0xe5, 0x08, 0x03, 0x71, 0xe1, 0xfa, 0x27, 0x92, 0x49, 0xa4, 0x4f, 0xa0,
-	0xec, 0x71, 0x07, 0x45, 0x93, 0xb4, 0x8b, 0x9d, 0x7a, 0xef, 0xad, 0x6e, 0x52, 0xe1, 0x9c, 0x65,
-	0xf7, 0x0b, 0x65, 0xf6, 0xa9, 0x27, 0x83, 0x2b, 0x3b, 0x74, 0x69, 0x3d, 0x06, 0x48, 0x0f, 0x55,
-	0x0d, 0x2f, 0xf0, 0x2a, 0x2a, 0x4a, 0x2d, 0xe9, 0x26, 0x94, 0x5f, 0xb2, 0xc9, 0x14, 0x75, 0x5d,
-	0x35, 0x3b, 0xdc, 0x3c, 0x31, 0x1e, 0x13, 0xeb, 0x67, 0x02, 0xd5, 0x13, 0x8f, 0xf9, 0xe2, 0x82,
-	0x4b, 0xfa, 0x2e, 0x54, 0xc6, 0x21, 0x2e, 0xed, 0x5c, 0xef, 0xdd, 0x4d, 0x8b, 0xc8, 0x80, 0xb6,
-	0x63, 0x2b, 0x15, 0xd7, 0xf5, 0x1c, 0x7c, 0x15, 0xe1, 0x0d, 0x37, 0xf4, 0x1e, 0x54, 0x02, 0x64,
-	0xce, 0x77, 0x52, 0x68, 0xd0, 0x25, 0x7b, 0x45, 0x6d, 0x4f, 0x85, 0x6a, 0x85, 0xc3, 0x3d, 0x6c,
-	0x96, 0xda, 0xa4, 0x53, 0xb5, 0xf5, 0x9a, 0x6e, 0x43, 0x55, 0xb8, 0xde, 0x18, 0x95, 0x75, 0x59,
-	0x5b, 0x57, 0xf4, 0xfe, 0x54, 0x58, 0x2e, 0xd4, 0x54, 0xd6, 0x7d, 0x26, 0xc7, 0x17, 0xb7, 0xaf,
-	0xed, 0x1d, 0xa8, 0xf8, 0xe1, 0x1c, 0x75, 0x75, 0xf5, 0xde, 0x7a, 0xea, 0x10, 0x0d, 0xd8, 0x8e,
-	0x2d, 0xac, 0x3f, 0x09, 0xd4, 0x74, 0xf3, 0x8e, 0x51, 0x32, 0x55, 0xe7, 0x29, 0x06, 0x97, 0x51,
-	0x07, 0xf5, 0x5a, 0x41, 0x3d, 0xca, 0x42, 0xd5, 0x1b, 0xfa, 0x28, 0x72, 0x3b, 0xbd, 0xf2, 0x51,
-	0x83, 0x6d, 0xf4, 0x9a, 0x69, 0x9a, 0x24, 0x62, 0x57, 0x7d, 0xb7, 0x53, 0xd3, 0x84, 0x59, 0xa5,
-	0x94, 0x59, 0xd4, 0x82, 0x55, 0x26, 0x04, 0x1f, 0xbb, 0x4c, 0xe2, 0x33, 0xbc, 0xd2, 0xdd, 0xa8,
-	0xd9, 0x33, 0x67, 0xd6, 0x00, 0x4a, 0xda, 0xbf, 0x02, 0xc5, 0xe1, 0x54, 0x9a, 0x05, 0x6a, 0xc2,
-	0xea, 0xe7, 0xc8, 0x1c, 0x0c, 0xfa, 0xfc, 0xf2, 0xd2, 0x95, 0x26, 0xa1, 0x0d, 0x80, 0x3e, 0xf7,
-	0xce, 0xfa, 0x17, 0xcc, 0x3b, 0x47, 0xd3, 0xa0, 0xeb, 0x70, 0x67, 0x38, 0x95, 0xcf, 0x5d, 0x79,
-	0xf1, 0xe5, 0xd9, 0x99, 0x40, 0x69, 0x16, 0xad, 0x3f, 0x08, 0x34, 0xf6, 0x74, 0x91, 0xc3, 0x80,
-	0xfb, 0x5c, 0xb0, 0x09, 0xdd, 0x83, 0xd5, 0x78, 0xad, 0xb1, 0x10, 0x8d, 0xe5, 0x7e, 0x8a, 0x65,
-	0xd6, 0x3e, 0x04, 0x34, 0xe3, 0x12, 0xd3, 0xce, 0x48, 0x69, 0xb7, 0x05, 0x2b, 0x5c, 0xe7, 0x8c,
-	0x79, 0x10, 0xee, 0x16, 0x90, 0x96, 0x16, 0x91, 0x6a, 0xae, 0xa8, 0x0e, 0x95, 0xc3, 0x0e, 0xa9,
-	0xb5, 0xd5, 0x9d, 0x47, 0xbf, 0x80, 0x8d, 0x50, 0x80, 0x95, 0x01, 0x4e, 0x50, 0xa2, 0x69, 0x58,
-	0x2f, 0x61, 0x6b, 0x7f, 0xc2, 0x47, 0x8a, 0x1e, 0xc7, 0x28, 0x04, 0x3b, 0x47, 0x1b, 0x7f, 0x98,
-	0xa2, 0x90, 0xff, 0x33, 0x9b, 0xb6, 0xe1, 0xde, 0x42, 0x5e, 0xe1, 0x73, 0x4f, 0xa0, 0xf5, 0x15,
-	0x98, 0x7b, 0x8e, 0xf3, 0x9c, 0x07, 0x2f, 0x30, 0x88, 0x8b, 0x89, 0x34, 0x83, 0xa4, 0x9a, 0x11,
-	0xaa, 0x8a, 0x91, 0xa8, 0x4a, 0x1b, 0xea, 0x4f, 0xb9, 0xeb, 0xf5, 0x27, 0x53, 0x21, 0x31, 0x96,
-	0x92, 0xec, 0x91, 0xb5, 0x01, 0xeb, 0x99, 0xb8, 0x51, 0xb2, 0x6f, 0xc1, 0x1c, 0x4e, 0xe5, 0x89,
-	0x0c, 0x90, 0x5d, 0xc6, 0xc9, 0x68, 0x26, 0xd9, 0x61, 0x21, 0x4c, 0xf7, 0xf0, 0xdf, 0xc1, 0x1d,
-	0x16, 0x12, 0x78, 0xfb, 0x2b, 0xe1, 0x68, 0xac, 0x67, 0x00, 0xc3, 0xa9, 0x5c, 0x8e, 0xe2, 0x56,
-	0x3d, 0x7b, 0x0f, 0xea, 0x3a, 0x58, 0x58, 0x7a, 0x4e, 0x34, 0x13, 0x8a, 0x3c, 0x55, 0x56, 0xee,
-	0x3a, 0xd6, 0x2e, 0xc0, 0x01, 0xde, 0x90, 0x7f, 0xd1, 0xc3, 0x84, 0xc6, 0xde, 0x64, 0xc2, 0xc7,
-	0x47, 0x83, 0xc8, 0xcb, 0x7a, 0x00, 0x6b, 0xc9, 0x49, 0x94, 0xba, 0x01, 0xc6, 0xd1, 0x20, 0x96,
-	0xf4, 0xa3, 0x81, 0xf5, 0xda, 0x80, 0xad, 0xb0, 0xb1, 0x87, 0xc8, 0x02, 0x39, 0x42, 0x26, 0x53,
-	0x1a, 0x95, 0x85, 0x92, 0xe4, 0x88, 0x44, 0xdb, 0x4b, 0x35, 0xdb, 0x0e, 0xed, 0xe8, 0x53, 0xa8,
-	0xfa, 0x01, 0x3f, 0x0f, 0x50, 0x88, 0xa6, 0xa1, 0x75, 0xbe, 0x9b, 0xfa, 0xe4, 0x27, 0xe9, 0x0e,
-	0x23, 0x87, 0x50, 0xf1, 0x13, 0x7f, 0xfa, 0x36, 0x18, 0x81, 0xa3, 0xb9, 0xb0, 0x94, 0xbe, 0x46,
-	0xe0, 0xb4, 0xbe, 0x87, 0x3b, 0x33, 0x11, 0x72, 0x9e, 0x87, 0x7e, 0xf6, 0x79, 0x68, 0xf4, 0x1e,
-	0xfe, 0xe7, 0x92, 0xb4, 0x0a, 0x64, 0x5e, 0x93, 0x47, 0x5a, 0x45, 0x92, 0x4f, 0xb4, 0x06, 0xe5,
-	0x61, 0xc0, 0x47, 0x68, 0x16, 0xe8, 0x1d, 0xa8, 0xd9, 0xe8, 0x4f, 0xdc, 0x31, 0x93, 0x68, 0x12,
-	0xba, 0x9a, 0x3e, 0x3b, 0xa6, 0xa1, 0x2e, 0xcc, 0x42, 0xa6, 0x88, 0xc3, 0x1b, 0xb0, 0xfe, 0x0d,
-	0x06, 0x5c, 0x75, 0x71, 0x2a, 0xe2, 0xa9, 0x6d, 0x02, 0xcd, 0x1e, 0x86, 0xa6, 0xbd, 0x5f, 0x0d,
-	0x28, 0x29, 0xf4, 0xf4, 0x43, 0xa8, 0x25, 0x81, 0xe8, 0x22, 0xe9, 0x5a, 0x8b, 0x47, 0x56, 0x61,
-	0x97, 0xd0, 0x8f, 0xc2, 0xa7, 0x3d, 0xba, 0xb2, 0x74, 0x63, 0xb6, 0xa7, 0xfa, 0x19, 0xca, 0x75,
-	0xed, 0x10, 0xfa, 0x35, 0xac, 0xcd, 0xdd, 0x78, 0xda, 0x4e, 0x2d, 0xf3, 0x45, 0xa8, 0xf5, 0xe0,
-	0x06, 0x8b, 0x08, 0x7d, 0x41, 0x15, 0x95, 0xb9, 0xe7, 0x34, 0x7f, 0xd0, 0xb9, 0x65, 0xd1, 0x8f,
-	0xa1, 0x11, 0xde, 0xfd, 0xe4, 0x81, 0xbf, 0x85, 0xf7, 0x2e, 0xe9, 0xfd, 0x4d, 0xa0, 0x7c, 0x22,
-	0x79, 0x80, 0xf4, 0x33, 0xa8, 0x25, 0xea, 0x42, 0x5b, 0x99, 0x47, 0x61, 0x4e, 0xca, 0x5a, 0x6f,
-	0xe4, 0x7e, 0x4b, 0xc0, 0xec, 0x43, 0x2d, 0x11, 0xa4, 0x6c, 0x9c, 0x79, 0x95, 0x6a, 0xdd, 0x9d,
-	0xf9, 0x96, 0x46, 0xe8, 0x10, 0xfa, 0x81, 0x16, 0x7f, 0xba, 0x39, 0x67, 0x71, 0xb3, 0x1f, 0xed,
-	0x41, 0xf1, 0x00, 0x67, 0xbc, 0x52, 0xe9, 0x58, 0x86, 0xff, 0x2f, 0x02, 0x55, 0x45, 0xb3, 0x03,
-	0x7b, 0xd8, 0x57, 0x13, 0x9e, 0xa3, 0x68, 0x76, 0xc2, 0xf9, 0xf7, 0x24, 0x3b, 0xe1, 0x65, 0xfc,
-	0x2e, 0xd0, 0x4f, 0xa0, 0x12, 0x49, 0x10, 0xcd, 0xfc, 0x3b, 0xcc, 0xea, 0x54, 0x6b, 0x3b, 0xe7,
-	0x4b, 0x12, 0xe1, 0x08, 0x20, 0xbd, 0x0e, 0x34, 0x33, 0x83, 0x85, 0x9b, 0xd3, 0x7a, 0x33, 0xff,
-	0x63, 0x1c, 0x6a, 0xdf, 0xfc, 0xe5, 0x7a, 0x87, 0xfc, 0x76, 0xbd, 0x43, 0x5e, 0x5f, 0xef, 0x90,
-	0x9f, 0x7e, 0xdf, 0x29, 0x8c, 0x56, 0xf4, 0x0f, 0xf2, 0xfb, 0xff, 0x04, 0x00, 0x00, 0xff, 0xff,
-	0x86, 0x1f, 0xc5, 0x3a, 0x32, 0x0b, 0x00, 0x00,
+	// 1184 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x57, 0xdd, 0x6e, 0x23, 0x45,
+	0x13, 0x75, 0x8f, 0xed, 0x38, 0x2e, 0x27, 0xde, 0x49, 0x27, 0x9b, 0x75, 0xfc, 0x7d, 0xb1, 0xcc,
+	0x08, 0x24, 0x0b, 0xb4, 0x26, 0x18, 0x58, 0x2d, 0x2b, 0x81, 0x94, 0x38, 0x90, 0x64, 0x97, 0x80,
+	0x35, 0x89, 0x58, 0x84, 0x84, 0x50, 0xdb, 0x53, 0x49, 0x86, 0xb5, 0xa7, 0x87, 0xe9, 0xf6, 0x6a,
+	0x7d, 0xc7, 0x1d, 0x8f, 0x00, 0xbc, 0x00, 0xcf, 0xc2, 0x0d, 0x12, 0x8f, 0xb0, 0x0a, 0xe2, 0x8a,
+	0x67, 0x40, 0x42, 0xdd, 0xf3, 0xeb, 0xbf, 0x40, 0x2e, 0xf6, 0xae, 0xab, 0xa7, 0xaa, 0xeb, 0x9c,
+	0xea, 0xea, 0x53, 0x36, 0x54, 0x99, 0xf0, 0xdd, 0x80, 0xf9, 0xfd, 0xb6, 0x1f, 0x70, 0xc9, 0xe9,
+	0x6a, 0x6c, 0x5b, 0xbb, 0x50, 0xea, 0xb1, 0xc9, 0x90, 0x33, 0x87, 0x52, 0x28, 0x1c, 0x32, 0xc9,
+	0x6a, 0xa4, 0x49, 0x5a, 0x6b, 0xb6, 0x5e, 0x5b, 0x5d, 0xa8, 0xd8, 0xec, 0x42, 0x76, 0xb9, 0x27,
+	0xf1, 0x85, 0xa4, 0x55, 0x30, 0x5c, 0x47, 0x3b, 0x14, 0x6c, 0xc3, 0x75, 0xa8, 0x09, 0xf9, 0x4b,
+	0xd7, 0xa9, 0x19, 0x7a, 0x43, 0x2d, 0xd5, 0x21, 0xcc, 0x71, 0x82, 0x5a, 0xbe, 0x49, 0x5a, 0x65,
+	0x5b, 0xaf, 0xad, 0x1f, 0x08, 0xdc, 0x39, 0xc5, 0x51, 0x1f, 0x03, 0x71, 0xe5, 0xfa, 0x67, 0x92,
+	0x49, 0xa4, 0x8f, 0xa0, 0xe8, 0x71, 0x07, 0x45, 0x8d, 0x34, 0xf3, 0xad, 0x4a, 0xe7, 0xf5, 0x76,
+	0x82, 0x70, 0xc6, 0xb3, 0xfd, 0x99, 0x72, 0xfb, 0xd8, 0x93, 0xc1, 0xc4, 0x0e, 0x43, 0xea, 0x0f,
+	0x01, 0xd2, 0x4d, 0x85, 0xe1, 0x19, 0x4e, 0x22, 0x50, 0x6a, 0x49, 0xb7, 0xa0, 0xf8, 0x9c, 0x0d,
+	0xc7, 0xa8, 0x71, 0x95, 0xed, 0xd0, 0x78, 0x64, 0x3c, 0x24, 0xd6, 0xcf, 0x04, 0x56, 0xcf, 0x3c,
+	0xe6, 0x8b, 0x2b, 0x2e, 0xe9, 0xdb, 0x50, 0x1a, 0x84, 0xbc, 0x74, 0x70, 0xa5, 0x73, 0x37, 0x05,
+	0x91, 0x21, 0x6d, 0xc7, 0x5e, 0xea, 0x5c, 0xd7, 0x73, 0xf0, 0x45, 0xc4, 0x37, 0x34, 0xe8, 0x3d,
+	0x28, 0x05, 0xc8, 0x9c, 0x6f, 0xa4, 0xd0, 0xa4, 0x0b, 0xf6, 0x8a, 0x32, 0xcf, 0x85, 0x2a, 0x85,
+	0xc3, 0x3d, 0xac, 0x15, 0x9a, 0xa4, 0xb5, 0x6a, 0xeb, 0x35, 0xdd, 0x81, 0x55, 0xe1, 0x7a, 0x03,
+	0x54, 0xde, 0x45, 0xed, 0x5d, 0xd2, 0xf6, 0xb9, 0xb0, 0x5c, 0x28, 0xab, 0xac, 0x07, 0x4c, 0x0e,
+	0xae, 0x6e, 0x8f, 0xed, 0x2d, 0x28, 0xf9, 0xe1, 0x3d, 0x6a, 0x74, 0x95, 0xce, 0x46, 0x1a, 0x10,
+	0x5d, 0xb0, 0x1d, 0x7b, 0x58, 0x7f, 0x11, 0x28, 0xeb, 0xe2, 0x9d, 0xa2, 0x64, 0x0a, 0xe7, 0x39,
+	0x06, 0xa3, 0xa8, 0x82, 0x7a, 0xad, 0xa8, 0x9e, 0x64, 0xa9, 0x6a, 0x83, 0x3e, 0x88, 0xc2, 0xce,
+	0x27, 0x3e, 0x6a, 0xb2, 0xd5, 0x4e, 0x2d, 0x4d, 0x93, 0x9c, 0xd8, 0x56, 0xdf, 0xed, 0xd4, 0x35,
+	0xe9, 0xac, 0x42, 0xda, 0x59, 0xd4, 0x82, 0x35, 0x26, 0x04, 0x1f, 0xb8, 0x4c, 0xe2, 0x13, 0x9c,
+	0xe8, 0x6a, 0x94, 0xed, 0xa9, 0x3d, 0xeb, 0x10, 0x0a, 0x3a, 0xbe, 0x04, 0xf9, 0xde, 0x58, 0x9a,
+	0x39, 0x6a, 0xc2, 0xda, 0xa7, 0xc8, 0x1c, 0x0c, 0xba, 0x7c, 0x34, 0x72, 0xa5, 0x49, 0x68, 0x15,
+	0xa0, 0xcb, 0xbd, 0x8b, 0xee, 0x15, 0xf3, 0x2e, 0xd1, 0x34, 0xe8, 0x06, 0xac, 0xf7, 0xc6, 0xf2,
+	0xa9, 0x2b, 0xaf, 0x3e, 0xbf, 0xb8, 0x10, 0x28, 0xcd, 0xbc, 0xf5, 0x27, 0x81, 0xea, 0xbe, 0x06,
+	0xd9, 0x0b, 0xb8, 0xcf, 0x05, 0x1b, 0xd2, 0x7d, 0x58, 0x8b, 0xd7, 0x9a, 0x0b, 0xd1, 0x5c, 0x76,
+	0x53, 0x2e, 0xd3, 0xfe, 0x21, 0xa1, 0xa9, 0x90, 0xb8, 0xed, 0x8c, 0xb4, 0xed, 0xb6, 0x61, 0x85,
+	0xeb, 0x9c, 0x71, 0x1f, 0x84, 0xd6, 0x1c, 0xd3, 0xc2, 0x3c, 0x53, 0xdd, 0x2b, 0xaa, 0x42, 0xc5,
+	0xb0, 0x42, 0x6a, 0x6d, 0xb5, 0x67, 0xd9, 0xcf, 0x71, 0x23, 0x14, 0x60, 0xe5, 0x10, 0x87, 0x28,
+	0xd1, 0x34, 0xac, 0xe7, 0xb0, 0x7d, 0x30, 0xe4, 0x7d, 0xd5, 0x1e, 0xa7, 0x28, 0x04, 0xbb, 0x44,
+	0x1b, 0xbf, 0x1b, 0xa3, 0x90, 0xaf, 0xb8, 0x9b, 0x76, 0xe0, 0xde, 0x5c, 0x5e, 0xe1, 0x73, 0x4f,
+	0xa0, 0xf5, 0x05, 0x98, 0xfb, 0x8e, 0xf3, 0x94, 0x07, 0xcf, 0x30, 0x88, 0xc1, 0x44, 0x9a, 0x41,
+	0x52, 0xcd, 0x08, 0x55, 0xc5, 0x48, 0x54, 0xa5, 0x09, 0x95, 0xc7, 0xdc, 0xf5, 0xba, 0xc3, 0xb1,
+	0x90, 0x18, 0x4b, 0x49, 0x76, 0xcb, 0xda, 0x84, 0x8d, 0xcc, 0xb9, 0x51, 0xb2, 0xaf, 0xc1, 0xec,
+	0x8d, 0xe5, 0x99, 0x0c, 0x90, 0x8d, 0xe2, 0x64, 0x34, 0x93, 0xec, 0x38, 0x17, 0xa6, 0xbb, 0xff,
+	0xef, 0xe4, 0x8e, 0x73, 0x09, 0xbd, 0x83, 0x95, 0xf0, 0x6a, 0xac, 0x27, 0x00, 0xbd, 0xb1, 0x5c,
+	0xce, 0xe2, 0x56, 0x35, 0x7b, 0x07, 0x2a, 0xfa, 0xb0, 0x10, 0xfa, 0x82, 0xd3, 0x4c, 0xc8, 0xf3,
+	0x54, 0x59, 0xb9, 0xeb, 0x58, 0x7b, 0x00, 0x47, 0x78, 0x43, 0xfe, 0xf9, 0x88, 0x37, 0x81, 0x7e,
+	0x85, 0x01, 0xdf, 0x1f, 0x0e, 0xf9, 0xe0, 0xe4, 0x30, 0x8e, 0xdc, 0x82, 0xe2, 0x80, 0x8f, 0xbd,
+	0xb0, 0x15, 0x8a, 0x76, 0x68, 0x58, 0x1f, 0xc2, 0xe6, 0x94, 0x6f, 0x04, 0x6c, 0x0b, 0x8a, 0x42,
+	0xb2, 0x40, 0x46, 0x89, 0x42, 0x43, 0xa5, 0x42, 0x2f, 0x49, 0x85, 0x9e, 0x63, 0xbd, 0x34, 0x60,
+	0x3b, 0xbc, 0x8e, 0x63, 0x64, 0x81, 0xec, 0x23, 0x93, 0x69, 0xf3, 0xa9, 0x28, 0x89, 0x51, 0xeb,
+	0xed, 0x2c, 0x55, 0x7a, 0x3b, 0xf4, 0xa3, 0x8f, 0x61, 0xd5, 0x0f, 0xf8, 0x65, 0x80, 0x42, 0xd4,
+	0x0c, 0x3d, 0x1d, 0xda, 0x69, 0xcc, 0xe2, 0x24, 0xed, 0x5e, 0x14, 0x10, 0xce, 0x89, 0x24, 0x9e,
+	0xbe, 0x01, 0x46, 0xe0, 0xe8, 0x0e, 0x5a, 0xda, 0xf4, 0x46, 0xe0, 0xd4, 0xbf, 0x85, 0xf5, 0xa9,
+	0x13, 0x16, 0x0c, 0x95, 0x6e, 0x76, 0xa8, 0x54, 0x3b, 0xf7, 0xff, 0x33, 0x24, 0xad, 0x1d, 0x99,
+	0x19, 0xf4, 0x40, 0x6b, 0x4f, 0xf2, 0x89, 0x96, 0xa1, 0xd8, 0x0b, 0x78, 0x1f, 0xcd, 0x1c, 0x5d,
+	0x87, 0xb2, 0x8d, 0xfe, 0xd0, 0x1d, 0x30, 0x89, 0x26, 0xa1, 0x6b, 0xe9, 0xb0, 0x32, 0x0d, 0xf5,
+	0xcc, 0xe6, 0x32, 0x45, 0x9d, 0xbf, 0x09, 0x1b, 0xea, 0xf2, 0x54, 0x15, 0xc7, 0x22, 0xca, 0x6f,
+	0x6d, 0x85, 0xb7, 0x1f, 0x6f, 0x46, 0xae, 0xdf, 0x13, 0xd8, 0x56, 0xdb, 0x36, 0x5e, 0xba, 0x42,
+	0x9e, 0x49, 0x1e, 0x24, 0x2a, 0x51, 0x83, 0x92, 0x1a, 0xd7, 0xaa, 0xec, 0x44, 0x3f, 0xb9, 0xd8,
+	0x54, 0x5f, 0x84, 0xf2, 0x3c, 0x89, 0xef, 0x3c, 0x36, 0x69, 0x03, 0x00, 0x47, 0xd2, 0x9f, 0x9c,
+	0x0d, 0x79, 0x32, 0xff, 0x32, 0x3b, 0x4a, 0xd7, 0x3c, 0x36, 0xc2, 0x48, 0xf3, 0xf4, 0x5a, 0x11,
+	0x99, 0x43, 0x10, 0xa1, 0xfb, 0x91, 0xc0, 0x7a, 0x08, 0x5a, 0x1d, 0xef, 0x5d, 0xf0, 0x57, 0x02,
+	0xaa, 0x01, 0x30, 0x18, 0x07, 0x01, 0x7a, 0xf2, 0xc8, 0x75, 0x6a, 0x85, 0x66, 0x5e, 0x7d, 0x4f,
+	0x77, 0x12, 0xd0, 0xc5, 0x14, 0x74, 0xe7, 0x37, 0x03, 0x0a, 0xaa, 0x6b, 0xe8, 0xfb, 0x50, 0x4e,
+	0x2e, 0x80, 0xce, 0x3f, 0xf1, 0xfa, 0xfc, 0x96, 0x95, 0xdb, 0x23, 0xf4, 0x83, 0xf0, 0x87, 0x54,
+	0x24, 0x90, 0x74, 0x73, 0xba, 0x17, 0xf5, 0xd0, 0x5f, 0x18, 0xda, 0x22, 0xf4, 0x4b, 0xb8, 0x33,
+	0xa3, 0xaf, 0xb4, 0x99, 0x7a, 0x2e, 0x96, 0xfc, 0xfa, 0x6b, 0x37, 0x78, 0x44, 0xc5, 0xce, 0x29,
+	0x50, 0x19, 0x55, 0xa5, 0x8b, 0x1f, 0xc8, 0x42, 0x58, 0xf4, 0x23, 0xa8, 0x86, 0x4a, 0x9b, 0xfc,
+	0x9c, 0xba, 0x45, 0xf4, 0x1e, 0xe9, 0xfc, 0x4d, 0xa0, 0xa8, 0x6f, 0x99, 0x7e, 0x02, 0xe5, 0x44,
+	0xcb, 0x69, 0x3d, 0x33, 0x82, 0x67, 0x06, 0x47, 0xfd, 0x7f, 0x0b, 0xbf, 0x25, 0x64, 0x0e, 0xa0,
+	0x9c, 0xc8, 0x7f, 0xf6, 0x9c, 0xd9, 0x99, 0x50, 0xbf, 0x3b, 0xf5, 0x2d, 0x3d, 0xa1, 0x45, 0xe8,
+	0x7b, 0x7a, 0xd4, 0xd2, 0xad, 0x19, 0x8f, 0x9b, 0xe3, 0x68, 0x07, 0xf2, 0x47, 0x38, 0x15, 0x95,
+	0x0a, 0xf5, 0x32, 0xfe, 0xbf, 0x10, 0x28, 0xa8, 0x4e, 0xa7, 0xc7, 0x50, 0x8a, 0x44, 0x97, 0xfe,
+	0x3f, 0x75, 0x9d, 0xd7, 0xed, 0xfa, 0xee, 0x92, 0xaf, 0x09, 0x8c, 0x73, 0xa8, 0x64, 0xde, 0x54,
+	0xb6, 0x47, 0x16, 0x3f, 0xf8, 0x6c, 0x8f, 0x2c, 0x7b, 0x90, 0xb9, 0x03, 0xf3, 0xd7, 0xeb, 0x06,
+	0xf9, 0xfd, 0xba, 0x41, 0x5e, 0x5e, 0x37, 0xc8, 0x4f, 0x7f, 0x34, 0x72, 0xfd, 0x15, 0xfd, 0x1f,
+	0xe2, 0xdd, 0x7f, 0x02, 0x00, 0x00, 0xff, 0xff, 0x6a, 0xc9, 0x55, 0x48, 0x55, 0x0c, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1952,144 +2168,112 @@ var _Store_serviceDesc = grpc.ServiceDesc{
 	Metadata: "aspirapb.proto",
 }
 
-// ZeroGRPCClient is the client API for ZeroGRPC service.
+// ZeroClient is the client API for Zero service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type ZeroGRPCClient interface {
-	WorkerHeartbeat(ctx context.Context, in *WorkerHeartbeatRequest, opts ...grpc.CallOption) (*WorkerHeartbeatResponse, error)
-	AllocID(ctx context.Context, in *AllocIDRequest, opts ...grpc.CallOption) (*AllocIDResponse, error)
-	ZeroStatus(ctx context.Context, in *ZeroStatusRequest, opts ...grpc.CallOption) (*ZeroStatusResponse, error)
+type ZeroClient interface {
+	//rpc WorkerHeartbeat( WorkerHeartbeatRequest) returns ( WorkerHeartbeatResponse){}
+	AllocID(ctx context.Context, in *ZeroAllocIDRequest, opts ...grpc.CallOption) (*ZeroAllocIDResponse, error)
+	//rpc ZeroStatus(ZeroStatusRequest) returns (ZeroStatusResponse){}
+	RegistStore(ctx context.Context, in *ZeroRegistStoreRequest, opts ...grpc.CallOption) (*ZeroRegistStoreResponse, error)
 }
 
-type zeroGRPCClient struct {
+type zeroClient struct {
 	cc *grpc.ClientConn
 }
 
-func NewZeroGRPCClient(cc *grpc.ClientConn) ZeroGRPCClient {
-	return &zeroGRPCClient{cc}
+func NewZeroClient(cc *grpc.ClientConn) ZeroClient {
+	return &zeroClient{cc}
 }
 
-func (c *zeroGRPCClient) WorkerHeartbeat(ctx context.Context, in *WorkerHeartbeatRequest, opts ...grpc.CallOption) (*WorkerHeartbeatResponse, error) {
-	out := new(WorkerHeartbeatResponse)
-	err := c.cc.Invoke(ctx, "/aspirapb.ZeroGRPC/WorkerHeartbeat", in, out, opts...)
+func (c *zeroClient) AllocID(ctx context.Context, in *ZeroAllocIDRequest, opts ...grpc.CallOption) (*ZeroAllocIDResponse, error) {
+	out := new(ZeroAllocIDResponse)
+	err := c.cc.Invoke(ctx, "/aspirapb.Zero/AllocID", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *zeroGRPCClient) AllocID(ctx context.Context, in *AllocIDRequest, opts ...grpc.CallOption) (*AllocIDResponse, error) {
-	out := new(AllocIDResponse)
-	err := c.cc.Invoke(ctx, "/aspirapb.ZeroGRPC/AllocID", in, out, opts...)
+func (c *zeroClient) RegistStore(ctx context.Context, in *ZeroRegistStoreRequest, opts ...grpc.CallOption) (*ZeroRegistStoreResponse, error) {
+	out := new(ZeroRegistStoreResponse)
+	err := c.cc.Invoke(ctx, "/aspirapb.Zero/RegistStore", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *zeroGRPCClient) ZeroStatus(ctx context.Context, in *ZeroStatusRequest, opts ...grpc.CallOption) (*ZeroStatusResponse, error) {
-	out := new(ZeroStatusResponse)
-	err := c.cc.Invoke(ctx, "/aspirapb.ZeroGRPC/ZeroStatus", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+// ZeroServer is the server API for Zero service.
+type ZeroServer interface {
+	//rpc WorkerHeartbeat( WorkerHeartbeatRequest) returns ( WorkerHeartbeatResponse){}
+	AllocID(context.Context, *ZeroAllocIDRequest) (*ZeroAllocIDResponse, error)
+	//rpc ZeroStatus(ZeroStatusRequest) returns (ZeroStatusResponse){}
+	RegistStore(context.Context, *ZeroRegistStoreRequest) (*ZeroRegistStoreResponse, error)
 }
 
-// ZeroGRPCServer is the server API for ZeroGRPC service.
-type ZeroGRPCServer interface {
-	WorkerHeartbeat(context.Context, *WorkerHeartbeatRequest) (*WorkerHeartbeatResponse, error)
-	AllocID(context.Context, *AllocIDRequest) (*AllocIDResponse, error)
-	ZeroStatus(context.Context, *ZeroStatusRequest) (*ZeroStatusResponse, error)
+// UnimplementedZeroServer can be embedded to have forward compatible implementations.
+type UnimplementedZeroServer struct {
 }
 
-// UnimplementedZeroGRPCServer can be embedded to have forward compatible implementations.
-type UnimplementedZeroGRPCServer struct {
-}
-
-func (*UnimplementedZeroGRPCServer) WorkerHeartbeat(ctx context.Context, req *WorkerHeartbeatRequest) (*WorkerHeartbeatResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method WorkerHeartbeat not implemented")
-}
-func (*UnimplementedZeroGRPCServer) AllocID(ctx context.Context, req *AllocIDRequest) (*AllocIDResponse, error) {
+func (*UnimplementedZeroServer) AllocID(ctx context.Context, req *ZeroAllocIDRequest) (*ZeroAllocIDResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AllocID not implemented")
 }
-func (*UnimplementedZeroGRPCServer) ZeroStatus(ctx context.Context, req *ZeroStatusRequest) (*ZeroStatusResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ZeroStatus not implemented")
+func (*UnimplementedZeroServer) RegistStore(ctx context.Context, req *ZeroRegistStoreRequest) (*ZeroRegistStoreResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegistStore not implemented")
 }
 
-func RegisterZeroGRPCServer(s *grpc.Server, srv ZeroGRPCServer) {
-	s.RegisterService(&_ZeroGRPC_serviceDesc, srv)
+func RegisterZeroServer(s *grpc.Server, srv ZeroServer) {
+	s.RegisterService(&_Zero_serviceDesc, srv)
 }
 
-func _ZeroGRPC_WorkerHeartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkerHeartbeatRequest)
+func _Zero_AllocID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ZeroAllocIDRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ZeroGRPCServer).WorkerHeartbeat(ctx, in)
+		return srv.(ZeroServer).AllocID(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/aspirapb.ZeroGRPC/WorkerHeartbeat",
+		FullMethod: "/aspirapb.Zero/AllocID",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ZeroGRPCServer).WorkerHeartbeat(ctx, req.(*WorkerHeartbeatRequest))
+		return srv.(ZeroServer).AllocID(ctx, req.(*ZeroAllocIDRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ZeroGRPC_AllocID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AllocIDRequest)
+func _Zero_RegistStore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ZeroRegistStoreRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ZeroGRPCServer).AllocID(ctx, in)
+		return srv.(ZeroServer).RegistStore(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/aspirapb.ZeroGRPC/AllocID",
+		FullMethod: "/aspirapb.Zero/RegistStore",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ZeroGRPCServer).AllocID(ctx, req.(*AllocIDRequest))
+		return srv.(ZeroServer).RegistStore(ctx, req.(*ZeroRegistStoreRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ZeroGRPC_ZeroStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ZeroStatusRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ZeroGRPCServer).ZeroStatus(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/aspirapb.ZeroGRPC/ZeroStatus",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ZeroGRPCServer).ZeroStatus(ctx, req.(*ZeroStatusRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _ZeroGRPC_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "aspirapb.ZeroGRPC",
-	HandlerType: (*ZeroGRPCServer)(nil),
+var _Zero_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "aspirapb.Zero",
+	HandlerType: (*ZeroServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "WorkerHeartbeat",
-			Handler:    _ZeroGRPC_WorkerHeartbeat_Handler,
-		},
-		{
 			MethodName: "AllocID",
-			Handler:    _ZeroGRPC_AllocID_Handler,
+			Handler:    _Zero_AllocID_Handler,
 		},
 		{
-			MethodName: "ZeroStatus",
-			Handler:    _ZeroGRPC_ZeroStatus_Handler,
+			MethodName: "RegistStore",
+			Handler:    _Zero_RegistStore_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -2781,7 +2965,7 @@ func (m *GetRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *AllocIDRequest) Marshal() (dAtA []byte, err error) {
+func (m *ZeroAllocIDRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2791,12 +2975,12 @@ func (m *AllocIDRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *AllocIDRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *ZeroAllocIDRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *AllocIDRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *ZeroAllocIDRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2804,11 +2988,16 @@ func (m *AllocIDRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Count != 0 {
+		i = encodeVarintAspirapb(dAtA, i, uint64(m.Count))
+		i--
+		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
 
-func (m *AllocIDResponse) Marshal() (dAtA []byte, err error) {
+func (m *ZeroAllocIDResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2818,12 +3007,12 @@ func (m *AllocIDResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *AllocIDResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *ZeroAllocIDResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *AllocIDResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *ZeroAllocIDResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2832,8 +3021,13 @@ func (m *AllocIDResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if m.ID != 0 {
-		i = encodeVarintAspirapb(dAtA, i, uint64(m.ID))
+	if m.End != 0 {
+		i = encodeVarintAspirapb(dAtA, i, uint64(m.End))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.Start != 0 {
+		i = encodeVarintAspirapb(dAtA, i, uint64(m.Start))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -2983,6 +3177,153 @@ func (m *ZeroStatusResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ZeroRegistStoreRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ZeroRegistStoreRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ZeroRegistStoreRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintAspirapb(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.EmtpySlots != 0 {
+		i = encodeVarintAspirapb(dAtA, i, uint64(m.EmtpySlots))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.StoreId != 0 {
+		i = encodeVarintAspirapb(dAtA, i, uint64(m.StoreId))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Address) > 0 {
+		i -= len(m.Address)
+		copy(dAtA[i:], m.Address)
+		i = encodeVarintAspirapb(dAtA, i, uint64(len(m.Address)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ZeroRegistStoreResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ZeroRegistStoreResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ZeroRegistStoreResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ZeroStoreInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ZeroStoreInfo) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ZeroStoreInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintAspirapb(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if len(m.CurrentGid) > 0 {
+		dAtA11 := make([]byte, len(m.CurrentGid)*10)
+		var j10 int
+		for _, num := range m.CurrentGid {
+			for num >= 1<<7 {
+				dAtA11[j10] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j10++
+			}
+			dAtA11[j10] = uint8(num)
+			j10++
+		}
+		i -= j10
+		copy(dAtA[i:], dAtA11[:j10])
+		i = encodeVarintAspirapb(dAtA, i, uint64(j10))
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.EmtpySlots != 0 {
+		i = encodeVarintAspirapb(dAtA, i, uint64(m.EmtpySlots))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.StoreId != 0 {
+		i = encodeVarintAspirapb(dAtA, i, uint64(m.StoreId))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Address) > 0 {
+		i -= len(m.Address)
+		copy(dAtA[i:], m.Address)
+		i = encodeVarintAspirapb(dAtA, i, uint64(len(m.Address)))
+		i--
+		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
@@ -3319,26 +3660,32 @@ func (m *GetRequest) Size() (n int) {
 	return n
 }
 
-func (m *AllocIDRequest) Size() (n int) {
+func (m *ZeroAllocIDRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
+	if m.Count != 0 {
+		n += 1 + sovAspirapb(uint64(m.Count))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
 
-func (m *AllocIDResponse) Size() (n int) {
+func (m *ZeroAllocIDResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.ID != 0 {
-		n += 1 + sovAspirapb(uint64(m.ID))
+	if m.Start != 0 {
+		n += 1 + sovAspirapb(uint64(m.Start))
+	}
+	if m.End != 0 {
+		n += 1 + sovAspirapb(uint64(m.End))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3404,6 +3751,77 @@ func (m *ZeroStatusResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ZeroRegistStoreRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Address)
+	if l > 0 {
+		n += 1 + l + sovAspirapb(uint64(l))
+	}
+	if m.StoreId != 0 {
+		n += 1 + sovAspirapb(uint64(m.StoreId))
+	}
+	if m.EmtpySlots != 0 {
+		n += 1 + sovAspirapb(uint64(m.EmtpySlots))
+	}
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovAspirapb(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ZeroRegistStoreResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ZeroStoreInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Address)
+	if l > 0 {
+		n += 1 + l + sovAspirapb(uint64(l))
+	}
+	if m.StoreId != 0 {
+		n += 1 + sovAspirapb(uint64(m.StoreId))
+	}
+	if m.EmtpySlots != 0 {
+		n += 1 + sovAspirapb(uint64(m.EmtpySlots))
+	}
+	if len(m.CurrentGid) > 0 {
+		l = 0
+		for _, e := range m.CurrentGid {
+			l += sovAspirapb(uint64(e))
+		}
+		n += 1 + sovAspirapb(uint64(l)) + l
+	}
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovAspirapb(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -5202,7 +5620,7 @@ func (m *GetRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *AllocIDRequest) Unmarshal(dAtA []byte) error {
+func (m *ZeroAllocIDRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -5225,12 +5643,31 @@ func (m *AllocIDRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: AllocIDRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: ZeroAllocIDRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: AllocIDRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: ZeroAllocIDRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Count", wireType)
+			}
+			m.Count = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Count |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAspirapb(dAtA[iNdEx:])
@@ -5256,7 +5693,7 @@ func (m *AllocIDRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *AllocIDResponse) Unmarshal(dAtA []byte) error {
+func (m *ZeroAllocIDResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -5279,17 +5716,17 @@ func (m *AllocIDResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: AllocIDResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: ZeroAllocIDResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: AllocIDResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: ZeroAllocIDResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Start", wireType)
 			}
-			m.ID = 0
+			m.Start = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowAspirapb
@@ -5299,7 +5736,26 @@ func (m *AllocIDResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ID |= uint64(b&0x7F) << shift
+				m.Start |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field End", wireType)
+			}
+			m.End = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.End |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -5691,6 +6147,448 @@ func (m *ZeroStatusResponse) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: ZeroStatusResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAspirapb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ZeroRegistStoreRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAspirapb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ZeroRegistStoreRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ZeroRegistStoreRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Address = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreId", wireType)
+			}
+			m.StoreId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StoreId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EmtpySlots", wireType)
+			}
+			m.EmtpySlots = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.EmtpySlots |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAspirapb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ZeroRegistStoreResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAspirapb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ZeroRegistStoreResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ZeroRegistStoreResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAspirapb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ZeroStoreInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAspirapb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ZeroStoreInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ZeroStoreInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Address = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreId", wireType)
+			}
+			m.StoreId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StoreId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EmtpySlots", wireType)
+			}
+			m.EmtpySlots = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.EmtpySlots |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType == 0 {
+				var v uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAspirapb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.CurrentGid = append(m.CurrentGid, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAspirapb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthAspirapb
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthAspirapb
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA[iNdEx:postIndex] {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.CurrentGid) == 0 {
+					m.CurrentGid = make([]uint64, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowAspirapb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.CurrentGid = append(m.CurrentGid, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field CurrentGid", wireType)
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAspirapb(dAtA[iNdEx:])

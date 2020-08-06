@@ -2,17 +2,16 @@ package main
 
 import (
 	"log"
-
-	"github.com/coreos/etcd/clientv3"
-	"github.com/thesues/aspira/utils"
-	"github.com/thesues/aspira/xlog"
-
 	"time"
 
+	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
+	"github.com/thesues/aspira/utils"
+	"github.com/thesues/aspira/xlog"
 )
 
-func serve(config *ZeroConfig) {
+//block function
+func (z *Zero) Serve(config *ZeroConfig) {
 	cfg, err := config.GetEmbedConfig()
 	if err != nil {
 		xlog.Logger.Fatal(err)
@@ -37,21 +36,24 @@ func serve(config *ZeroConfig) {
 	})
 	utils.Check(err)
 
-	zero := &Zero{
-		Client:    client,
-		Id:        uint64(e.Server.ID()),
-		EmbedEted: e,
-		Cfg:       config,
-	}
+	z.Client = client
+	z.Id = uint64(e.Server.ID())
+	z.EmbedEted = e
+	z.Cfg = config
+	z.policy = RandomReplication{}
+
 	//go zero.Report()
-	zero.ServGRPC()
-	go zero.LeaderLoop()
+	z.ServGRPC()
+	go z.LeaderLoop()
 
 	//register zero as GRPC service
 	xlog.Logger.Fatal(<-e.Err())
+
 }
 
 func main() {
 	zeroConfig := NewConfig()
-	serve(zeroConfig)
+	zero := NewZero()
+	zero.Serve(zeroConfig)
+	//serve(zeroConfig)
 }

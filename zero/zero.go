@@ -32,12 +32,24 @@ type Zero struct {
 	EmbedEted *embed.Etcd
 
 	Cfg          *ZeroConfig
-	idLock       sync.Mutex
+	allocIdLock  sync.Mutex
+	reLock       sync.Mutex
 	isLeader     int32
 	auditStopper *util.Stopper
 
+	//FIXME
 	memberProgress map[uint64]raft.ProgressStateType
 	memberState    aspirapb.MembershipState
+
+	clusterStore map[uint64]aspirapb.ZeroStoreInfo
+	policy       RebalancePolicy
+}
+
+// NewZero, initial in-memory struct of Zero
+func NewZero() *Zero {
+	z := new(Zero)
+	z.clusterStore = make(map[uint64]aspirapb.ZeroStoreInfo)
+	return z
 }
 
 //interface to etcd
@@ -122,7 +134,7 @@ func (z *Zero) ServGRPC() {
 		grpc.MaxConcurrentStreams(1000),
 	)
 
-	aspirapb.RegisterZeroGRPCServer(s, z)
+	aspirapb.RegisterZeroServer(s, z)
 
 	listener, err := net.Listen("tcp", z.Cfg.GrpcUrl)
 	if err != nil {
@@ -142,10 +154,85 @@ func (z *Zero) WorkerHeartbeat(context.Context, *aspirapb.WorkerHeartbeatRequest
 	return nil, nil
 }
 
-func (z *Zero) AllocID(context.Context, *aspirapb.AllocIDRequest) (*aspirapb.AllocIDResponse, error) {
+//FIXME: because store will report the status to leader, so reuse the stream to send addWorker info.
+//if so, we can be sure that it's leader
+/*
+func (z *Zero) buildRaftGroup(stores []*aspirapb.ZeroStoreInfo) error {
+	conns := make([]*grpc.ClientConn, len(store))
+	for _, s := range stores {
+		conn, err := grpc.Dial(s, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
+		if err != nil {
+			return err
+		}
+		conns = append(conns, conn)
+	}
+	//create primary node first//
+
+	client := aspirapb.NewStoreClient(conn)
+	//block until raft group started
+	req := aspirapb.AddWorkerRequest{
+		Gid:         gid,
+		Id:          id,
+		JoinCluster: remoteCluster,
+	}
+	_, err = client.AddWorker(context.Background(), &req)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Success\n")
+	return nil
+}
+*/
+
+func (z *Zero) RegistStore(ctx context.Context, req *aspirapb.ZeroRegistStoreRequest) (*aspirapb.ZeroRegistStoreResponse, error) {
+	if !z.amLeader() {
+		return &aspirapb.ZeroRegistStoreResponse{}, errors.Errorf("not a leader")
+	}
+	z.reLock.Lock()
+	defer z.reLock.Unlock()
+
+	if _, ok := z.clusterStore[req.StoreId]; ok {
+		xlog.Logger.Infof("store %d %s already registered", req.StoreId, req.Name)
+		return &aspirapb.ZeroRegistStoreResponse{}, errors.Errorf("already registered")
+	}
+
+	z.clusterStore[req.StoreId] = aspirapb.ZeroStoreInfo{
+		Address:    req.Address,
+		StoreId:    req.StoreId,
+		EmtpySlots: req.EmtpySlots,
+		CurrentGid: nil,
+		Name:       req.Name,
+	}
+
+	return &aspirapb.ZeroRegistStoreResponse{}, nil
+	/*
+		var stores []*aspirapb.ZeroStoreInfo
+		for _, v := range z.clusterStore {
+			stores = append(stores, v)
+		}
+
+		targetStore := z.policy.AllocNewRaftGroup(req.Gid, 3, stores)
+		if targetStore == nil {
+			return &aspirapb.ZeroRegistStoreResponse{}, errors.Errorf("can not allocate for %d", req.Gid)
+		}
+
+		//asdf
+		//
+		res := &aspirapb.ZeroRegistStoreResponse{
+			Stores: targetStore,
+		}
+		return res, nil
+	*/
+}
+
+func (z *Zero) AllocID(ctx context.Context, req *aspirapb.ZeroAllocIDRequest) (*aspirapb.ZeroAllocIDResponse, error) {
+
+	if req.Count == 0 {
+		return &aspirapb.ZeroAllocIDResponse{}, errors.New("request count can not be 1")
+	}
 	var err error
-	z.idLock.Lock()
-	defer z.idLock.Unlock()
+	z.allocIdLock.Lock()
+	defer z.allocIdLock.Unlock()
 
 	curValue, err := z.getValue(idKey)
 	if err != nil {
@@ -162,8 +249,9 @@ func (z *Zero) AllocID(context.Context, *aspirapb.AllocIDRequest) (*aspirapb.All
 		curr = binary.BigEndian.Uint64(curValue)
 		cmp = clientv3.Compare(clientv3.Value(idKey), "=", string(curValue))
 	}
+
 	var newValue [8]byte
-	binary.BigEndian.PutUint64(newValue[:], curr+1)
+	binary.BigEndian.PutUint64(newValue[:], curr+uint64(req.Count))
 
 	txn := clientv3.NewKV(z.Client).Txn(context.Background())
 	t := txn.If(cmp)
@@ -174,5 +262,5 @@ func (z *Zero) AllocID(context.Context, *aspirapb.AllocIDRequest) (*aspirapb.All
 	if !resp.Succeeded {
 		return nil, errors.New("generate id failed, we may not leader")
 	}
-	return &aspirapb.AllocIDResponse{ID: curr + 1}, nil
+	return &aspirapb.ZeroAllocIDResponse{Start: curr, End: curr + uint64(req.Count)}, nil
 }

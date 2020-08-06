@@ -28,6 +28,7 @@ func putAspira(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
 	client := aspirapb.NewStoreClient(conn)
 
@@ -110,6 +111,7 @@ func addWorker(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 	client := aspirapb.NewStoreClient(conn)
 	//block until raft group started
 	req := aspirapb.AddWorkerRequest{
@@ -136,6 +138,7 @@ func getAspira(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
 	client := aspirapb.NewStoreClient(conn)
 	getStream, err := client.Get(context.Background(), &aspirapb.GetRequest{

@@ -19,20 +19,20 @@ import (
 	"github.com/thesues/aspira/conn"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/xlog"
+	zeroclient "github.com/thesues/aspira/zero_client"
 	otrace "go.opencensus.io/trace"
 	"google.golang.org/grpc"
 )
 
 type AspiraStore struct {
 	sync.RWMutex
-	addr     string //grpc address
-	httpAddr string //http address
-	name     string
-	workers  map[uint64]*AspiraWorker
-	//raftServer *RaftServer  //internal comms
+	addr       string //grpc address
+	httpAddr   string //http address
+	name       string
+	storeId    uint64
+	workers    map[uint64]*AspiraWorker
 	grpcServer *grpc.Server //internal comms, raftServer is registered on grpcServer
 	httpServer *http.Server
-	//stopper    *util.Stopper
 }
 
 func NewAspiraStore(name, addr, httpAddr string) *AspiraStore {
@@ -47,6 +47,46 @@ func NewAspiraStore(name, addr, httpAddr string) *AspiraStore {
 	return as
 }
 
+func (as *AspiraStore) RegisterStore() error {
+	xlog.Logger.Infof("RegisterStore")
+	storeIdPath := fmt.Sprintf("%s/store_id", as.name)
+	idString, err := ioutil.ReadFile(storeIdPath)
+	if err == nil {
+		id, err := strconv.ParseUint(string(idString), 10, 64)
+		if err != nil {
+			xlog.Logger.Fatalf("can not read ioString")
+		}
+		as.storeId = id
+		return nil
+	}
+
+	zeroClient := zeroclient.NewZeroClient()
+	if err = zeroClient.Connect([]string{"127.0.0.1:3401", "127.0.0.1:3402", "127.0.0.1:3403"}); err != nil {
+		return err
+	}
+	//TODO loop for a while?
+	ids, err := zeroClient.AllocID(1)
+	if err != nil {
+		return err
+	}
+	req := aspirapb.ZeroRegistStoreRequest{
+		Address:    as.addr,
+		StoreId:    ids[0],
+		EmtpySlots: 20,
+		Name:       as.name,
+	}
+
+	if err = zeroClient.RegisterSelfAsStore(&req); err != nil {
+		return err
+	}
+
+	as.storeId = ids[0]
+
+	ioutil.WriteFile(storeIdPath, []byte(fmt.Sprintf("%d", as.storeId)), 0644)
+	xlog.Logger.Infof("success to register to zero")
+	return nil
+}
+
 func (as *AspiraStore) Stop() {
 	for _, w := range as.workers {
 		w.Stop()
@@ -57,6 +97,8 @@ func (as *AspiraStore) Stop() {
 
 // Load from disk
 func (s *AspiraStore) LoadAndRun() {
+
+	xlog.Logger.Info("LoadAndRun")
 	baseDirectory := s.name
 	workDirs, err := ioutil.ReadDir(baseDirectory)
 	if err != nil {
@@ -85,7 +127,7 @@ func (s *AspiraStore) LoadAndRun() {
 					continue
 				}
 				s.workers[gid] = worker
-				worker.InitAndStart("")
+				go worker.InitAndStart("")
 			}
 		}
 	}
@@ -155,7 +197,7 @@ func (s *AspiraStore) startNewWorker(id, gid uint64, addr, joinAddress string) e
 	s.workers[gid] = x
 	s.Unlock()
 
-	x.InitAndStart(joinAddress)
+	go x.InitAndStart(joinAddress)
 	return nil
 }
 
@@ -195,7 +237,10 @@ func main() {
 	as.ServGRPC()
 	as.ServHTTP()
 
-	xlog.Logger.Info("LoadAndRun")
+	//register to zeros
+	if err := as.RegisterStore(); err != nil {
+		xlog.Logger.Warnf("RegisterStore failed err is %+v", err.Error())
+	}
 
 	as.LoadAndRun()
 

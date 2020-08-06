@@ -32,6 +32,7 @@ func (suite *StoreTestSuite) TearDownSuite() {
 		os.RemoveAll(dir)
 	}
 }
+
 func (suite *StoreTestSuite) SetupSuite() {
 
 	fmt.Println("SETUP SUITE")

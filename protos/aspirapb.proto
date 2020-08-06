@@ -162,12 +162,15 @@ service Store {
 }
 
 //zero service
-message AllocIDRequest{
-	//header 
+message ZeroAllocIDRequest{
+	//header
+	int32 count = 1;
 }
 
-message AllocIDResponse {
-	uint64 ID = 1;
+//allocID range from [start,end), half open
+message ZeroAllocIDResponse {
+	uint64 start = 1;
+	uint64 end = 2;
 }
 
 //I do not want to import raft's proto.
@@ -194,9 +197,31 @@ message ZeroStatusRequest {
 message ZeroStatusResponse {
 
 }
+
+
+message ZeroRegistStoreRequest {
+	string address = 1;
+	uint64 storeId = 2;
+	uint64 emtpySlots = 3;
+	string name = 4;
+}
+
+
+message ZeroRegistStoreResponse {
+}
+
+message ZeroStoreInfo {
+	string address = 1;
+	uint64 storeId = 2;
+	uint64 emtpySlots = 3;
+	repeated uint64 currentGid = 4;
+	string name = 5;
+}
+
 //zero service
-service ZeroGRPC {
-	rpc WorkerHeartbeat( WorkerHeartbeatRequest) returns ( WorkerHeartbeatResponse){}
-	rpc AllocID(AllocIDRequest) returns (AllocIDResponse){}
-	rpc ZeroStatus(ZeroStatusRequest) returns (ZeroStatusResponse){}
+service Zero {
+	//rpc WorkerHeartbeat( WorkerHeartbeatRequest) returns ( WorkerHeartbeatResponse){}
+	rpc AllocID(ZeroAllocIDRequest) returns (ZeroAllocIDResponse){}
+	//rpc ZeroStatus(ZeroStatusRequest) returns (ZeroStatusResponse){}
+	rpc RegistStore(ZeroRegistStoreRequest) returns (ZeroRegistStoreResponse) {}
 }
