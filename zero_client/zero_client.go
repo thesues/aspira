@@ -19,6 +19,12 @@ func NewZeroClient() *ZeroClient {
 	return &ZeroClient{}
 }
 
+func (client *ZeroClient) Close() {
+	for _, c := range client.Conns {
+		c.Close()
+	}
+}
+
 // Connect to Zero's grpc service, if all of connect failed to connnect, return error
 func (client *ZeroClient) Connect(addrs []string) error {
 	if len(addrs) == 0 {
@@ -68,6 +74,30 @@ func (client *ZeroClient) AllocID(count int) ([]uint64, error) {
 	}
 
 }
+
+func (client *ZeroClient) CreateHeartbeatStream() (aspirapb.Zero_StreamHeartbeatClient, context.CancelFunc, error) {
+	loop := 0
+	current := client.lastLeader
+	for {
+		if client.Conns != nil && client.Conns[current] != nil {
+			zc := aspirapb.NewZeroClient(client.Conns[current])
+			ctx, cancel := context.WithCancel(context.Background())
+			stream, err := zc.StreamHeartbeat(ctx)
+			if err != nil {
+				cancel()
+				xlog.Logger.Warnf(err.Error())
+				loop++
+				current = (current + 1) % len(client.Conns)
+				if loop > 3*len(client.Conns) {
+					return nil, nil, errors.Errorf("RegisterSelfAsStore failed")
+				}
+				continue
+			}
+			return stream, cancel, nil
+		}
+	}
+}
+
 func (client *ZeroClient) RegisterSelfAsStore(req *aspirapb.ZeroRegistStoreRequest) error {
 
 	loop := 0

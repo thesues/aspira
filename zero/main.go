@@ -42,7 +42,6 @@ func (z *Zero) Serve(config *ZeroConfig) {
 	z.Cfg = config
 	z.policy = RandomReplication{}
 
-	//go zero.Report()
 	z.ServGRPC()
 	go z.LeaderLoop()
 

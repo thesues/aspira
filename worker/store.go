@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"contrib.go.opencensus.io/exporter/jaeger"
 	"github.com/pkg/errors"
@@ -97,7 +99,6 @@ func (as *AspiraStore) Stop() {
 
 // Load from disk
 func (s *AspiraStore) LoadAndRun() {
-
 	xlog.Logger.Info("LoadAndRun")
 	baseDirectory := s.name
 	workDirs, err := ioutil.ReadDir(baseDirectory)
@@ -179,6 +180,61 @@ func (as *AspiraStore) ServGRPC() {
 
 }
 
+//getHeartbeatStream must return a valid hearbeat stream
+func (s *AspiraStore) getHeartbeatStream(zeroAddrs []string) (aspirapb.Zero_StreamHeartbeatClient, context.CancelFunc) {
+
+Connect:
+	c := zeroclient.NewZeroClient()
+	for {
+		if err := c.Connect(zeroAddrs); err != nil {
+			xlog.Logger.Warnf("can not connect to any of [%+v]", zeroAddrs)
+			time.Sleep(50 * time.Millisecond)
+		}
+		break
+	}
+
+	stream, cancel, err := c.CreateHeartbeatStream()
+	if err != nil {
+		xlog.Logger.Warnf(err.Error())
+		c.Close()
+		goto Connect
+	}
+	return stream, cancel
+}
+
+//StartHeartbeat collect local worker info and report to zero
+func (s *AspiraStore) StartHeartbeat(zeroAddrs []string) {
+
+	ticker := time.NewTicker(5 * time.Second)
+
+	var stream aspirapb.Zero_StreamHeartbeatClient
+	var cancel context.CancelFunc
+	var err error
+
+	stream, cancel = s.getHeartbeatStream(zeroAddrs)
+	for {
+		select {
+		case <-ticker.C:
+			s.Lock()
+			req := aspirapb.ZeroHeartbeatRequest{
+				StoreId: s.storeId,
+				Workers: make(map[uint64]*aspirapb.WorkerInfo),
+			}
+			for gid, worker := range s.workers {
+				req.Workers[gid] = worker.WorkerInfo()
+
+			}
+			s.Unlock()
+			err = stream.Send(&req)
+			if err != nil {
+				cancel()
+				stream, cancel = s.getHeartbeatStream(zeroAddrs)
+			}
+			xlog.Logger.Infof("Reported to zero %v", req)
+		}
+	}
+}
+
 func (s *AspiraStore) startNewWorker(id, gid uint64, addr, joinAddress string) error {
 	s.Lock()
 	if _, ok := s.workers[gid]; ok {
@@ -244,6 +300,9 @@ func main() {
 
 	as.LoadAndRun()
 
+	go as.StartHeartbeat([]string{"127.0.0.1:3401"})
+
+	xlog.Logger.Infof("store is ready!")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
 		syscall.SIGINT,

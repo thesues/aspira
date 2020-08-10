@@ -15,7 +15,6 @@ import (
 	_ "github.com/thesues/aspira/utils"
 	"github.com/thesues/aspira/xlog"
 	"github.com/thesues/cannyls-go/util"
-	"go.etcd.io/etcd/raft"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -32,23 +31,24 @@ type Zero struct {
 	EmbedEted *embed.Etcd
 
 	Cfg          *ZeroConfig
-	allocIdLock  sync.Mutex
-	reLock       sync.Mutex
+	allocIdLock  sync.Mutex   //used in AllocID
+	reLock       sync.RWMutex //protect clusterStore
+	workerLock   sync.RWMutex //protect clusterWorker
 	isLeader     int32
 	auditStopper *util.Stopper
 
-	//FIXME
-	memberProgress map[uint64]raft.ProgressStateType
-	memberState    aspirapb.MembershipState
-
-	clusterStore map[uint64]aspirapb.ZeroStoreInfo
-	policy       RebalancePolicy
+	clusterWorker map[uint64]*aspirapb.WorkerInfo    //in memory
+	clusterStore  map[uint64]*aspirapb.ZeroStoreInfo //saved in etcd and loaded when zero become leader
+	addrToStoreID map[string]uint64                  //in memory, construct from clusterStore, map addr => storeID
+	policy        RebalancePolicy
 }
 
 // NewZero, initial in-memory struct of Zero
 func NewZero() *Zero {
 	z := new(Zero)
-	z.clusterStore = make(map[uint64]aspirapb.ZeroStoreInfo)
+	z.clusterStore = make(map[uint64]*aspirapb.ZeroStoreInfo)
+	z.clusterWorker = make(map[uint64]*aspirapb.WorkerInfo)
+	z.auditStopper = util.NewStopper()
 	return z
 }
 
@@ -108,7 +108,6 @@ func (z *Zero) audit() {
 }
 
 func (z *Zero) LeaderLoop() {
-	z.auditStopper = util.NewStopper()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -145,6 +144,7 @@ func (z *Zero) ServGRPC() {
 	}()
 }
 
+/*
 func (z *Zero) ZeroStatus(context.Context, *aspirapb.ZeroStatusRequest) (*aspirapb.ZeroStatusResponse, error) {
 	return nil, nil
 }
@@ -153,6 +153,7 @@ func (z *Zero) ZeroStatus(context.Context, *aspirapb.ZeroStatusRequest) (*aspira
 func (z *Zero) WorkerHeartbeat(context.Context, *aspirapb.WorkerHeartbeatRequest) (*aspirapb.WorkerHeartbeatResponse, error) {
 	return nil, nil
 }
+*/
 
 //FIXME: because store will report the status to leader, so reuse the stream to send addWorker info.
 //if so, we can be sure that it's leader
@@ -196,14 +197,23 @@ func (z *Zero) RegistStore(ctx context.Context, req *aspirapb.ZeroRegistStoreReq
 		return &aspirapb.ZeroRegistStoreResponse{}, errors.Errorf("already registered")
 	}
 
-	z.clusterStore[req.StoreId] = aspirapb.ZeroStoreInfo{
-		Address:    req.Address,
-		StoreId:    req.StoreId,
-		EmtpySlots: req.EmtpySlots,
-		CurrentGid: nil,
-		Name:       req.Name,
+	z.clusterStore[req.StoreId] = &aspirapb.ZeroStoreInfo{
+		Address:     req.Address,
+		StoreId:     req.StoreId,
+		EmtpySlots:  req.EmtpySlots,
+		CurrentGids: nil,
+		Name:        req.Name,
 	}
 
+	key := fmt.Sprintf("store_%d", req.StoreId)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	txn := clientv3.NewKV(z.Client).Txn(ctx)
+	xxx, err := z.clusterStore[req.StoreId].Marshal()
+	if err != nil {
+		xlog.Logger.Warnf(err.Error())
+	}
+	_, err = txn.Then(clientv3.OpPut(key, string(xxx))).Commit()
 	return &aspirapb.ZeroRegistStoreResponse{}, nil
 	/*
 		var stores []*aspirapb.ZeroStoreInfo

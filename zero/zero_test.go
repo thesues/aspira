@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -35,7 +36,44 @@ func (suite *ZeroTestSuite) SetupSuite() {
 
 func (suite *ZeroTestSuite) TearDownSuite() {
 	suite.zero.EmbedEted.Close()
-	//os.Remove("zero.db")
+}
+
+func (suite *ZeroTestSuite) TestHeartbeatStream() {
+	//register a store
+	c := zeroclient.NewZeroClient()
+	err := c.Connect([]string{"127.0.0.1:3403"})
+	suite.Nil(err)
+
+	ids, err := c.AllocID(1)
+	suite.Nil(err)
+	suite.Equal(1, int(ids[1]-ids[0]))
+	req := &aspirapb.ZeroRegistStoreRequest{
+		Address:    "192.168.0.2:3301",
+		StoreId:    ids[0],
+		EmtpySlots: 20,
+		Name:       "store_two",
+	}
+	err = c.RegisterSelfAsStore(req)
+	stream, cancel, err := c.CreateHeartbeatStream()
+	suite.Nil(err)
+
+	for i := 0; i < 10; i++ {
+		hb := aspirapb.ZeroHeartbeatRequest{
+			StoreId: ids[0],
+			Workers: nil,
+		}
+		err = stream.Send(&hb)
+		if err != nil {
+			fmt.Printf(err.Error())
+		}
+		suite.Nil(err)
+	}
+	time.Sleep(time.Second)
+	cancel()
+
+	suite.zero.reLock.Lock()
+	suite.Equal(ids[0], suite.zero.clusterStore[ids[0]].StoreId)
+	suite.zero.reLock.Unlock()
 }
 
 func (suite *ZeroTestSuite) TestRegistStore() {

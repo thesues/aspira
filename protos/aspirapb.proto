@@ -85,6 +85,7 @@ AspiraProposalPutWithOffset {
 	uint32 offset
 }
 */
+
 message AspiraProposal {
 	enum Type {
 		Put = 0;
@@ -175,8 +176,7 @@ message ZeroAllocIDResponse {
 
 //I do not want to import raft's proto.
 //the progress should be the same
-
-message WorkerHeartbeatRequest {
+message WorkerInfo {
 	enum ProgressType {
 		Probe = 0;
 		Replicate = 1;
@@ -184,18 +184,17 @@ message WorkerHeartbeatRequest {
 	}
 	MembershipState state = 1;
 	map<uint64,ProgressType> progress = 2;
-	RaftContext rd = 3;
+	RaftContext raftContext = 3;
+	bool leader = 4;
 }
 
-message WorkerHeartbeatResponse {
+
+message ZeroHeartbeatRequest {
+	uint64 storeId = 1;
+	map<uint64, WorkerInfo> workers = 2;
 }
 
-message ZeroStatusRequest {
-
-}
-
-message ZeroStatusResponse {
-
+message ZeroHeartbeatResponse {
 }
 
 
@@ -214,14 +213,13 @@ message ZeroStoreInfo {
 	string address = 1;
 	uint64 storeId = 2;
 	uint64 emtpySlots = 3;
-	repeated uint64 currentGid = 4;
+	repeated uint64 currentGids = 4;
 	string name = 5;
 }
 
 //zero service
 service Zero {
-	//rpc WorkerHeartbeat( WorkerHeartbeatRequest) returns ( WorkerHeartbeatResponse){}
 	rpc AllocID(ZeroAllocIDRequest) returns (ZeroAllocIDResponse){}
-	//rpc ZeroStatus(ZeroStatusRequest) returns (ZeroStatusResponse){}
 	rpc RegistStore(ZeroRegistStoreRequest) returns (ZeroRegistStoreResponse) {}
+	rpc StreamHeartbeat(stream ZeroHeartbeatRequest) returns (ZeroHeartbeatResponse){}
 }

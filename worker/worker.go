@@ -23,10 +23,13 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
 	"github.com/thesues/aspira/conn"
@@ -43,6 +46,7 @@ type AspiraWorker struct {
 	store     *raftwal.WAL
 	stopper   *utils.Stopper
 	storePath string
+	info      unsafe.Pointer // *aspirapb.WorkerInfo
 }
 
 func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker, err error) {
@@ -74,6 +78,27 @@ func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker
 		//state:      &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
 	}
 	return as, nil
+}
+
+func (aw *AspiraWorker) WorkerInfo() *aspirapb.WorkerInfo {
+	return (*aspirapb.WorkerInfo)(atomic.LoadPointer(&aw.info))
+}
+
+func (aw *AspiraWorker) SetWorkerInfo(isLeader bool, p map[uint64]aspirapb.WorkerInfo_ProgressType) {
+
+	if isLeader {
+		info := &aspirapb.WorkerInfo{
+			State:       proto.Clone(aw.Node.State).(*aspirapb.MembershipState),
+			RaftContext: proto.Clone(aw.Node.RaftContext).(*aspirapb.RaftContext),
+			Leader:      isLeader,
+			Progress:    p,
+		}
+		atomic.StorePointer(&aw.info, unsafe.Pointer(info))
+		return
+	}
+	//else
+	atomic.StorePointer(&aw.info, unsafe.Pointer(nil))
+
 }
 
 func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
@@ -173,31 +198,6 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
 	aw.stopper.RunWorker(aw.Run)
 }
 
-/*
-func (as *AspiraWorker) ServeGRPC() (err error) {
-	s := grpc.NewServer(
-		grpc.MaxRecvMsgSize(33<<20),
-		grpc.MaxSendMsgSize(33<<20),
-		grpc.MaxConcurrentStreams(1000),
-	)
-
-	aspirapb.RegisterRaftServer(s, as.raftServer)
-	aspirapb.RegisterAspiraGRPCServer(s, as)
-	listener, err := net.Listen("tcp", as.addr)
-	if err != nil {
-		return err
-	}
-	go func() {
-		defer func() {
-			xlog.Logger.Infof("GRPC server return")
-		}()
-		s.Serve(listener)
-	}()
-	as.grpcServer = s
-	return nil
-}
-*/
-
 var errInvalidProposal = errors.New("Invalid group proposal")
 
 func (aw *AspiraWorker) applyProposal(e raftpb.Entry) (string, error) {
@@ -233,6 +233,7 @@ func (aw *AspiraWorker) Run() {
 	defer ticker.Stop()
 	n := aw.Node
 	loop := uint64(0)
+
 	for {
 		select {
 		case <-aw.stopper.ShouldStop():
@@ -262,7 +263,9 @@ func (aw *AspiraWorker) Run() {
 					}
 				}
 
-				for _, progress := range n.Raft().Status().Progress {
+				p := make(map[uint64]aspirapb.WorkerInfo_ProgressType)
+
+				for id, progress := range n.Raft().Status().Progress {
 					/*
 						if id == n.Id {
 							xlog.Logger.Infof("%d is now %+v", id, true)
@@ -270,11 +273,25 @@ func (aw *AspiraWorker) Run() {
 						}
 						xlog.Logger.Infof("%d is now %+v", id, progress.RecentActive)
 					*/
+					switch progress.State {
+					case raft.ProgressStateProbe:
+						p[id] = aspirapb.WorkerInfo_Probe
+					case raft.ProgressStateReplicate:
+						p[id] = aspirapb.WorkerInfo_Replicate
+					case raft.ProgressStateSnapshot:
+						p[id] = aspirapb.WorkerInfo_Snapshot
+					default:
+						xlog.Logger.Fatal("unkown status type")
+					}
+
 					if progress.State == raft.ProgressStateSnapshot {
 						createSnapshot = false
 					}
+
 				}
+				aw.SetWorkerInfo(true, p)
 			}
+
 			if !raft.IsEmptySnap(rd.Snapshot) {
 
 				//drain the applied messages
@@ -339,6 +356,7 @@ func (aw *AspiraWorker) Run() {
 				for i := range rd.Messages {
 					aw.Node.Send(&rd.Messages[i])
 				}
+				aw.SetWorkerInfo(false, nil)
 			}
 			span.Annotate(nil, "Sent messages")
 

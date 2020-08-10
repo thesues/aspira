@@ -85,31 +85,31 @@ func (AspiraProposal_Type) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_978c3dd237f791ac, []int{6, 0}
 }
 
-type WorkerHeartbeatRequest_ProgressType int32
+type WorkerInfo_ProgressType int32
 
 const (
-	WorkerHeartbeatRequest_Probe     WorkerHeartbeatRequest_ProgressType = 0
-	WorkerHeartbeatRequest_Replicate WorkerHeartbeatRequest_ProgressType = 1
-	WorkerHeartbeatRequest_Snapshot  WorkerHeartbeatRequest_ProgressType = 2
+	WorkerInfo_Probe     WorkerInfo_ProgressType = 0
+	WorkerInfo_Replicate WorkerInfo_ProgressType = 1
+	WorkerInfo_Snapshot  WorkerInfo_ProgressType = 2
 )
 
-var WorkerHeartbeatRequest_ProgressType_name = map[int32]string{
+var WorkerInfo_ProgressType_name = map[int32]string{
 	0: "Probe",
 	1: "Replicate",
 	2: "Snapshot",
 }
 
-var WorkerHeartbeatRequest_ProgressType_value = map[string]int32{
+var WorkerInfo_ProgressType_value = map[string]int32{
 	"Probe":     0,
 	"Replicate": 1,
 	"Snapshot":  2,
 }
 
-func (x WorkerHeartbeatRequest_ProgressType) String() string {
-	return proto.EnumName(WorkerHeartbeatRequest_ProgressType_name, int32(x))
+func (x WorkerInfo_ProgressType) String() string {
+	return proto.EnumName(WorkerInfo_ProgressType_name, int32(x))
 }
 
-func (WorkerHeartbeatRequest_ProgressType) EnumDescriptor() ([]byte, []int) {
+func (WorkerInfo_ProgressType) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_978c3dd237f791ac, []int{17, 0}
 }
 
@@ -487,18 +487,6 @@ func (m *EntryMeta) GetAssociateKey() string {
 	return ""
 }
 
-//
-//AspiraProposalPut{
-//string associateKey
-//bytes data
-//}
-//AspiraProposalPutWithOffset {
-//string associateKey
-//bytes data
-//uint64 key
-//uint32 reservation
-//uint32 offset
-//}
 type AspiraProposal struct {
 	ProposalType         AspiraProposal_Type `protobuf:"varint,1,opt,name=ProposalType,proto3,enum=aspirapb.AspiraProposal_Type" json:"ProposalType,omitempty"`
 	Key                  uint64              `protobuf:"varint,2,opt,name=key,proto3" json:"key,omitempty"`
@@ -1132,27 +1120,30 @@ func (m *ZeroAllocIDResponse) GetEnd() uint64 {
 	return 0
 }
 
-type WorkerHeartbeatRequest struct {
-	State                *MembershipState                               `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
-	Progress             map[uint64]WorkerHeartbeatRequest_ProgressType `protobuf:"bytes,2,rep,name=progress,proto3" json:"progress,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3,enum=aspirapb.WorkerHeartbeatRequest_ProgressType"`
-	Rd                   *RaftContext                                   `protobuf:"bytes,3,opt,name=rd,proto3" json:"rd,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                       `json:"-"`
-	XXX_unrecognized     []byte                                         `json:"-"`
-	XXX_sizecache        int32                                          `json:"-"`
+//I do not want to import raft's proto.
+//the progress should be the same
+type WorkerInfo struct {
+	State                *MembershipState                   `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	Progress             map[uint64]WorkerInfo_ProgressType `protobuf:"bytes,2,rep,name=progress,proto3" json:"progress,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3,enum=aspirapb.WorkerInfo_ProgressType"`
+	RaftContext          *RaftContext                       `protobuf:"bytes,3,opt,name=raftContext,proto3" json:"raftContext,omitempty"`
+	Leader               bool                               `protobuf:"varint,4,opt,name=leader,proto3" json:"leader,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                           `json:"-"`
+	XXX_unrecognized     []byte                             `json:"-"`
+	XXX_sizecache        int32                              `json:"-"`
 }
 
-func (m *WorkerHeartbeatRequest) Reset()         { *m = WorkerHeartbeatRequest{} }
-func (m *WorkerHeartbeatRequest) String() string { return proto.CompactTextString(m) }
-func (*WorkerHeartbeatRequest) ProtoMessage()    {}
-func (*WorkerHeartbeatRequest) Descriptor() ([]byte, []int) {
+func (m *WorkerInfo) Reset()         { *m = WorkerInfo{} }
+func (m *WorkerInfo) String() string { return proto.CompactTextString(m) }
+func (*WorkerInfo) ProtoMessage()    {}
+func (*WorkerInfo) Descriptor() ([]byte, []int) {
 	return fileDescriptor_978c3dd237f791ac, []int{17}
 }
-func (m *WorkerHeartbeatRequest) XXX_Unmarshal(b []byte) error {
+func (m *WorkerInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *WorkerHeartbeatRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *WorkerInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_WorkerHeartbeatRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_WorkerInfo.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1162,57 +1153,66 @@ func (m *WorkerHeartbeatRequest) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
-func (m *WorkerHeartbeatRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WorkerHeartbeatRequest.Merge(m, src)
+func (m *WorkerInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WorkerInfo.Merge(m, src)
 }
-func (m *WorkerHeartbeatRequest) XXX_Size() int {
+func (m *WorkerInfo) XXX_Size() int {
 	return m.Size()
 }
-func (m *WorkerHeartbeatRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_WorkerHeartbeatRequest.DiscardUnknown(m)
+func (m *WorkerInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_WorkerInfo.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_WorkerHeartbeatRequest proto.InternalMessageInfo
+var xxx_messageInfo_WorkerInfo proto.InternalMessageInfo
 
-func (m *WorkerHeartbeatRequest) GetState() *MembershipState {
+func (m *WorkerInfo) GetState() *MembershipState {
 	if m != nil {
 		return m.State
 	}
 	return nil
 }
 
-func (m *WorkerHeartbeatRequest) GetProgress() map[uint64]WorkerHeartbeatRequest_ProgressType {
+func (m *WorkerInfo) GetProgress() map[uint64]WorkerInfo_ProgressType {
 	if m != nil {
 		return m.Progress
 	}
 	return nil
 }
 
-func (m *WorkerHeartbeatRequest) GetRd() *RaftContext {
+func (m *WorkerInfo) GetRaftContext() *RaftContext {
 	if m != nil {
-		return m.Rd
+		return m.RaftContext
 	}
 	return nil
 }
 
-type WorkerHeartbeatResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+func (m *WorkerInfo) GetLeader() bool {
+	if m != nil {
+		return m.Leader
+	}
+	return false
 }
 
-func (m *WorkerHeartbeatResponse) Reset()         { *m = WorkerHeartbeatResponse{} }
-func (m *WorkerHeartbeatResponse) String() string { return proto.CompactTextString(m) }
-func (*WorkerHeartbeatResponse) ProtoMessage()    {}
-func (*WorkerHeartbeatResponse) Descriptor() ([]byte, []int) {
+type ZeroHeartbeatRequest struct {
+	StoreId              uint64                 `protobuf:"varint,1,opt,name=storeId,proto3" json:"storeId,omitempty"`
+	Workers              map[uint64]*WorkerInfo `protobuf:"bytes,2,rep,name=workers,proto3" json:"workers,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}               `json:"-"`
+	XXX_unrecognized     []byte                 `json:"-"`
+	XXX_sizecache        int32                  `json:"-"`
+}
+
+func (m *ZeroHeartbeatRequest) Reset()         { *m = ZeroHeartbeatRequest{} }
+func (m *ZeroHeartbeatRequest) String() string { return proto.CompactTextString(m) }
+func (*ZeroHeartbeatRequest) ProtoMessage()    {}
+func (*ZeroHeartbeatRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_978c3dd237f791ac, []int{18}
 }
-func (m *WorkerHeartbeatResponse) XXX_Unmarshal(b []byte) error {
+func (m *ZeroHeartbeatRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *WorkerHeartbeatResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ZeroHeartbeatRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_WorkerHeartbeatResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_ZeroHeartbeatRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1222,36 +1222,50 @@ func (m *WorkerHeartbeatResponse) XXX_Marshal(b []byte, deterministic bool) ([]b
 		return b[:n], nil
 	}
 }
-func (m *WorkerHeartbeatResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WorkerHeartbeatResponse.Merge(m, src)
+func (m *ZeroHeartbeatRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ZeroHeartbeatRequest.Merge(m, src)
 }
-func (m *WorkerHeartbeatResponse) XXX_Size() int {
+func (m *ZeroHeartbeatRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *WorkerHeartbeatResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_WorkerHeartbeatResponse.DiscardUnknown(m)
+func (m *ZeroHeartbeatRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ZeroHeartbeatRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_WorkerHeartbeatResponse proto.InternalMessageInfo
+var xxx_messageInfo_ZeroHeartbeatRequest proto.InternalMessageInfo
 
-type ZeroStatusRequest struct {
+func (m *ZeroHeartbeatRequest) GetStoreId() uint64 {
+	if m != nil {
+		return m.StoreId
+	}
+	return 0
+}
+
+func (m *ZeroHeartbeatRequest) GetWorkers() map[uint64]*WorkerInfo {
+	if m != nil {
+		return m.Workers
+	}
+	return nil
+}
+
+type ZeroHeartbeatResponse struct {
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ZeroStatusRequest) Reset()         { *m = ZeroStatusRequest{} }
-func (m *ZeroStatusRequest) String() string { return proto.CompactTextString(m) }
-func (*ZeroStatusRequest) ProtoMessage()    {}
-func (*ZeroStatusRequest) Descriptor() ([]byte, []int) {
+func (m *ZeroHeartbeatResponse) Reset()         { *m = ZeroHeartbeatResponse{} }
+func (m *ZeroHeartbeatResponse) String() string { return proto.CompactTextString(m) }
+func (*ZeroHeartbeatResponse) ProtoMessage()    {}
+func (*ZeroHeartbeatResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_978c3dd237f791ac, []int{19}
 }
-func (m *ZeroStatusRequest) XXX_Unmarshal(b []byte) error {
+func (m *ZeroHeartbeatResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *ZeroStatusRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ZeroHeartbeatResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_ZeroStatusRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_ZeroHeartbeatResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1261,56 +1275,17 @@ func (m *ZeroStatusRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 		return b[:n], nil
 	}
 }
-func (m *ZeroStatusRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ZeroStatusRequest.Merge(m, src)
+func (m *ZeroHeartbeatResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ZeroHeartbeatResponse.Merge(m, src)
 }
-func (m *ZeroStatusRequest) XXX_Size() int {
+func (m *ZeroHeartbeatResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *ZeroStatusRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_ZeroStatusRequest.DiscardUnknown(m)
+func (m *ZeroHeartbeatResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ZeroHeartbeatResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_ZeroStatusRequest proto.InternalMessageInfo
-
-type ZeroStatusResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *ZeroStatusResponse) Reset()         { *m = ZeroStatusResponse{} }
-func (m *ZeroStatusResponse) String() string { return proto.CompactTextString(m) }
-func (*ZeroStatusResponse) ProtoMessage()    {}
-func (*ZeroStatusResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_978c3dd237f791ac, []int{20}
-}
-func (m *ZeroStatusResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *ZeroStatusResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_ZeroStatusResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *ZeroStatusResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ZeroStatusResponse.Merge(m, src)
-}
-func (m *ZeroStatusResponse) XXX_Size() int {
-	return m.Size()
-}
-func (m *ZeroStatusResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_ZeroStatusResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ZeroStatusResponse proto.InternalMessageInfo
+var xxx_messageInfo_ZeroHeartbeatResponse proto.InternalMessageInfo
 
 type ZeroRegistStoreRequest struct {
 	Address              string   `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
@@ -1326,7 +1301,7 @@ func (m *ZeroRegistStoreRequest) Reset()         { *m = ZeroRegistStoreRequest{}
 func (m *ZeroRegistStoreRequest) String() string { return proto.CompactTextString(m) }
 func (*ZeroRegistStoreRequest) ProtoMessage()    {}
 func (*ZeroRegistStoreRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_978c3dd237f791ac, []int{21}
+	return fileDescriptor_978c3dd237f791ac, []int{20}
 }
 func (m *ZeroRegistStoreRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1393,7 +1368,7 @@ func (m *ZeroRegistStoreResponse) Reset()         { *m = ZeroRegistStoreResponse
 func (m *ZeroRegistStoreResponse) String() string { return proto.CompactTextString(m) }
 func (*ZeroRegistStoreResponse) ProtoMessage()    {}
 func (*ZeroRegistStoreResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_978c3dd237f791ac, []int{22}
+	return fileDescriptor_978c3dd237f791ac, []int{21}
 }
 func (m *ZeroRegistStoreResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1426,7 +1401,7 @@ type ZeroStoreInfo struct {
 	Address              string   `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
 	StoreId              uint64   `protobuf:"varint,2,opt,name=storeId,proto3" json:"storeId,omitempty"`
 	EmtpySlots           uint64   `protobuf:"varint,3,opt,name=emtpySlots,proto3" json:"emtpySlots,omitempty"`
-	CurrentGid           []uint64 `protobuf:"varint,4,rep,packed,name=currentGid,proto3" json:"currentGid,omitempty"`
+	CurrentGids          []uint64 `protobuf:"varint,4,rep,packed,name=currentGids,proto3" json:"currentGids,omitempty"`
 	Name                 string   `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -1437,7 +1412,7 @@ func (m *ZeroStoreInfo) Reset()         { *m = ZeroStoreInfo{} }
 func (m *ZeroStoreInfo) String() string { return proto.CompactTextString(m) }
 func (*ZeroStoreInfo) ProtoMessage()    {}
 func (*ZeroStoreInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_978c3dd237f791ac, []int{23}
+	return fileDescriptor_978c3dd237f791ac, []int{22}
 }
 func (m *ZeroStoreInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1487,9 +1462,9 @@ func (m *ZeroStoreInfo) GetEmtpySlots() uint64 {
 	return 0
 }
 
-func (m *ZeroStoreInfo) GetCurrentGid() []uint64 {
+func (m *ZeroStoreInfo) GetCurrentGids() []uint64 {
 	if m != nil {
-		return m.CurrentGid
+		return m.CurrentGids
 	}
 	return nil
 }
@@ -1504,7 +1479,7 @@ func (m *ZeroStoreInfo) GetName() string {
 func init() {
 	proto.RegisterEnum("aspirapb.EntryMeta_Type", EntryMeta_Type_name, EntryMeta_Type_value)
 	proto.RegisterEnum("aspirapb.AspiraProposal_Type", AspiraProposal_Type_name, AspiraProposal_Type_value)
-	proto.RegisterEnum("aspirapb.WorkerHeartbeatRequest_ProgressType", WorkerHeartbeatRequest_ProgressType_name, WorkerHeartbeatRequest_ProgressType_value)
+	proto.RegisterEnum("aspirapb.WorkerInfo_ProgressType", WorkerInfo_ProgressType_name, WorkerInfo_ProgressType_value)
 	proto.RegisterType((*Payload)(nil), "aspirapb.Payload")
 	proto.RegisterType((*RaftContext)(nil), "aspirapb.RaftContext")
 	proto.RegisterType((*MembershipState)(nil), "aspirapb.MembershipState")
@@ -1523,11 +1498,11 @@ func init() {
 	proto.RegisterType((*GetRequest)(nil), "aspirapb.GetRequest")
 	proto.RegisterType((*ZeroAllocIDRequest)(nil), "aspirapb.ZeroAllocIDRequest")
 	proto.RegisterType((*ZeroAllocIDResponse)(nil), "aspirapb.ZeroAllocIDResponse")
-	proto.RegisterType((*WorkerHeartbeatRequest)(nil), "aspirapb.WorkerHeartbeatRequest")
-	proto.RegisterMapType((map[uint64]WorkerHeartbeatRequest_ProgressType)(nil), "aspirapb.WorkerHeartbeatRequest.ProgressEntry")
-	proto.RegisterType((*WorkerHeartbeatResponse)(nil), "aspirapb.WorkerHeartbeatResponse")
-	proto.RegisterType((*ZeroStatusRequest)(nil), "aspirapb.ZeroStatusRequest")
-	proto.RegisterType((*ZeroStatusResponse)(nil), "aspirapb.ZeroStatusResponse")
+	proto.RegisterType((*WorkerInfo)(nil), "aspirapb.WorkerInfo")
+	proto.RegisterMapType((map[uint64]WorkerInfo_ProgressType)(nil), "aspirapb.WorkerInfo.ProgressEntry")
+	proto.RegisterType((*ZeroHeartbeatRequest)(nil), "aspirapb.ZeroHeartbeatRequest")
+	proto.RegisterMapType((map[uint64]*WorkerInfo)(nil), "aspirapb.ZeroHeartbeatRequest.WorkersEntry")
+	proto.RegisterType((*ZeroHeartbeatResponse)(nil), "aspirapb.ZeroHeartbeatResponse")
 	proto.RegisterType((*ZeroRegistStoreRequest)(nil), "aspirapb.ZeroRegistStoreRequest")
 	proto.RegisterType((*ZeroRegistStoreResponse)(nil), "aspirapb.ZeroRegistStoreResponse")
 	proto.RegisterType((*ZeroStoreInfo)(nil), "aspirapb.ZeroStoreInfo")
@@ -1536,81 +1511,86 @@ func init() {
 func init() { proto.RegisterFile("aspirapb.proto", fileDescriptor_978c3dd237f791ac) }
 
 var fileDescriptor_978c3dd237f791ac = []byte{
-	// 1184 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x57, 0xdd, 0x6e, 0x23, 0x45,
-	0x13, 0x75, 0x8f, 0xed, 0x38, 0x2e, 0x27, 0xde, 0x49, 0x27, 0x9b, 0x75, 0xfc, 0x7d, 0xb1, 0xcc,
-	0x08, 0x24, 0x0b, 0xb4, 0x26, 0x18, 0x58, 0x2d, 0x2b, 0x81, 0x94, 0x38, 0x90, 0x64, 0x97, 0x80,
-	0x35, 0x89, 0x58, 0x84, 0x84, 0x50, 0xdb, 0x53, 0x49, 0x86, 0xb5, 0xa7, 0x87, 0xe9, 0xf6, 0x6a,
-	0x7d, 0xc7, 0x1d, 0x8f, 0x00, 0xbc, 0x00, 0xcf, 0xc2, 0x0d, 0x12, 0x8f, 0xb0, 0x0a, 0xe2, 0x8a,
-	0x67, 0x40, 0x42, 0xdd, 0xf3, 0xeb, 0xbf, 0x40, 0x2e, 0xf6, 0xae, 0xab, 0xa7, 0xaa, 0xeb, 0x9c,
-	0xea, 0xea, 0x53, 0x36, 0x54, 0x99, 0xf0, 0xdd, 0x80, 0xf9, 0xfd, 0xb6, 0x1f, 0x70, 0xc9, 0xe9,
-	0x6a, 0x6c, 0x5b, 0xbb, 0x50, 0xea, 0xb1, 0xc9, 0x90, 0x33, 0x87, 0x52, 0x28, 0x1c, 0x32, 0xc9,
-	0x6a, 0xa4, 0x49, 0x5a, 0x6b, 0xb6, 0x5e, 0x5b, 0x5d, 0xa8, 0xd8, 0xec, 0x42, 0x76, 0xb9, 0x27,
-	0xf1, 0x85, 0xa4, 0x55, 0x30, 0x5c, 0x47, 0x3b, 0x14, 0x6c, 0xc3, 0x75, 0xa8, 0x09, 0xf9, 0x4b,
-	0xd7, 0xa9, 0x19, 0x7a, 0x43, 0x2d, 0xd5, 0x21, 0xcc, 0x71, 0x82, 0x5a, 0xbe, 0x49, 0x5a, 0x65,
-	0x5b, 0xaf, 0xad, 0x1f, 0x08, 0xdc, 0x39, 0xc5, 0x51, 0x1f, 0x03, 0x71, 0xe5, 0xfa, 0x67, 0x92,
-	0x49, 0xa4, 0x8f, 0xa0, 0xe8, 0x71, 0x07, 0x45, 0x8d, 0x34, 0xf3, 0xad, 0x4a, 0xe7, 0xf5, 0x76,
-	0x82, 0x70, 0xc6, 0xb3, 0xfd, 0x99, 0x72, 0xfb, 0xd8, 0x93, 0xc1, 0xc4, 0x0e, 0x43, 0xea, 0x0f,
-	0x01, 0xd2, 0x4d, 0x85, 0xe1, 0x19, 0x4e, 0x22, 0x50, 0x6a, 0x49, 0xb7, 0xa0, 0xf8, 0x9c, 0x0d,
-	0xc7, 0xa8, 0x71, 0x95, 0xed, 0xd0, 0x78, 0x64, 0x3c, 0x24, 0xd6, 0xcf, 0x04, 0x56, 0xcf, 0x3c,
-	0xe6, 0x8b, 0x2b, 0x2e, 0xe9, 0xdb, 0x50, 0x1a, 0x84, 0xbc, 0x74, 0x70, 0xa5, 0x73, 0x37, 0x05,
-	0x91, 0x21, 0x6d, 0xc7, 0x5e, 0xea, 0x5c, 0xd7, 0x73, 0xf0, 0x45, 0xc4, 0x37, 0x34, 0xe8, 0x3d,
-	0x28, 0x05, 0xc8, 0x9c, 0x6f, 0xa4, 0xd0, 0xa4, 0x0b, 0xf6, 0x8a, 0x32, 0xcf, 0x85, 0x2a, 0x85,
-	0xc3, 0x3d, 0xac, 0x15, 0x9a, 0xa4, 0xb5, 0x6a, 0xeb, 0x35, 0xdd, 0x81, 0x55, 0xe1, 0x7a, 0x03,
-	0x54, 0xde, 0x45, 0xed, 0x5d, 0xd2, 0xf6, 0xb9, 0xb0, 0x5c, 0x28, 0xab, 0xac, 0x07, 0x4c, 0x0e,
-	0xae, 0x6e, 0x8f, 0xed, 0x2d, 0x28, 0xf9, 0xe1, 0x3d, 0x6a, 0x74, 0x95, 0xce, 0x46, 0x1a, 0x10,
-	0x5d, 0xb0, 0x1d, 0x7b, 0x58, 0x7f, 0x11, 0x28, 0xeb, 0xe2, 0x9d, 0xa2, 0x64, 0x0a, 0xe7, 0x39,
-	0x06, 0xa3, 0xa8, 0x82, 0x7a, 0xad, 0xa8, 0x9e, 0x64, 0xa9, 0x6a, 0x83, 0x3e, 0x88, 0xc2, 0xce,
-	0x27, 0x3e, 0x6a, 0xb2, 0xd5, 0x4e, 0x2d, 0x4d, 0x93, 0x9c, 0xd8, 0x56, 0xdf, 0xed, 0xd4, 0x35,
-	0xe9, 0xac, 0x42, 0xda, 0x59, 0xd4, 0x82, 0x35, 0x26, 0x04, 0x1f, 0xb8, 0x4c, 0xe2, 0x13, 0x9c,
-	0xe8, 0x6a, 0x94, 0xed, 0xa9, 0x3d, 0xeb, 0x10, 0x0a, 0x3a, 0xbe, 0x04, 0xf9, 0xde, 0x58, 0x9a,
-	0x39, 0x6a, 0xc2, 0xda, 0xa7, 0xc8, 0x1c, 0x0c, 0xba, 0x7c, 0x34, 0x72, 0xa5, 0x49, 0x68, 0x15,
-	0xa0, 0xcb, 0xbd, 0x8b, 0xee, 0x15, 0xf3, 0x2e, 0xd1, 0x34, 0xe8, 0x06, 0xac, 0xf7, 0xc6, 0xf2,
-	0xa9, 0x2b, 0xaf, 0x3e, 0xbf, 0xb8, 0x10, 0x28, 0xcd, 0xbc, 0xf5, 0x27, 0x81, 0xea, 0xbe, 0x06,
-	0xd9, 0x0b, 0xb8, 0xcf, 0x05, 0x1b, 0xd2, 0x7d, 0x58, 0x8b, 0xd7, 0x9a, 0x0b, 0xd1, 0x5c, 0x76,
-	0x53, 0x2e, 0xd3, 0xfe, 0x21, 0xa1, 0xa9, 0x90, 0xb8, 0xed, 0x8c, 0xb4, 0xed, 0xb6, 0x61, 0x85,
-	0xeb, 0x9c, 0x71, 0x1f, 0x84, 0xd6, 0x1c, 0xd3, 0xc2, 0x3c, 0x53, 0xdd, 0x2b, 0xaa, 0x42, 0xc5,
-	0xb0, 0x42, 0x6a, 0x6d, 0xb5, 0x67, 0xd9, 0xcf, 0x71, 0x23, 0x14, 0x60, 0xe5, 0x10, 0x87, 0x28,
-	0xd1, 0x34, 0xac, 0xe7, 0xb0, 0x7d, 0x30, 0xe4, 0x7d, 0xd5, 0x1e, 0xa7, 0x28, 0x04, 0xbb, 0x44,
-	0x1b, 0xbf, 0x1b, 0xa3, 0x90, 0xaf, 0xb8, 0x9b, 0x76, 0xe0, 0xde, 0x5c, 0x5e, 0xe1, 0x73, 0x4f,
-	0xa0, 0xf5, 0x05, 0x98, 0xfb, 0x8e, 0xf3, 0x94, 0x07, 0xcf, 0x30, 0x88, 0xc1, 0x44, 0x9a, 0x41,
-	0x52, 0xcd, 0x08, 0x55, 0xc5, 0x48, 0x54, 0xa5, 0x09, 0x95, 0xc7, 0xdc, 0xf5, 0xba, 0xc3, 0xb1,
-	0x90, 0x18, 0x4b, 0x49, 0x76, 0xcb, 0xda, 0x84, 0x8d, 0xcc, 0xb9, 0x51, 0xb2, 0xaf, 0xc1, 0xec,
-	0x8d, 0xe5, 0x99, 0x0c, 0x90, 0x8d, 0xe2, 0x64, 0x34, 0x93, 0xec, 0x38, 0x17, 0xa6, 0xbb, 0xff,
-	0xef, 0xe4, 0x8e, 0x73, 0x09, 0xbd, 0x83, 0x95, 0xf0, 0x6a, 0xac, 0x27, 0x00, 0xbd, 0xb1, 0x5c,
-	0xce, 0xe2, 0x56, 0x35, 0x7b, 0x07, 0x2a, 0xfa, 0xb0, 0x10, 0xfa, 0x82, 0xd3, 0x4c, 0xc8, 0xf3,
-	0x54, 0x59, 0xb9, 0xeb, 0x58, 0x7b, 0x00, 0x47, 0x78, 0x43, 0xfe, 0xf9, 0x88, 0x37, 0x81, 0x7e,
-	0x85, 0x01, 0xdf, 0x1f, 0x0e, 0xf9, 0xe0, 0xe4, 0x30, 0x8e, 0xdc, 0x82, 0xe2, 0x80, 0x8f, 0xbd,
-	0xb0, 0x15, 0x8a, 0x76, 0x68, 0x58, 0x1f, 0xc2, 0xe6, 0x94, 0x6f, 0x04, 0x6c, 0x0b, 0x8a, 0x42,
-	0xb2, 0x40, 0x46, 0x89, 0x42, 0x43, 0xa5, 0x42, 0x2f, 0x49, 0x85, 0x9e, 0x63, 0xbd, 0x34, 0x60,
-	0x3b, 0xbc, 0x8e, 0x63, 0x64, 0x81, 0xec, 0x23, 0x93, 0x69, 0xf3, 0xa9, 0x28, 0x89, 0x51, 0xeb,
-	0xed, 0x2c, 0x55, 0x7a, 0x3b, 0xf4, 0xa3, 0x8f, 0x61, 0xd5, 0x0f, 0xf8, 0x65, 0x80, 0x42, 0xd4,
-	0x0c, 0x3d, 0x1d, 0xda, 0x69, 0xcc, 0xe2, 0x24, 0xed, 0x5e, 0x14, 0x10, 0xce, 0x89, 0x24, 0x9e,
-	0xbe, 0x01, 0x46, 0xe0, 0xe8, 0x0e, 0x5a, 0xda, 0xf4, 0x46, 0xe0, 0xd4, 0xbf, 0x85, 0xf5, 0xa9,
-	0x13, 0x16, 0x0c, 0x95, 0x6e, 0x76, 0xa8, 0x54, 0x3b, 0xf7, 0xff, 0x33, 0x24, 0xad, 0x1d, 0x99,
-	0x19, 0xf4, 0x40, 0x6b, 0x4f, 0xf2, 0x89, 0x96, 0xa1, 0xd8, 0x0b, 0x78, 0x1f, 0xcd, 0x1c, 0x5d,
-	0x87, 0xb2, 0x8d, 0xfe, 0xd0, 0x1d, 0x30, 0x89, 0x26, 0xa1, 0x6b, 0xe9, 0xb0, 0x32, 0x0d, 0xf5,
-	0xcc, 0xe6, 0x32, 0x45, 0x9d, 0xbf, 0x09, 0x1b, 0xea, 0xf2, 0x54, 0x15, 0xc7, 0x22, 0xca, 0x6f,
-	0x6d, 0x85, 0xb7, 0x1f, 0x6f, 0x46, 0xae, 0xdf, 0x13, 0xd8, 0x56, 0xdb, 0x36, 0x5e, 0xba, 0x42,
-	0x9e, 0x49, 0x1e, 0x24, 0x2a, 0x51, 0x83, 0x92, 0x1a, 0xd7, 0xaa, 0xec, 0x44, 0x3f, 0xb9, 0xd8,
-	0x54, 0x5f, 0x84, 0xf2, 0x3c, 0x89, 0xef, 0x3c, 0x36, 0x69, 0x03, 0x00, 0x47, 0xd2, 0x9f, 0x9c,
-	0x0d, 0x79, 0x32, 0xff, 0x32, 0x3b, 0x4a, 0xd7, 0x3c, 0x36, 0xc2, 0x48, 0xf3, 0xf4, 0x5a, 0x11,
-	0x99, 0x43, 0x10, 0xa1, 0xfb, 0x91, 0xc0, 0x7a, 0x08, 0x5a, 0x1d, 0xef, 0x5d, 0xf0, 0x57, 0x02,
-	0xaa, 0x01, 0x30, 0x18, 0x07, 0x01, 0x7a, 0xf2, 0xc8, 0x75, 0x6a, 0x85, 0x66, 0x5e, 0x7d, 0x4f,
-	0x77, 0x12, 0xd0, 0xc5, 0x14, 0x74, 0xe7, 0x37, 0x03, 0x0a, 0xaa, 0x6b, 0xe8, 0xfb, 0x50, 0x4e,
-	0x2e, 0x80, 0xce, 0x3f, 0xf1, 0xfa, 0xfc, 0x96, 0x95, 0xdb, 0x23, 0xf4, 0x83, 0xf0, 0x87, 0x54,
-	0x24, 0x90, 0x74, 0x73, 0xba, 0x17, 0xf5, 0xd0, 0x5f, 0x18, 0xda, 0x22, 0xf4, 0x4b, 0xb8, 0x33,
-	0xa3, 0xaf, 0xb4, 0x99, 0x7a, 0x2e, 0x96, 0xfc, 0xfa, 0x6b, 0x37, 0x78, 0x44, 0xc5, 0xce, 0x29,
-	0x50, 0x19, 0x55, 0xa5, 0x8b, 0x1f, 0xc8, 0x42, 0x58, 0xf4, 0x23, 0xa8, 0x86, 0x4a, 0x9b, 0xfc,
-	0x9c, 0xba, 0x45, 0xf4, 0x1e, 0xe9, 0xfc, 0x4d, 0xa0, 0xa8, 0x6f, 0x99, 0x7e, 0x02, 0xe5, 0x44,
-	0xcb, 0x69, 0x3d, 0x33, 0x82, 0x67, 0x06, 0x47, 0xfd, 0x7f, 0x0b, 0xbf, 0x25, 0x64, 0x0e, 0xa0,
-	0x9c, 0xc8, 0x7f, 0xf6, 0x9c, 0xd9, 0x99, 0x50, 0xbf, 0x3b, 0xf5, 0x2d, 0x3d, 0xa1, 0x45, 0xe8,
-	0x7b, 0x7a, 0xd4, 0xd2, 0xad, 0x19, 0x8f, 0x9b, 0xe3, 0x68, 0x07, 0xf2, 0x47, 0x38, 0x15, 0x95,
-	0x0a, 0xf5, 0x32, 0xfe, 0xbf, 0x10, 0x28, 0xa8, 0x4e, 0xa7, 0xc7, 0x50, 0x8a, 0x44, 0x97, 0xfe,
-	0x3f, 0x75, 0x9d, 0xd7, 0xed, 0xfa, 0xee, 0x92, 0xaf, 0x09, 0x8c, 0x73, 0xa8, 0x64, 0xde, 0x54,
-	0xb6, 0x47, 0x16, 0x3f, 0xf8, 0x6c, 0x8f, 0x2c, 0x7b, 0x90, 0xb9, 0x03, 0xf3, 0xd7, 0xeb, 0x06,
-	0xf9, 0xfd, 0xba, 0x41, 0x5e, 0x5e, 0x37, 0xc8, 0x4f, 0x7f, 0x34, 0x72, 0xfd, 0x15, 0xfd, 0x1f,
-	0xe2, 0xdd, 0x7f, 0x02, 0x00, 0x00, 0xff, 0xff, 0x6a, 0xc9, 0x55, 0x48, 0x55, 0x0c, 0x00, 0x00,
+	// 1250 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x57, 0x5d, 0x6f, 0x1b, 0x45,
+	0x17, 0xf6, 0xac, 0xed, 0x38, 0x3e, 0x76, 0xdc, 0xed, 0xd4, 0x6d, 0x5d, 0xbf, 0x6f, 0x8d, 0xbb,
+	0xe2, 0xc2, 0x6a, 0x85, 0x5b, 0x0c, 0xb4, 0xa5, 0x12, 0x95, 0x12, 0xa7, 0x34, 0xa1, 0x14, 0xac,
+	0x4d, 0xd4, 0x22, 0x24, 0x40, 0x63, 0xef, 0x49, 0xb2, 0xaa, 0xbd, 0xb3, 0xec, 0x8c, 0x4b, 0x7d,
+	0xc7, 0x1d, 0x7f, 0x81, 0xfe, 0x23, 0xb8, 0x40, 0xe2, 0x27, 0xa0, 0x20, 0xb8, 0xe1, 0x37, 0x80,
+	0xd0, 0xcc, 0x7e, 0xfa, 0x2b, 0x28, 0x17, 0xbd, 0x9b, 0x8f, 0x73, 0xe6, 0x3c, 0xcf, 0xd9, 0x67,
+	0xce, 0x99, 0x85, 0x1a, 0x13, 0xbe, 0x1b, 0x30, 0x7f, 0xd8, 0xf5, 0x03, 0x2e, 0x39, 0xdd, 0x8c,
+	0xe7, 0xd6, 0x75, 0x28, 0x0d, 0xd8, 0x6c, 0xcc, 0x99, 0x43, 0x29, 0x14, 0x76, 0x99, 0x64, 0x0d,
+	0xd2, 0x26, 0x9d, 0xaa, 0xad, 0xc7, 0x56, 0x1f, 0x2a, 0x36, 0x3b, 0x92, 0x7d, 0xee, 0x49, 0x7c,
+	0x25, 0x69, 0x0d, 0x0c, 0xd7, 0xd1, 0x06, 0x05, 0xdb, 0x70, 0x1d, 0x6a, 0x42, 0xfe, 0xd8, 0x75,
+	0x1a, 0x86, 0x5e, 0x50, 0x43, 0x75, 0x08, 0x73, 0x9c, 0xa0, 0x91, 0x6f, 0x93, 0x4e, 0xd9, 0xd6,
+	0x63, 0xeb, 0x07, 0x02, 0x17, 0x9e, 0xe2, 0x64, 0x88, 0x81, 0x38, 0x71, 0xfd, 0x03, 0xc9, 0x24,
+	0xd2, 0x07, 0x50, 0xf4, 0xb8, 0x83, 0xa2, 0x41, 0xda, 0xf9, 0x4e, 0xa5, 0xf7, 0x76, 0x37, 0x41,
+	0xb8, 0x60, 0xd9, 0xfd, 0x4c, 0x99, 0x3d, 0xf2, 0x64, 0x30, 0xb3, 0x43, 0x97, 0xe6, 0x7d, 0x80,
+	0x74, 0x51, 0x61, 0x78, 0x81, 0xb3, 0x08, 0x94, 0x1a, 0xd2, 0x3a, 0x14, 0x5f, 0xb2, 0xf1, 0x14,
+	0x35, 0xae, 0xb2, 0x1d, 0x4e, 0x1e, 0x18, 0xf7, 0x89, 0xf5, 0x9a, 0xc0, 0xe6, 0x81, 0xc7, 0x7c,
+	0x71, 0xc2, 0x25, 0xbd, 0x0d, 0xa5, 0x51, 0xc8, 0x4b, 0x3b, 0x57, 0x7a, 0x97, 0x53, 0x10, 0x19,
+	0xd2, 0x76, 0x6c, 0xa5, 0xce, 0x75, 0x3d, 0x07, 0x5f, 0x45, 0x7c, 0xc3, 0x09, 0xbd, 0x0a, 0xa5,
+	0x00, 0x99, 0xf3, 0x8d, 0x14, 0x9a, 0x74, 0xc1, 0xde, 0x50, 0xd3, 0x43, 0xa1, 0x52, 0xe1, 0x70,
+	0x0f, 0x1b, 0x85, 0x36, 0xe9, 0x6c, 0xda, 0x7a, 0x4c, 0xaf, 0xc1, 0xa6, 0x70, 0xbd, 0x11, 0x2a,
+	0xeb, 0xa2, 0xb6, 0x2e, 0xe9, 0xf9, 0xa1, 0xb0, 0x5c, 0x28, 0xab, 0xa8, 0x3b, 0x4c, 0x8e, 0x4e,
+	0xce, 0x8f, 0xed, 0x16, 0x94, 0xfc, 0xf0, 0x3b, 0x6a, 0x74, 0x95, 0xde, 0xc5, 0xd4, 0x21, 0xfa,
+	0xc0, 0x76, 0x6c, 0x61, 0xfd, 0x45, 0xa0, 0xac, 0x93, 0xf7, 0x14, 0x25, 0x53, 0x38, 0x0f, 0x31,
+	0x98, 0x44, 0x19, 0xd4, 0x63, 0x45, 0x75, 0x3f, 0x4b, 0x55, 0x4f, 0xe8, 0xdd, 0xc8, 0xed, 0x70,
+	0xe6, 0xa3, 0x26, 0x5b, 0xeb, 0x35, 0xd2, 0x30, 0xc9, 0x89, 0x5d, 0xb5, 0x6f, 0xa7, 0xa6, 0x89,
+	0xb2, 0x0a, 0xa9, 0xb2, 0xa8, 0x05, 0x55, 0x26, 0x04, 0x1f, 0xb9, 0x4c, 0xe2, 0x13, 0x9c, 0xe9,
+	0x6c, 0x94, 0xed, 0xb9, 0x35, 0x6b, 0x17, 0x0a, 0xda, 0xbf, 0x04, 0xf9, 0xc1, 0x54, 0x9a, 0x39,
+	0x6a, 0x42, 0xf5, 0x53, 0x64, 0x0e, 0x06, 0x7d, 0x3e, 0x99, 0xb8, 0xd2, 0x24, 0xb4, 0x06, 0xd0,
+	0xe7, 0xde, 0x51, 0xff, 0x84, 0x79, 0xc7, 0x68, 0x1a, 0xf4, 0x22, 0x6c, 0x0d, 0xa6, 0xf2, 0xb9,
+	0x2b, 0x4f, 0x3e, 0x3f, 0x3a, 0x12, 0x28, 0xcd, 0xbc, 0xf5, 0x07, 0x81, 0xda, 0xb6, 0x06, 0x39,
+	0x08, 0xb8, 0xcf, 0x05, 0x1b, 0xd3, 0x6d, 0xa8, 0xc6, 0x63, 0xcd, 0x85, 0x68, 0x2e, 0xd7, 0x53,
+	0x2e, 0xf3, 0xf6, 0x21, 0xa1, 0x39, 0x97, 0x58, 0x76, 0x46, 0x2a, 0xbb, 0x2b, 0xb0, 0xc1, 0x75,
+	0xcc, 0x58, 0x07, 0xe1, 0x6c, 0x89, 0x69, 0x61, 0x99, 0xa9, 0xd6, 0x8a, 0xca, 0x50, 0x31, 0xcc,
+	0x90, 0x1a, 0x5b, 0xdd, 0x45, 0xf6, 0x4b, 0xdc, 0x08, 0x05, 0xd8, 0xd8, 0xc5, 0x31, 0x4a, 0x34,
+	0x0d, 0xeb, 0x25, 0x5c, 0xd9, 0x19, 0xf3, 0xa1, 0x92, 0xc7, 0x53, 0x14, 0x82, 0x1d, 0xa3, 0x8d,
+	0xdf, 0x4e, 0x51, 0xc8, 0x37, 0xac, 0xa6, 0x6b, 0x70, 0x75, 0x29, 0xae, 0xf0, 0xb9, 0x27, 0xd0,
+	0x7a, 0x06, 0xe6, 0xb6, 0xe3, 0x3c, 0xe7, 0xc1, 0x0b, 0x0c, 0x62, 0x30, 0x51, 0xcd, 0x20, 0x69,
+	0xcd, 0x08, 0xab, 0x8a, 0x91, 0x54, 0x95, 0x36, 0x54, 0x3e, 0xe1, 0xae, 0xd7, 0x1f, 0x4f, 0x85,
+	0xc4, 0xb8, 0x94, 0x64, 0x97, 0xac, 0x4b, 0x70, 0x31, 0x73, 0x6e, 0x14, 0xec, 0x2b, 0x30, 0x07,
+	0x53, 0x79, 0x20, 0x03, 0x64, 0x93, 0x38, 0x18, 0xcd, 0x04, 0xdb, 0xcb, 0x85, 0xe1, 0xde, 0xf9,
+	0x6f, 0x72, 0x7b, 0xb9, 0x84, 0xde, 0xce, 0x46, 0xf8, 0x69, 0xac, 0x27, 0x00, 0x83, 0xa9, 0x5c,
+	0xcf, 0xe2, 0x5c, 0x39, 0x7b, 0x17, 0x2a, 0xfa, 0xb0, 0x10, 0xfa, 0x8a, 0xd3, 0x4c, 0xc8, 0xf3,
+	0xb4, 0xb2, 0x72, 0xd7, 0xb1, 0xee, 0x00, 0x3c, 0xc6, 0x33, 0xe2, 0x2f, 0x7b, 0xdc, 0x04, 0xfa,
+	0x25, 0x06, 0x7c, 0x7b, 0x3c, 0xe6, 0xa3, 0xfd, 0xdd, 0xd8, 0xb3, 0x0e, 0xc5, 0x11, 0x9f, 0x7a,
+	0xa1, 0x14, 0x8a, 0x76, 0x38, 0xb1, 0x3e, 0x82, 0x4b, 0x73, 0xb6, 0x11, 0xb0, 0x3a, 0x14, 0x85,
+	0x64, 0x81, 0x8c, 0x02, 0x85, 0x13, 0x15, 0x0a, 0xbd, 0x24, 0x14, 0x7a, 0x8e, 0xf5, 0xa7, 0x01,
+	0x10, 0x7e, 0x8e, 0x7d, 0xef, 0x88, 0xd3, 0xdb, 0xda, 0x4d, 0x62, 0x24, 0xb7, 0x6b, 0x6b, 0xab,
+	0xbb, 0x1d, 0xda, 0xd1, 0x87, 0xb0, 0xe9, 0x07, 0xfc, 0x38, 0x40, 0x21, 0x1a, 0x86, 0xee, 0x08,
+	0x56, 0xea, 0x93, 0x1e, 0xdc, 0x1d, 0x44, 0x46, 0x61, 0x3f, 0x48, 0x7c, 0xe8, 0x3d, 0xa8, 0x04,
+	0xa9, 0x90, 0xb5, 0x64, 0xd6, 0xaa, 0x3c, 0x6b, 0xa9, 0x2e, 0xed, 0x58, 0x57, 0x94, 0xa8, 0x4c,
+	0x47, 0xb3, 0xe6, 0xd7, 0xb0, 0x35, 0x17, 0x6b, 0x45, 0x9b, 0xb9, 0x97, 0x6d, 0x33, 0xb5, 0xde,
+	0x8d, 0x33, 0x01, 0xeb, 0x0a, 0x92, 0xe9, 0x44, 0x77, 0x75, 0x05, 0x4a, 0xb6, 0x68, 0x19, 0x8a,
+	0x83, 0x80, 0x0f, 0xd1, 0xcc, 0xd1, 0x2d, 0x28, 0xdb, 0xe8, 0x8f, 0xdd, 0x11, 0x93, 0x68, 0x12,
+	0x5a, 0x4d, 0x5b, 0x96, 0x69, 0x58, 0x3f, 0x13, 0xa8, 0xab, 0x0f, 0xb5, 0x87, 0x2c, 0x90, 0x43,
+	0x64, 0x89, 0x20, 0x1a, 0x50, 0x12, 0x92, 0x07, 0xb8, 0x1f, 0x8b, 0x22, 0x9e, 0xd2, 0x47, 0x50,
+	0xfa, 0x4e, 0x03, 0x8a, 0x53, 0x7b, 0x2b, 0x45, 0xba, 0xea, 0xa8, 0x08, 0x7e, 0x94, 0xe3, 0xd8,
+	0xb7, 0x39, 0x80, 0x6a, 0x76, 0x63, 0x45, 0x42, 0x6e, 0x66, 0x13, 0x52, 0xe9, 0xd5, 0x57, 0x25,
+	0x24, 0x9b, 0x83, 0xab, 0x70, 0x79, 0x21, 0x7e, 0x74, 0x93, 0xbf, 0x27, 0x70, 0x45, 0xed, 0xd8,
+	0x78, 0xec, 0x0a, 0x79, 0xa0, 0x78, 0x64, 0x68, 0xaa, 0x37, 0x85, 0xd2, 0x09, 0xd1, 0x75, 0x21,
+	0x9e, 0x66, 0x13, 0x60, 0xcc, 0x27, 0xa0, 0x05, 0x80, 0x13, 0xe9, 0xcf, 0x0e, 0xc6, 0x3c, 0x69,
+	0xd2, 0x99, 0x15, 0x55, 0x7c, 0x3d, 0x36, 0xc1, 0xa8, 0x30, 0xeb, 0xb1, 0x2a, 0x6a, 0x4b, 0x08,
+	0x22, 0x74, 0xaf, 0x09, 0x6c, 0xa9, 0x3d, 0xbd, 0xaa, 0xe5, 0xfe, 0x26, 0x40, 0xb5, 0xa1, 0x32,
+	0x9a, 0x06, 0x01, 0x7a, 0xf2, 0xb1, 0xeb, 0x88, 0x46, 0xa1, 0x9d, 0xef, 0x14, 0xec, 0xec, 0x52,
+	0x02, 0xbb, 0x98, 0xc2, 0xee, 0xfd, 0x62, 0x40, 0x41, 0x69, 0x9d, 0x7e, 0x00, 0xe5, 0x24, 0xaf,
+	0x74, 0xb9, 0x12, 0x35, 0x97, 0x97, 0xac, 0xdc, 0x1d, 0x42, 0x3f, 0x0c, 0xdf, 0x7b, 0x51, 0x1d,
+	0xa7, 0x97, 0xe6, 0x6f, 0x90, 0x7e, 0x9b, 0xac, 0x74, 0xed, 0x10, 0xfa, 0x05, 0x5c, 0x58, 0x68,
+	0x03, 0xb4, 0x9d, 0x5a, 0xae, 0xee, 0x4c, 0xcd, 0x1b, 0x67, 0x58, 0x44, 0xe9, 0xce, 0x29, 0x50,
+	0x99, 0xe2, 0x4f, 0x57, 0x5f, 0xeb, 0x95, 0xb0, 0xe8, 0x43, 0xa8, 0x85, 0x0d, 0x21, 0x79, 0xf5,
+	0x9d, 0xc3, 0xfb, 0x0e, 0xe9, 0xfd, 0x4d, 0xa0, 0xa8, 0xbf, 0x33, 0xfd, 0x18, 0xca, 0x49, 0xcb,
+	0xa1, 0xcd, 0xcc, 0x4b, 0x61, 0xa1, 0xbf, 0x35, 0xff, 0xb7, 0x72, 0x2f, 0x21, 0xb3, 0x03, 0xe5,
+	0xa4, 0x4b, 0x65, 0xcf, 0x59, 0x6c, 0x5d, 0xcd, 0xcb, 0x73, 0x7b, 0xe9, 0x09, 0x1d, 0x42, 0xdf,
+	0xd7, 0x2f, 0x02, 0x5a, 0x5f, 0xb0, 0x38, 0xdb, 0x8f, 0xf6, 0x20, 0xff, 0x18, 0xe7, 0xbc, 0xd2,
+	0x7e, 0xb2, 0x8e, 0xff, 0x3f, 0x04, 0x0a, 0x4a, 0xeb, 0x74, 0x0f, 0x4a, 0x51, 0x6f, 0xa0, 0xff,
+	0x9f, 0x2f, 0x1f, 0xf3, 0xed, 0xa5, 0x79, 0x7d, 0xcd, 0x6e, 0x02, 0xe3, 0x10, 0x2a, 0x99, 0x5b,
+	0x95, 0xd5, 0xc8, 0xea, 0x2b, 0x9f, 0xd5, 0xc8, 0xba, 0x2b, 0x99, 0xa3, 0xcf, 0xe0, 0x42, 0x98,
+	0xbe, 0x54, 0xf5, 0xad, 0xb3, 0xcb, 0x5c, 0xf3, 0xad, 0xb5, 0xfb, 0x69, 0xaa, 0x77, 0xcc, 0x9f,
+	0x4e, 0x5b, 0xe4, 0xd7, 0xd3, 0x16, 0xf9, 0xed, 0xb4, 0x45, 0x7e, 0xfc, 0xbd, 0x95, 0x1b, 0x6e,
+	0xe8, 0x5f, 0xa8, 0xf7, 0xfe, 0x0d, 0x00, 0x00, 0xff, 0xff, 0xa0, 0x99, 0x60, 0x1b, 0x54, 0x0d,
+	0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -2172,10 +2152,9 @@ var _Store_serviceDesc = grpc.ServiceDesc{
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type ZeroClient interface {
-	//rpc WorkerHeartbeat( WorkerHeartbeatRequest) returns ( WorkerHeartbeatResponse){}
 	AllocID(ctx context.Context, in *ZeroAllocIDRequest, opts ...grpc.CallOption) (*ZeroAllocIDResponse, error)
-	//rpc ZeroStatus(ZeroStatusRequest) returns (ZeroStatusResponse){}
 	RegistStore(ctx context.Context, in *ZeroRegistStoreRequest, opts ...grpc.CallOption) (*ZeroRegistStoreResponse, error)
+	StreamHeartbeat(ctx context.Context, opts ...grpc.CallOption) (Zero_StreamHeartbeatClient, error)
 }
 
 type zeroClient struct {
@@ -2204,12 +2183,45 @@ func (c *zeroClient) RegistStore(ctx context.Context, in *ZeroRegistStoreRequest
 	return out, nil
 }
 
+func (c *zeroClient) StreamHeartbeat(ctx context.Context, opts ...grpc.CallOption) (Zero_StreamHeartbeatClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Zero_serviceDesc.Streams[0], "/aspirapb.Zero/StreamHeartbeat", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &zeroStreamHeartbeatClient{stream}
+	return x, nil
+}
+
+type Zero_StreamHeartbeatClient interface {
+	Send(*ZeroHeartbeatRequest) error
+	CloseAndRecv() (*ZeroHeartbeatResponse, error)
+	grpc.ClientStream
+}
+
+type zeroStreamHeartbeatClient struct {
+	grpc.ClientStream
+}
+
+func (x *zeroStreamHeartbeatClient) Send(m *ZeroHeartbeatRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *zeroStreamHeartbeatClient) CloseAndRecv() (*ZeroHeartbeatResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(ZeroHeartbeatResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ZeroServer is the server API for Zero service.
 type ZeroServer interface {
-	//rpc WorkerHeartbeat( WorkerHeartbeatRequest) returns ( WorkerHeartbeatResponse){}
 	AllocID(context.Context, *ZeroAllocIDRequest) (*ZeroAllocIDResponse, error)
-	//rpc ZeroStatus(ZeroStatusRequest) returns (ZeroStatusResponse){}
 	RegistStore(context.Context, *ZeroRegistStoreRequest) (*ZeroRegistStoreResponse, error)
+	StreamHeartbeat(Zero_StreamHeartbeatServer) error
 }
 
 // UnimplementedZeroServer can be embedded to have forward compatible implementations.
@@ -2221,6 +2233,9 @@ func (*UnimplementedZeroServer) AllocID(ctx context.Context, req *ZeroAllocIDReq
 }
 func (*UnimplementedZeroServer) RegistStore(ctx context.Context, req *ZeroRegistStoreRequest) (*ZeroRegistStoreResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegistStore not implemented")
+}
+func (*UnimplementedZeroServer) StreamHeartbeat(srv Zero_StreamHeartbeatServer) error {
+	return status.Errorf(codes.Unimplemented, "method StreamHeartbeat not implemented")
 }
 
 func RegisterZeroServer(s *grpc.Server, srv ZeroServer) {
@@ -2263,6 +2278,32 @@ func _Zero_RegistStore_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Zero_StreamHeartbeat_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ZeroServer).StreamHeartbeat(&zeroStreamHeartbeatServer{stream})
+}
+
+type Zero_StreamHeartbeatServer interface {
+	SendAndClose(*ZeroHeartbeatResponse) error
+	Recv() (*ZeroHeartbeatRequest, error)
+	grpc.ServerStream
+}
+
+type zeroStreamHeartbeatServer struct {
+	grpc.ServerStream
+}
+
+func (x *zeroStreamHeartbeatServer) SendAndClose(m *ZeroHeartbeatResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *zeroStreamHeartbeatServer) Recv() (*ZeroHeartbeatRequest, error) {
+	m := new(ZeroHeartbeatRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 var _Zero_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "aspirapb.Zero",
 	HandlerType: (*ZeroServer)(nil),
@@ -2276,7 +2317,13 @@ var _Zero_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Zero_RegistStore_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamHeartbeat",
+			Handler:       _Zero_StreamHeartbeat_Handler,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "aspirapb.proto",
 }
 
@@ -3034,7 +3081,7 @@ func (m *ZeroAllocIDResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *WorkerHeartbeatRequest) Marshal() (dAtA []byte, err error) {
+func (m *WorkerInfo) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -3044,12 +3091,12 @@ func (m *WorkerHeartbeatRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *WorkerHeartbeatRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *WorkerInfo) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *WorkerHeartbeatRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *WorkerInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -3058,9 +3105,19 @@ func (m *WorkerHeartbeatRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if m.Rd != nil {
+	if m.Leader {
+		i--
+		if m.Leader {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.RaftContext != nil {
 		{
-			size, err := m.Rd.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.RaftContext.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -3100,7 +3157,7 @@ func (m *WorkerHeartbeatRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	return len(dAtA) - i, nil
 }
 
-func (m *WorkerHeartbeatResponse) Marshal() (dAtA []byte, err error) {
+func (m *ZeroHeartbeatRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -3110,12 +3167,12 @@ func (m *WorkerHeartbeatResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *WorkerHeartbeatResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *ZeroHeartbeatRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *WorkerHeartbeatResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *ZeroHeartbeatRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -3124,10 +3181,39 @@ func (m *WorkerHeartbeatResponse) MarshalToSizedBuffer(dAtA []byte) (int, error)
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
+	if len(m.Workers) > 0 {
+		for k := range m.Workers {
+			v := m.Workers[k]
+			baseI := i
+			if v != nil {
+				{
+					size, err := v.MarshalToSizedBuffer(dAtA[:i])
+					if err != nil {
+						return 0, err
+					}
+					i -= size
+					i = encodeVarintAspirapb(dAtA, i, uint64(size))
+				}
+				i--
+				dAtA[i] = 0x12
+			}
+			i = encodeVarintAspirapb(dAtA, i, uint64(k))
+			i--
+			dAtA[i] = 0x8
+			i = encodeVarintAspirapb(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.StoreId != 0 {
+		i = encodeVarintAspirapb(dAtA, i, uint64(m.StoreId))
+		i--
+		dAtA[i] = 0x8
+	}
 	return len(dAtA) - i, nil
 }
 
-func (m *ZeroStatusRequest) Marshal() (dAtA []byte, err error) {
+func (m *ZeroHeartbeatResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -3137,39 +3223,12 @@ func (m *ZeroStatusRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *ZeroStatusRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *ZeroHeartbeatResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *ZeroStatusRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *ZeroStatusResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *ZeroStatusResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ZeroStatusResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *ZeroHeartbeatResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -3290,21 +3349,21 @@ func (m *ZeroStoreInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x2a
 	}
-	if len(m.CurrentGid) > 0 {
-		dAtA11 := make([]byte, len(m.CurrentGid)*10)
-		var j10 int
-		for _, num := range m.CurrentGid {
+	if len(m.CurrentGids) > 0 {
+		dAtA12 := make([]byte, len(m.CurrentGids)*10)
+		var j11 int
+		for _, num := range m.CurrentGids {
 			for num >= 1<<7 {
-				dAtA11[j10] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA12[j11] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j10++
+				j11++
 			}
-			dAtA11[j10] = uint8(num)
-			j10++
+			dAtA12[j11] = uint8(num)
+			j11++
 		}
-		i -= j10
-		copy(dAtA[i:], dAtA11[:j10])
-		i = encodeVarintAspirapb(dAtA, i, uint64(j10))
+		i -= j11
+		copy(dAtA[i:], dAtA12[:j11])
+		i = encodeVarintAspirapb(dAtA, i, uint64(j11))
 		i--
 		dAtA[i] = 0x22
 	}
@@ -3693,7 +3752,7 @@ func (m *ZeroAllocIDResponse) Size() (n int) {
 	return n
 }
 
-func (m *WorkerHeartbeatRequest) Size() (n int) {
+func (m *WorkerInfo) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -3711,41 +3770,48 @@ func (m *WorkerHeartbeatRequest) Size() (n int) {
 			n += mapEntrySize + 1 + sovAspirapb(uint64(mapEntrySize))
 		}
 	}
-	if m.Rd != nil {
-		l = m.Rd.Size()
+	if m.RaftContext != nil {
+		l = m.RaftContext.Size()
 		n += 1 + l + sovAspirapb(uint64(l))
 	}
+	if m.Leader {
+		n += 2
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
 
-func (m *WorkerHeartbeatResponse) Size() (n int) {
+func (m *ZeroHeartbeatRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
+	if m.StoreId != 0 {
+		n += 1 + sovAspirapb(uint64(m.StoreId))
+	}
+	if len(m.Workers) > 0 {
+		for k, v := range m.Workers {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+				l += 1 + sovAspirapb(uint64(l))
+			}
+			mapEntrySize := 1 + sovAspirapb(uint64(k)) + l
+			n += mapEntrySize + 1 + sovAspirapb(uint64(mapEntrySize))
+		}
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
 
-func (m *ZeroStatusRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *ZeroStatusResponse) Size() (n int) {
+func (m *ZeroHeartbeatResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -3811,9 +3877,9 @@ func (m *ZeroStoreInfo) Size() (n int) {
 	if m.EmtpySlots != 0 {
 		n += 1 + sovAspirapb(uint64(m.EmtpySlots))
 	}
-	if len(m.CurrentGid) > 0 {
+	if len(m.CurrentGids) > 0 {
 		l = 0
-		for _, e := range m.CurrentGid {
+		for _, e := range m.CurrentGids {
 			l += sovAspirapb(uint64(e))
 		}
 		n += 1 + sovAspirapb(uint64(l)) + l
@@ -5785,7 +5851,7 @@ func (m *ZeroAllocIDResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *WorkerHeartbeatRequest) Unmarshal(dAtA []byte) error {
+func (m *WorkerInfo) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -5808,10 +5874,10 @@ func (m *WorkerHeartbeatRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: WorkerHeartbeatRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: WorkerInfo: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: WorkerHeartbeatRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: WorkerInfo: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -5880,10 +5946,10 @@ func (m *WorkerHeartbeatRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Progress == nil {
-				m.Progress = make(map[uint64]WorkerHeartbeatRequest_ProgressType)
+				m.Progress = make(map[uint64]WorkerInfo_ProgressType)
 			}
 			var mapkey uint64
-			var mapvalue WorkerHeartbeatRequest_ProgressType
+			var mapvalue WorkerInfo_ProgressType
 			for iNdEx < postIndex {
 				entryPreIndex := iNdEx
 				var wire uint64
@@ -5927,7 +5993,7 @@ func (m *WorkerHeartbeatRequest) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						mapvalue |= WorkerHeartbeatRequest_ProgressType(b&0x7F) << shift
+						mapvalue |= WorkerInfo_ProgressType(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -5951,7 +6017,7 @@ func (m *WorkerHeartbeatRequest) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Rd", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RaftContext", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -5978,12 +6044,220 @@ func (m *WorkerHeartbeatRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Rd == nil {
-				m.Rd = &RaftContext{}
+			if m.RaftContext == nil {
+				m.RaftContext = &RaftContext{}
 			}
-			if err := m.Rd.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.RaftContext.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Leader", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Leader = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAspirapb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ZeroHeartbeatRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAspirapb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ZeroHeartbeatRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ZeroHeartbeatRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreId", wireType)
+			}
+			m.StoreId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StoreId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Workers", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAspirapb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAspirapb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Workers == nil {
+				m.Workers = make(map[uint64]*WorkerInfo)
+			}
+			var mapkey uint64
+			var mapvalue *WorkerInfo
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAspirapb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowAspirapb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+				} else if fieldNum == 2 {
+					var mapmsglen int
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowAspirapb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapmsglen |= int(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					if mapmsglen < 0 {
+						return ErrInvalidLengthAspirapb
+					}
+					postmsgIndex := iNdEx + mapmsglen
+					if postmsgIndex < 0 {
+						return ErrInvalidLengthAspirapb
+					}
+					if postmsgIndex > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = &WorkerInfo{}
+					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+						return err
+					}
+					iNdEx = postmsgIndex
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipAspirapb(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthAspirapb
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.Workers[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -6010,7 +6284,7 @@ func (m *WorkerHeartbeatRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *WorkerHeartbeatResponse) Unmarshal(dAtA []byte) error {
+func (m *ZeroHeartbeatResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -6033,118 +6307,10 @@ func (m *WorkerHeartbeatResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: WorkerHeartbeatResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: ZeroHeartbeatResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: WorkerHeartbeatResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		default:
-			iNdEx = preIndex
-			skippy, err := skipAspirapb(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthAspirapb
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthAspirapb
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *ZeroStatusRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowAspirapb
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ZeroStatusRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ZeroStatusRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		default:
-			iNdEx = preIndex
-			skippy, err := skipAspirapb(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthAspirapb
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthAspirapb
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *ZeroStatusResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowAspirapb
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ZeroStatusResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ZeroStatusResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: ZeroHeartbeatResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:
@@ -6498,7 +6664,7 @@ func (m *ZeroStoreInfo) Unmarshal(dAtA []byte) error {
 						break
 					}
 				}
-				m.CurrentGid = append(m.CurrentGid, v)
+				m.CurrentGids = append(m.CurrentGids, v)
 			} else if wireType == 2 {
 				var packedLen int
 				for shift := uint(0); ; shift += 7 {
@@ -6533,8 +6699,8 @@ func (m *ZeroStoreInfo) Unmarshal(dAtA []byte) error {
 					}
 				}
 				elementCount = count
-				if elementCount != 0 && len(m.CurrentGid) == 0 {
-					m.CurrentGid = make([]uint64, 0, elementCount)
+				if elementCount != 0 && len(m.CurrentGids) == 0 {
+					m.CurrentGids = make([]uint64, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint64
@@ -6552,10 +6718,10 @@ func (m *ZeroStoreInfo) Unmarshal(dAtA []byte) error {
 							break
 						}
 					}
-					m.CurrentGid = append(m.CurrentGid, v)
+					m.CurrentGids = append(m.CurrentGids, v)
 				}
 			} else {
-				return fmt.Errorf("proto: wrong wireType = %d for field CurrentGid", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field CurrentGids", wireType)
 			}
 		case 5:
 			if wireType != 2 {
