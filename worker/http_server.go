@@ -140,7 +140,8 @@ func (as *AspiraStore) add(c *gin.Context) {
 
 	joinCluster := c.PostForm("joinCluster")
 
-	err = as.startNewWorker(id, gid, as.addr, joinCluster)
+	//FIXME
+	err = as.startNewWorker(id, gid, as.addr, joinCluster, "")
 	if err != nil {
 		c.String(500, err.Error())
 		return

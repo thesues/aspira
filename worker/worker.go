@@ -23,6 +23,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -80,17 +82,14 @@ func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker
 	return as, nil
 }
 
-func (aw *AspiraWorker) WorkerInfo() *aspirapb.WorkerInfo {
-	return (*aspirapb.WorkerInfo)(atomic.LoadPointer(&aw.info))
+func (aw *AspiraWorker) WorkerStatus() *aspirapb.WorkerStatus {
+	return (*aspirapb.WorkerStatus)(atomic.LoadPointer(&aw.info))
 }
 
-func (aw *AspiraWorker) SetWorkerInfo(isLeader bool, p map[uint64]aspirapb.WorkerInfo_ProgressType) {
-
-	if isLeader {
-		info := &aspirapb.WorkerInfo{
-			State:       proto.Clone(aw.Node.State).(*aspirapb.MembershipState),
+func (aw *AspiraWorker) SetWorkerStatus(p map[uint64]aspirapb.WorkerStatus_ProgressType) {
+	if p != nil {
+		info := &aspirapb.WorkerStatus{
 			RaftContext: proto.Clone(aw.Node.RaftContext).(*aspirapb.RaftContext),
-			Leader:      isLeader,
 			Progress:    p,
 		}
 		atomic.StorePointer(&aw.info, unsafe.Pointer(info))
@@ -101,8 +100,20 @@ func (aw *AspiraWorker) SetWorkerInfo(isLeader bool, p map[uint64]aspirapb.Worke
 
 }
 
-func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
+func splitAndTrim(s string, sep string) []string {
+	parts := strings.Split(s, sep)
+	for i := 0; i < len(parts); i++ {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
 
+// InitAndStart
+//if has localstore, restart
+//if joinClusterAddr == "", initialCluster == "", start worker as leader
+//if initialCluster != "",  start worker in the initialCluster, the format of initialCluster is "100;127.0.0.1:3301,  101;127.0.0.1:3302, 104;127.0.0.1:3304" => ID;addr, ID;addr, ID;addr
+//if joinClusterAddr != "", join the remote addr(must be leader)
+func (aw *AspiraWorker) InitAndStart(joinClusterAddr, initialCluster string) error {
 	restart := aw.store.PastLife()
 	if restart {
 		snap, err := aw.store.Snapshot()
@@ -122,14 +133,48 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
 			}
 		}
 		aw.Node.SetRaft(raft.RestartNode(aw.Node.Cfg))
-	} else if len(joinClusterAddr) == 0 {
+	} else if len(joinClusterAddr) == 0 && len(initialCluster) == 0 {
 		xlog.Logger.Info("START")
 		rpeers := make([]raft.Peer, 1)
 		data, err := aw.Node.RaftContext.Marshal()
 		utils.Check(err)
 		rpeers[0] = raft.Peer{ID: aw.Node.Id, Context: data}
 		aw.Node.SetRaft(raft.StartNode(aw.Node.Cfg, rpeers))
-	} else {
+	} else if len(initialCluster) != 0 {
+		//initial start
+		xlog.Logger.Info("Initial START")
+		parts := strings.Split(initialCluster, ",")
+		rpeers := make([]raft.Peer, len(parts))
+		var valid bool
+		for i, part := range parts {
+
+			segs := splitAndTrim(part, ";")
+			if len(segs) != 2 {
+				return errors.Errorf("failed to parse initialcluster, segs len is not 2")
+			}
+
+			id, err := strconv.ParseUint(segs[0], 10, 64)
+			if err != nil {
+				return errors.Errorf("failed to parse initialcluster, seg[0] is %v, err is %v", segs[0], err)
+			}
+			xlog.Logger.Infof("worker:%d,  segs: %v, [%d, %s]", aw.Node.Id, segs, aw.Node.Id, aw.Node.MyAddr)
+			if id == aw.Node.Id && segs[1] == aw.Node.MyAddr {
+				valid = true
+			}
+			rc := aspirapb.RaftContext{
+				Id:   id,
+				Gid:  aw.Node.Gid,
+				Addr: segs[1],
+			}
+			data, err := rc.Marshal()
+			rpeers[i] = raft.Peer{ID: id, Context: data}
+		}
+
+		if !valid {
+			return errors.Errorf("initial start: initialCluster doesnot include myself")
+		}
+		aw.Node.SetRaft(raft.StartNode(aw.Node.Cfg, rpeers))
+	} else if len(joinClusterAddr) != 0 {
 		//join remote cluster
 		xlog.Logger.Info("Join remote cluster")
 		p := conn.GetPools().Connect(joinClusterAddr)
@@ -149,8 +194,7 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
 			time.Sleep(time.Duration(retry) * time.Second)
 			retry++
 			if retry > 10 {
-				xlog.Logger.Errorf("can not download remote snapshot from %s, quit", joinClusterAddr)
-				return
+				return errors.Errorf("can not download remote snapshot from %s, quit", joinClusterAddr)
 			}
 		}
 
@@ -174,8 +218,7 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
 			xlog.Logger.Errorf("Error while joining cluster: %v\n, try again", err)
 			retry++
 			if retry > 10 {
-				xlog.Logger.Errorf("Error while join remote cluster %+v, quit...", err)
-				return
+				return errors.Errorf("Error while join remote cluster %+v, quit...", err)
 			}
 			timeout *= 2
 			if timeout > 32*time.Second {
@@ -185,6 +228,8 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
 			cancel()
 		}
 		aw.Node.SetRaft(raft.StartNode(aw.Node.Cfg, nil))
+	} else { //if len(initialCluster) ! = 0 &&  len(joinAddress) != 0
+		xlog.Logger.Fatal("input parameter is %+v, and %+v", joinClusterAddr, initialCluster)
 	}
 
 	aw.stopper.RunWorker(func() {
@@ -196,6 +241,7 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr string) {
 		})
 	*/
 	aw.stopper.RunWorker(aw.Run)
+	return nil
 }
 
 var errInvalidProposal = errors.New("Invalid group proposal")
@@ -263,7 +309,7 @@ func (aw *AspiraWorker) Run() {
 					}
 				}
 
-				p := make(map[uint64]aspirapb.WorkerInfo_ProgressType)
+				p := make(map[uint64]aspirapb.WorkerStatus_ProgressType)
 
 				for id, progress := range n.Raft().Status().Progress {
 					/*
@@ -275,11 +321,11 @@ func (aw *AspiraWorker) Run() {
 					*/
 					switch progress.State {
 					case raft.ProgressStateProbe:
-						p[id] = aspirapb.WorkerInfo_Probe
+						p[id] = aspirapb.WorkerStatus_Probe
 					case raft.ProgressStateReplicate:
-						p[id] = aspirapb.WorkerInfo_Replicate
+						p[id] = aspirapb.WorkerStatus_Replicate
 					case raft.ProgressStateSnapshot:
-						p[id] = aspirapb.WorkerInfo_Snapshot
+						p[id] = aspirapb.WorkerStatus_Snapshot
 					default:
 						xlog.Logger.Fatal("unkown status type")
 					}
@@ -289,7 +335,7 @@ func (aw *AspiraWorker) Run() {
 					}
 
 				}
-				aw.SetWorkerInfo(true, p)
+				aw.SetWorkerStatus(p)
 			}
 
 			if !raft.IsEmptySnap(rd.Snapshot) {
@@ -356,7 +402,7 @@ func (aw *AspiraWorker) Run() {
 				for i := range rd.Messages {
 					aw.Node.Send(&rd.Messages[i])
 				}
-				aw.SetWorkerInfo(false, nil)
+				aw.SetWorkerStatus(nil)
 			}
 			span.Annotate(nil, "Sent messages")
 

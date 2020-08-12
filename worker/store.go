@@ -1,3 +1,17 @@
+/*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+ */
+
 package main
 
 import (
@@ -37,7 +51,11 @@ type AspiraStore struct {
 	httpServer *http.Server
 }
 
-func NewAspiraStore(name, addr, httpAddr string) *AspiraStore {
+func NewAspiraStore(name, addr, httpAddr string) (*AspiraStore, error) {
+
+	if strings.HasPrefix(addr, ":") {
+		return nil, errors.Errorf("must give full address, your addr is %s", addr)
+	}
 	as := &AspiraStore{
 		addr:     addr,
 		httpAddr: httpAddr,
@@ -46,7 +64,7 @@ func NewAspiraStore(name, addr, httpAddr string) *AspiraStore {
 		//stopper:  util.NewStopper(),
 	}
 
-	return as
+	return as, nil
 }
 
 func (as *AspiraStore) RegisterStore() error {
@@ -127,8 +145,16 @@ func (s *AspiraStore) LoadAndRun() {
 					xlog.Logger.Warnf("can not install worker, %v", err)
 					continue
 				}
-				s.workers[gid] = worker
-				go worker.InitAndStart("")
+				go func() {
+					if err = worker.InitAndStart("", ""); err != nil {
+						xlog.Logger.Warnf(err.Error())
+						return
+					}
+					s.Lock()
+					s.workers[gid] = worker
+					s.Unlock()
+
+				}()
 			}
 		}
 	}
@@ -218,25 +244,27 @@ func (s *AspiraStore) StartHeartbeat(zeroAddrs []string) {
 			s.Lock()
 			req := aspirapb.ZeroHeartbeatRequest{
 				StoreId: s.storeId,
-				Workers: make(map[uint64]*aspirapb.WorkerInfo),
+				Workers: make(map[uint64]*aspirapb.WorkerStatus),
 			}
 			for gid, worker := range s.workers {
-				req.Workers[gid] = worker.WorkerInfo()
-
+				req.Workers[gid] = worker.WorkerStatus()
 			}
 			s.Unlock()
 			err = stream.Send(&req)
 			if err != nil {
 				cancel()
+				xlog.Logger.Warnf("heatbeat stream returns %v, try again", err)
 				stream, cancel = s.getHeartbeatStream(zeroAddrs)
+			} else {
+				xlog.Logger.Debugf("Reported to zero %v", req)
 			}
-			xlog.Logger.Infof("Reported to zero %v", req)
 		}
 	}
 }
 
-func (s *AspiraStore) startNewWorker(id, gid uint64, addr, joinAddress string) error {
-	s.Lock()
+//startNewWorker non-block
+func (s *AspiraStore) startNewWorker(id, gid uint64, addr, joinAddress string, initialCluster string) error {
+
 	if _, ok := s.workers[gid]; ok {
 		s.Unlock()
 		return errors.Errorf("can not put the same group[%d] into the same store", gid)
@@ -250,10 +278,15 @@ func (s *AspiraStore) startNewWorker(id, gid uint64, addr, joinAddress string) e
 		s.Unlock()
 		return err
 	}
-	s.workers[gid] = x
-	s.Unlock()
-
-	go x.InitAndStart(joinAddress)
+	go func() {
+		if err = x.InitAndStart(joinAddress, initialCluster); err != nil {
+			xlog.Logger.Warnf(err.Error())
+			return
+		}
+		s.Lock()
+		s.workers[gid] = x
+		s.Unlock()
+	}()
 	return nil
 }
 
@@ -289,13 +322,16 @@ func main() {
 	}
 	xlog.InitLog(logOutputs)
 
-	as := NewAspiraStore(*name, *addr, *httpAddr)
+	as, err := NewAspiraStore(*name, *addr, *httpAddr)
+	if err != nil {
+		panic(err.Error())
+	}
 	as.ServGRPC()
 	as.ServHTTP()
 
 	//register to zeros
 	if err := as.RegisterStore(); err != nil {
-		xlog.Logger.Warnf("RegisterStore failed err is %+v", err.Error())
+		xlog.Logger.Fatal("RegisterStore failed err is %+v", err.Error())
 	}
 
 	as.LoadAndRun()

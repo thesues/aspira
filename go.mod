@@ -15,6 +15,7 @@ require (
 	github.com/golang/protobuf v1.3.3
 	github.com/golang/snappy v0.0.1
 	github.com/hashicorp/golang-lru v0.5.0
+	github.com/olekukonko/tablewriter v0.0.0-20170122224234-a0225b3f23b5
 	github.com/pkg/errors v0.8.1
 	github.com/stretchr/testify v1.4.0
 	github.com/swaggo/files v0.0.0-20190704085106-630677cd5c14

@@ -1,7 +1,22 @@
+/*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+ */
+
 package main
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -16,6 +31,7 @@ type ZeroTestSuite struct {
 }
 
 func (suite *ZeroTestSuite) SetupSuite() {
+	os.Remove("zero.log")
 	zConfig := &ZeroConfig{
 		Name:                "zero",
 		Dir:                 "zero.db",
@@ -36,6 +52,7 @@ func (suite *ZeroTestSuite) SetupSuite() {
 
 func (suite *ZeroTestSuite) TearDownSuite() {
 	suite.zero.EmbedEted.Close()
+	os.RemoveAll("zero.db")
 }
 
 func (suite *ZeroTestSuite) TestHeartbeatStream() {
@@ -57,23 +74,46 @@ func (suite *ZeroTestSuite) TestHeartbeatStream() {
 	stream, cancel, err := c.CreateHeartbeatStream()
 	suite.Nil(err)
 
+	//fake a worker 1000, gid 999
+	suite.zero.workers[1000] = &workerProgress{
+		workerInfo: &aspirapb.ZeroWorkerInfo{
+			WorkId:  1000,
+			StoreId: ids[0],
+			Gid:     999,
+		},
+		progress: aspirapb.WorkerStatus_Unknown,
+	}
+
+	fmt.Printf("store id is %d\n", ids[0])
+
+	suite.zero.gidToWorkerID[999] = []uint64{1000}
+
 	for i := 0; i < 10; i++ {
 		hb := aspirapb.ZeroHeartbeatRequest{
 			StoreId: ids[0],
-			Workers: nil,
+			Workers: map[uint64]*aspirapb.WorkerStatus{
+				999: {
+					Progress: map[uint64]aspirapb.WorkerStatus_ProgressType{
+						1000: aspirapb.WorkerStatus_Probe,
+					},
+					RaftContext: &aspirapb.RaftContext{
+						Id:   1000,
+						Gid:  999,
+						Addr: "localhost",
+					},
+				},
+			},
 		}
 		err = stream.Send(&hb)
 		if err != nil {
 			fmt.Printf(err.Error())
 		}
 		suite.Nil(err)
+		time.Sleep(500 * time.Millisecond)
 	}
-	time.Sleep(time.Second)
+	time.Sleep(2 * time.Second)
+	suite.Equal(aspirapb.WorkerStatus_Leader, suite.zero.workers[1000].progress)
 	cancel()
-
-	suite.zero.reLock.Lock()
-	suite.Equal(ids[0], suite.zero.clusterStore[ids[0]].StoreId)
-	suite.zero.reLock.Unlock()
 }
 
 func (suite *ZeroTestSuite) TestRegistStore() {
@@ -94,13 +134,13 @@ func (suite *ZeroTestSuite) TestRegistStore() {
 	err = c.RegisterSelfAsStore(req)
 	suite.Nil(err)
 
-	suite.zero.reLock.Lock()
-	defer suite.zero.reLock.Unlock()
-	v, ok := suite.zero.clusterStore[ids[0]]
+	suite.zero.RLock()
+	defer suite.zero.RUnlock()
+	v, ok := suite.zero.stores[ids[0]]
 	suite.True(ok)
-	suite.Equal(req.Address, v.Address)
-	suite.Equal(req.StoreId, v.StoreId)
-	suite.Equal(req.Name, v.Name)
+	suite.Equal(req.Address, v.storeInfo.Address)
+	suite.Equal(req.StoreId, v.storeInfo.StoreId)
+	suite.Equal(req.Name, v.storeInfo.Name)
 
 }
 

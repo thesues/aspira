@@ -17,11 +17,11 @@ func (p RandomReplication) AllocNewRaftGroup(gid uint64, replicate int, current 
 		return nil
 	}
 	sort.Slice(current, func(a, b int) bool {
-		return current[a].EmtpySlots > current[b].EmtpySlots
+		return current[a].Slots > current[b].Slots
 	})
 	var ret []*aspirapb.ZeroStoreInfo
 	for i := 0; i < len(current) && len(ret) < 3; i++ {
-		if current[i].EmtpySlots > 0 {
+		if current[i].Slots > 0 {
 			ret = append(ret, current[i])
 		} else {
 			return nil

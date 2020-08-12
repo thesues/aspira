@@ -41,9 +41,13 @@ func (suite *StoreTestSuite) SetupSuite() {
 		os.Mkdir(dir, 0755)
 		//defer os.RemoveAll(dir)
 	}
-	s1 := NewAspiraStore("db1", ":3301", ":8081")
-	s2 := NewAspiraStore("db2", ":3302", ":8082")
-	s3 := NewAspiraStore("db3", ":3303", ":8083")
+	s1, err := NewAspiraStore("db1", "127.0.0.1:3301", ":8081")
+	suite.Nil(err)
+	s2, err := NewAspiraStore("db2", "127.0.0.1:3302", ":8082")
+	suite.Nil(err)
+	s3, err := NewAspiraStore("db3", "127.0.0.1:3303", ":8083")
+	suite.Nil(err)
+
 	ss := []*AspiraStore{s1, s2, s3}
 	for k := range ss {
 		ss[k].ServGRPC()
@@ -166,4 +170,44 @@ func (suite *StoreTestSuite) TestPutGet() {
 
 func TestStoreTestSuite(t *testing.T) {
 	suite.Run(t, new(StoreTestSuite))
+}
+
+func TestStoreInitialCluster(t *testing.T) {
+	xlog.InitLog([]string{"test.log"})
+	for _, dir := range []string{"db1", "db2", "db3"} {
+		os.Mkdir(dir, 0755)
+		defer os.RemoveAll(dir)
+	}
+	s1, _ := NewAspiraStore("db1", "127.0.0.1:3301", ":8081")
+	s2, _ := NewAspiraStore("db2", "127.0.0.1:3302", ":8082")
+	s3, _ := NewAspiraStore("db3", "127.0.0.1:3303", ":8083")
+	ss := []*AspiraStore{s1, s2, s3}
+	for k := range ss {
+		ss[k].ServGRPC()
+		ss[k].ServHTTP()
+	}
+
+	cluster := "1;127.0.0.1:3301, 2;127.0.0.1:3302, 3;127.0.0.1:3303"
+	for i := 1; i <= 3; i++ {
+		req := aspirapb.AddWorkerRequest{
+			Gid:            1000,
+			Id:             uint64(i),
+			JoinCluster:    "",
+			InitialCluster: cluster,
+		}
+		ss[i-1].AddWorker(context.Background(), &req)
+	}
+	time.Sleep(5 * time.Second)
+	var result *aspirapb.WorkerStatus
+	for i := 0; i < 3; i++ {
+		w := ss[i].GetWorker(1000)
+		assert.NotNil(t, w)
+		s := w.WorkerStatus()
+		if s != nil {
+			result = s
+		}
+	}
+	assert.NotNil(t, result)
+	assert.Equal(t, 3, len(result.Progress))
+	fmt.Printf("%+v", result)
 }
