@@ -79,10 +79,6 @@ type Zero struct {
 // NewZero, initial in-memory struct of Zero
 func NewZero() *Zero {
 	z := new(Zero)
-	/*
-		z.clusterStore = make(map[uint64]*aspirapb.ZeroStoreInfo)
-		z.clusterWorker = make(map[uint64]*aspirapb.WorkerInfo)
-	*/
 	z.auditStopper = util.NewStopper()
 	return z
 }
@@ -94,6 +90,7 @@ func (z *Zero) listEtcdMembers() (*clientv3.MemberListResponse, error) {
 	return z.Client.MemberList(ctx)
 }
 
+/*
 func (z *Zero) getValue(key string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -106,6 +103,7 @@ func (z *Zero) getValue(key string) ([]byte, error) {
 	}
 	return resp.Kvs[0].Value, nil
 }
+*/
 
 func (z *Zero) getCurrentLeader() uint64 {
 	return uint64(z.EmbedEted.Server.Leader())
@@ -138,7 +136,7 @@ func (z *Zero) audit() {
 			return
 		case <-ticker.C:
 			//xlog.Logger.Info("audit")
-			xlog.Logger.Info(z.Display())
+			//xlog.Logger.Info(z.Display())
 		}
 	}
 }
@@ -162,16 +160,25 @@ func (z *Zero) LeaderLoop() {
 				z.auditStopper.RunWorker(z.audit)
 				atomic.StoreInt32(&z.isLeader, 1)
 				//load from etcd
+				var err error
 				z.Lock()
-
-				z.stores = make(map[uint64]*storeProgress)
-				z.workers = make(map[uint64]*workerProgress)
-				//FIXME, read from etcd
+				z.stores, err = LoadStores(z.Client)
+				if err != nil {
+					xlog.Logger.Warnf("can not load store", err.Error())
+					z.Unlock()
+					continue
+				}
+				z.workers, err = LoadWorkers(z.Client)
+				if err != nil {
+					xlog.Logger.Warnf("can not load workers", err.Error())
+					z.Unlock()
+					continue
+				}
 				z.gidToWorkerID = buildGidToWorker(z.workers)
 				z.Unlock()
 
-				//lost leader
 			} else if !z.amLeader() && atomic.LoadInt32(&z.isLeader) == 1 {
+				//lost leader
 				//stop audit
 				z.auditStopper.Stop()
 				atomic.StoreInt32(&z.isLeader, 0)
@@ -265,14 +272,15 @@ func (z *Zero) RegistStore(ctx context.Context, req *aspirapb.ZeroRegistStoreReq
 	}
 
 	key := storeKey(req.StoreId)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	txn := clientv3.NewKV(z.Client).Txn(ctx)
-	xxx, err := sInfo.Marshal()
+	val, err := sInfo.Marshal()
 	if err != nil {
 		xlog.Logger.Warnf(err.Error())
+		return nil, err
 	}
-	_, err = txn.Then(clientv3.OpPut(key, string(xxx))).Commit()
+	if err = EtcdSetKV(z.Client, key, val); err != nil {
+		return nil, err
+	}
+
 	return &aspirapb.ZeroRegistStoreResponse{}, nil
 	/*
 		var stores []*aspirapb.ZeroStoreInfo
@@ -303,7 +311,7 @@ func (z *Zero) AllocID(ctx context.Context, req *aspirapb.ZeroAllocIDRequest) (*
 	z.allocIdLock.Lock()
 	defer z.allocIdLock.Unlock()
 
-	curValue, err := z.getValue(idKey)
+	curValue, err := EtcdGetKV(z.Client, idKey)
 	if err != nil {
 		return nil, err
 	}

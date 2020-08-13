@@ -200,6 +200,7 @@ message ZeroHeartbeatRequest {
 }
 
 message ZeroHeartbeatResponse {
+	string errorMsg = 1;
 }
 
 

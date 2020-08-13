@@ -25,12 +25,13 @@ import (
 )
 
 func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error {
+
 	if !z.amLeader() {
 		return errors.Errorf("not a leader")
 	}
 	for {
 		req, err := stream.Recv()
-		xlog.Logger.Infof("%+v, err %v", req, err)
+		xlog.Logger.Infof("HB: %+v, err %v", req, err)
 		if !z.amLeader() {
 			return errors.Errorf("not a leader")
 		}
@@ -47,6 +48,7 @@ func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error
 		store, ok := z.stores[req.StoreId]
 		z.RUnlock()
 		if !ok {
+			xlog.Logger.Info()
 			return errors.Errorf("store %d not registered", req.StoreId)
 		}
 		//valid address
@@ -55,7 +57,7 @@ func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error
 		store.lastEcho = time.Now()
 
 		if req.Workers == nil {
-			return nil
+			continue
 		}
 
 		for gid, status := range req.Workers {
@@ -76,10 +78,12 @@ func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error
 				p, ok := status.Progress[workerID]
 				if !ok {
 					z.workers[workerID].progress = aspirapb.WorkerStatus_Unknown
+					//worker missing on report...set this worker missing in the futhure.
 					continue
 				}
+
 				//valid?
-				if worker.workerInfo.Gid != gid ||
+				if worker.workerInfo == nil || worker.workerInfo.Gid != gid ||
 					worker.workerInfo.StoreId != req.StoreId ||
 					worker.workerInfo.WorkId != workerID {
 					//FIXME

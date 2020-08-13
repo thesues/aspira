@@ -241,15 +241,17 @@ func (s *AspiraStore) StartHeartbeat(zeroAddrs []string) {
 	for {
 		select {
 		case <-ticker.C:
-			s.Lock()
 			req := aspirapb.ZeroHeartbeatRequest{
 				StoreId: s.storeId,
 				Workers: make(map[uint64]*aspirapb.WorkerStatus),
 			}
+
+			s.RLock()
 			for gid, worker := range s.workers {
 				req.Workers[gid] = worker.WorkerStatus()
 			}
-			s.Unlock()
+			s.RUnlock()
+
 			err = stream.Send(&req)
 			if err != nil {
 				cancel()
@@ -336,7 +338,7 @@ func main() {
 
 	as.LoadAndRun()
 
-	go as.StartHeartbeat([]string{"127.0.0.1:3401"})
+	go as.StartHeartbeat([]string{"127.0.0.1:3401", "127.0.0.1:3402", "127.0.0.1:3403"})
 
 	xlog.Logger.Infof("store is ready!")
 	sc := make(chan os.Signal, 1)

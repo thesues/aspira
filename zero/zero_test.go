@@ -74,20 +74,39 @@ func (suite *ZeroTestSuite) TestHeartbeatStream() {
 	stream, cancel, err := c.CreateHeartbeatStream()
 	suite.Nil(err)
 
-	//fake a worker 1000, gid 999
-	suite.zero.workers[1000] = &workerProgress{
-		workerInfo: &aspirapb.ZeroWorkerInfo{
-			WorkId:  1000,
-			StoreId: ids[0],
-			Gid:     999,
+	//fake a worker 1000,1001,1002, gid 999
+	suite.zero.workers = map[uint64]*workerProgress{
+		1000: {
+			workerInfo: &aspirapb.ZeroWorkerInfo{
+				WorkId:  1000,
+				StoreId: ids[0],
+				Gid:     999,
+			},
+			progress: aspirapb.WorkerStatus_Unknown,
 		},
-		progress: aspirapb.WorkerStatus_Unknown,
+		1001: {
+			workerInfo: &aspirapb.ZeroWorkerInfo{
+				WorkId:  1001,
+				StoreId: ids[0],
+				Gid:     999,
+			},
+			progress: aspirapb.WorkerStatus_Unknown,
+		},
+		1002: {
+			workerInfo: &aspirapb.ZeroWorkerInfo{
+				WorkId:  1002,
+				StoreId: ids[0],
+				Gid:     999,
+			},
+			progress: aspirapb.WorkerStatus_Unknown,
+		},
 	}
 
 	fmt.Printf("store id is %d\n", ids[0])
 
-	suite.zero.gidToWorkerID[999] = []uint64{1000}
+	suite.zero.gidToWorkerID[999] = []uint64{1000, 1001, 1002}
 
+	//leader heartbeat
 	for i := 0; i < 10; i++ {
 		hb := aspirapb.ZeroHeartbeatRequest{
 			StoreId: ids[0],
@@ -95,6 +114,8 @@ func (suite *ZeroTestSuite) TestHeartbeatStream() {
 				999: {
 					Progress: map[uint64]aspirapb.WorkerStatus_ProgressType{
 						1000: aspirapb.WorkerStatus_Probe,
+						1001: aspirapb.WorkerStatus_Replicate,
+						1002: aspirapb.WorkerStatus_Snapshot,
 					},
 					RaftContext: &aspirapb.RaftContext{
 						Id:   1000,
@@ -109,7 +130,7 @@ func (suite *ZeroTestSuite) TestHeartbeatStream() {
 			fmt.Printf(err.Error())
 		}
 		suite.Nil(err)
-		time.Sleep(500 * time.Millisecond)
+		//time.Sleep(500 * time.Millisecond)
 	}
 	time.Sleep(2 * time.Second)
 	suite.Equal(aspirapb.WorkerStatus_Leader, suite.zero.workers[1000].progress)
