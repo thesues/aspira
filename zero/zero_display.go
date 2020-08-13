@@ -20,6 +20,7 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	_ "github.com/thesues/aspira/utils"
+	"github.com/thesues/aspira/xlog"
 )
 
 func (z *Zero) Display() string {
@@ -31,6 +32,10 @@ func (z *Zero) Display() string {
 	table.SetAutoMergeCells(true)
 	table.SetHeader([]string{"GID", "WorkerID", "StoreID", "StoreAddress", "Progress"})
 	table.SetRowLine(true)
+
+	xlog.Logger.Infof("%+v", z.gidToWorkerID)
+	xlog.Logger.Infof("%+v", z.workers)
+	xlog.Logger.Infof("%+v", z.stores)
 
 	//merge gid
 	for gid, workerIDs := range z.gidToWorkerID {

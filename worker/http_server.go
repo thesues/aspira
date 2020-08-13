@@ -126,6 +126,7 @@ func (as *AspiraStore) put(c *gin.Context) {
 // @Failure 400 {string} string ""
 // @Failure 500 {string} string ""
 // @Router /addworker/ [post]
+/*
 func (as *AspiraStore) add(c *gin.Context) {
 	id, err := strconv.ParseUint(c.PostForm("id"), 10, 64)
 	if err != nil {
@@ -149,6 +150,7 @@ func (as *AspiraStore) add(c *gin.Context) {
 	c.String(200, "")
 	return
 }
+*/
 
 // @Summary Get an object
 // @Param oid path integer true "Object ID"
@@ -227,7 +229,7 @@ func (as *AspiraStore) ServHTTP() {
 	r.POST("/put/:gid/", as.put)
 	r.GET("/get/:gid/:oid", as.get)
 	r.GET("/list", as.list)
-	r.POST("/addworker", as.add)
+	//r.POST("/addworker", as.add)
 
 	//http api docs
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

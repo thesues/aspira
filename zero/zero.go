@@ -109,8 +109,13 @@ func (z *Zero) getCurrentLeader() uint64 {
 	return uint64(z.EmbedEted.Server.Leader())
 }
 
-func (z *Zero) amLeader() bool {
+//_amLeader is call in func leadLoop
+func (z *Zero) _amLeader() bool {
 	return z.Id == z.getCurrentLeader()
+}
+
+func (z *Zero) amLeader() bool {
+	return atomic.LoadInt32(&z.isLeader) == 1
 }
 
 /*
@@ -156,9 +161,7 @@ func (z *Zero) LeaderLoop() {
 		select {
 		case <-ticker.C:
 			//became leader
-			if z.amLeader() && atomic.LoadInt32(&z.isLeader) == 0 {
-				z.auditStopper.RunWorker(z.audit)
-				atomic.StoreInt32(&z.isLeader, 1)
+			if z._amLeader() && atomic.LoadInt32(&z.isLeader) == 0 {
 				//load from etcd
 				var err error
 				z.Lock()
@@ -176,8 +179,10 @@ func (z *Zero) LeaderLoop() {
 				}
 				z.gidToWorkerID = buildGidToWorker(z.workers)
 				z.Unlock()
+				atomic.StoreInt32(&z.isLeader, 1)
+				z.auditStopper.RunWorker(z.audit)
 
-			} else if !z.amLeader() && atomic.LoadInt32(&z.isLeader) == 1 {
+			} else if !z._amLeader() && atomic.LoadInt32(&z.isLeader) == 1 {
 				//lost leader
 				//stop audit
 				z.auditStopper.Stop()

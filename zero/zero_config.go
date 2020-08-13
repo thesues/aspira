@@ -21,7 +21,8 @@ type ZeroConfig struct {
 	InitialCluster      string // --initial-cluster
 	InitialClusterState string // --initial-cluster-state
 	ClusterToken        string
-	GrpcUrl             string //--listen-grpc
+	GrpcUrl             string // --listen-grpc
+	HttpUrl             string // --listen-http
 }
 
 func parseUrls(s string) (ret []url.URL, err error) {
@@ -110,20 +111,28 @@ func NewConfig() *ZeroConfig {
 				Name:        "initial-cluster",
 				Usage:       "initial cluster configuration for bootstrapping",
 				Destination: &config.InitialCluster,
+				Required:    true,
 			},
 			&cli.StringFlag{
 				Name:        "initial-cluster-state",
 				Usage:       "",
 				Destination: &config.InitialClusterState,
+				Required:    true,
 			},
 			&cli.StringFlag{
 				Name:        "initial-cluster-token",
 				Usage:       "",
 				Destination: &config.ClusterToken,
+				Required:    true,
 			},
 			&cli.StringFlag{
 				Name:        "listen-grpc",
 				Destination: &config.GrpcUrl,
+				Required:    true,
+			},
+			&cli.StringFlag{
+				Name:        "listen-http",
+				Destination: &config.HttpUrl,
 				Required:    true,
 			},
 		},

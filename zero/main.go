@@ -42,7 +42,9 @@ func (z *Zero) Serve(config *ZeroConfig) {
 	z.Cfg = config
 	z.policy = RandomReplication{}
 
+	z.ServHTTP()
 	z.ServGRPC()
+
 	go z.LeaderLoop()
 
 	//register zero as GRPC service
