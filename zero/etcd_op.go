@@ -12,14 +12,61 @@ import (
 	"github.com/thesues/aspira/protos/aspirapb"
 )
 
-//TODO, add version id, compare version ID and set...
+var (
+	versionKey = "AspiraVersionKey"
+)
+
 func EtcdSetKV(c *clientv3.Client, key string, val []byte, opts ...clientv3.OpOption) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	kv := clientv3.NewKV(c)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	_, err := kv.Put(ctx, key, string(val), opts...)
 	return err
 }
+
+//TODO, add version id, compare version ID and set...
+/*
+func EtcdSetKV(c *clientv3.Client, key string, val []byte, opts ...clientv3.OpOption) error {
+
+	currentVersion, err := EtcdGetKV(c, versionKey)
+	if err != nil {
+		return err
+	}
+
+	//build txn, compare and set ID
+	var cmp clientv3.Cmp
+	var curr uint64
+
+	if currentVersion == nil {
+		cmp = clientv3.Compare(clientv3.CreateRevision(versionKey), "=", 0)
+	} else {
+		curr = binary.BigEndian.Uint64(currentVersion)
+		cmp = clientv3.Compare(clientv3.Value(versionKey), "=", string(currentVersion))
+	}
+
+	var newVersion [8]byte
+	binary.BigEndian.PutUint64(newVersion[:], curr+1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	txn := clientv3.NewKV(c).Txn(ctx)
+
+	t := txn.If(cmp)
+	task := t.Then(
+		clientv3.OpPut(versionKey, string(newVersion[:])),
+		clientv3.OpPut(key, string(val), opts...))
+
+	for {
+
+		res, err := task.Commit()
+		if res.Succeeded == false || err != nil {
+			continue
+		}
+		break
+	}
+	return nil
+}
+*/
 
 func EtcdGetKV(c *clientv3.Client, key string, opts ...clientv3.OpOption) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -34,7 +81,7 @@ func EtcdGetKV(c *clientv3.Client, key string, opts ...clientv3.OpOption) ([]byt
 	return resp.Kvs[0].Value, nil
 }
 
-func LoadStores(c *clientv3.Client) (map[uint64]*storeProgress, error) {
+func loadStores(c *clientv3.Client) (map[uint64]*storeProgress, error) {
 	kvs, err := EtcdRange(c, "store")
 	if err != nil {
 		return nil, err
@@ -58,7 +105,7 @@ func LoadStores(c *clientv3.Client) (map[uint64]*storeProgress, error) {
 
 }
 
-func LoadWorkers(c *clientv3.Client) (map[uint64]*workerProgress, error) {
+func loadWorkers(c *clientv3.Client) (map[uint64]*workerProgress, error) {
 	kvs, err := EtcdRange(c, "worker")
 	if err != nil {
 		return nil, err

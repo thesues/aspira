@@ -2,37 +2,6 @@ info:
   contact: {}
   license: {}
 paths:
-  /addworker/:
-    post:
-      parameters:
-      - description: raft ID
-        in: formData
-        name: id
-        required: true
-        type: integer
-      - description: Group ID
-        in: formData
-        name: gid
-        required: true
-        type: integer
-      - description: remote cluster addr
-        in: formData
-        name: joinCluster
-        type: string
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: body
-        "400":
-          description: Bad Request
-          schema:
-            type: string
-        "500":
-          description: Internal Server Error
-          schema:
-            type: string
-      summary: add new worker
   /del/{gid}/{oid}:
     delete:
       parameters:

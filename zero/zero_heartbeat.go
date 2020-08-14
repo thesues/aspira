@@ -31,7 +31,6 @@ func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error
 	}
 	for {
 		req, err := stream.Recv()
-		xlog.Logger.Infof("HB: %+v, err %v", req, err)
 		if !z.amLeader() {
 			return errors.Errorf("not a leader")
 		}
@@ -84,10 +83,12 @@ func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error
 
 				//valid?
 				if worker.workerInfo == nil || worker.workerInfo.Gid != gid ||
-					worker.workerInfo.StoreId != req.StoreId ||
 					worker.workerInfo.WorkId != workerID {
 					//FIXME
-					xlog.Logger.Warnf("reported worker's status should be %+v, ", worker.workerInfo)
+					xlog.Logger.Warnf("reported worker's status should be %+v, but yours is [gid: %d, storeId: %d, id: %d]",
+						worker.workerInfo,
+						gid, workerID,
+					)
 					continue
 				}
 				z.workers[workerID].progress = p

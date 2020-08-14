@@ -17,43 +17,87 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"sort"
+	"time"
 
 	"github.com/olekukonko/tablewriter"
 	_ "github.com/thesues/aspira/utils"
 	"github.com/thesues/aspira/xlog"
 )
 
-func (z *Zero) Display() string {
+//less function
+func cmpString(a, b string) bool {
+	if len(a) < len(b) {
+		return true
+	} else if len(a) > len(b) {
+		return false
+	}
+	//len
+	for i := 0; i < len(a); i++ {
+		if a[i]-'0' < b[i]-'0' {
+			return true
+		} else if a[i] > b[i] {
+			return false
+		}
+	}
+	return false
+}
+
+func (z *Zero) DisplayStore() string {
+	z.RLock()
+	defer z.RUnlock()
+	var data [][]string
+	for _, s := range z.stores {
+		var row []string
+		row = append(row, []string{
+			fmt.Sprintf("%d", s.storeInfo.StoreId),
+			fmt.Sprintf("%s", s.storeInfo.Address),
+			fmt.Sprintf("%v", s.lastEcho.Format(time.RFC3339))}...)
+		data = append(data, row)
+	}
+	output := new(bytes.Buffer)
+	table := tablewriter.NewWriter(output)
+	table.SetHeader([]string{"StoreID", "ADDRESS", "LastEcho"})
+
+	sort.SliceStable(data, func(i, j int) bool {
+		return cmpString(data[i][0], data[j][0])
+	})
+	table.AppendBulk(data)
+	table.Render()
+	return string(output.Bytes())
+
+}
+func (z *Zero) DisplayWorker() string {
 	output := new(bytes.Buffer)
 	var data [][]string
 	table := tablewriter.NewWriter(output)
 	z.RLock()
 	defer z.RUnlock()
-	table.SetAutoMergeCells(true)
+	//table.SetAutoMergeCells(true)
 	table.SetHeader([]string{"GID", "WorkerID", "StoreID", "StoreAddress", "Progress"})
-	table.SetRowLine(true)
+	//table.SetRowLine(true)
 
-	xlog.Logger.Infof("%+v", z.gidToWorkerID)
 	xlog.Logger.Infof("%+v", z.workers)
 	xlog.Logger.Infof("%+v", z.stores)
 
-	//merge gid
-	for gid, workerIDs := range z.gidToWorkerID {
+	for _, w := range z.workers {
 		var row []string
-		for _, workerID := range workerIDs {
-			row = append(row, fmt.Sprintf("%d", gid))
-			p := z.workers[workerID]
-			storeID := p.workerInfo.StoreId
-			store := z.stores[storeID]
-			row = append(row, []string{
-				fmt.Sprintf("%d", workerID),
-				fmt.Sprintf("%d", storeID),
-				store.storeInfo.Address,
-				p.progress.String()}...)
-
-		}
+		row = append(row, []string{
+			fmt.Sprintf("%d", w.workerInfo.Gid),
+			fmt.Sprintf("%d", w.workerInfo.WorkId),
+			fmt.Sprintf("%d", w.workerInfo.StoreId),
+			z.stores[w.workerInfo.StoreId].storeInfo.Address,
+			w.progress.String()}...)
 		data = append(data, row)
 	}
+
+	sort.SliceStable(data, func(a, b int) bool {
+		//compare gid first, and workerId
+		if data[a][0] == data[b][0] {
+			return cmpString(data[a][1], data[b][1])
+		}
+		return cmpString(data[a][0], data[b][0])
+	})
 	table.AppendBulk(data)
 	table.Render()
 	return string(output.Bytes())

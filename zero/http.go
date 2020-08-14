@@ -16,7 +16,7 @@ func (z *Zero) ServHTTP() {
 	r := gin.New()
 
 	r.GET("/", func(c *gin.Context) {
-		c.String(200, z.Display())
+		c.String(200, z.DisplayStore()+"\n\n"+z.DisplayWorker())
 	})
 
 	srv := &http.Server{

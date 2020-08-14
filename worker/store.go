@@ -322,7 +322,9 @@ func main() {
 	if *logToStdout {
 		logOutputs = append(logOutputs, os.Stdout.Name())
 	}
-	xlog.InitLog(logOutputs)
+
+	//xlog.InitLog(logOutputs)
+	xlog.InitLog(nil)
 
 	as, err := NewAspiraStore(*name, *addr, *httpAddr)
 	if err != nil {

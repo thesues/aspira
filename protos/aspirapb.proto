@@ -229,10 +229,17 @@ message ZeroStoreInfo {
 	string name = 4;
 }
 
+message ZeroAddWorkerGroupRequest{
+}
+
+message ZeroAddWorkerGroupResponse {
+}
+
 //zero service
 service Zero {
 	rpc AllocID(ZeroAllocIDRequest) returns (ZeroAllocIDResponse){}
 	rpc RegistStore(ZeroRegistStoreRequest) returns (ZeroRegistStoreResponse) {}
 	rpc StreamHeartbeat(stream ZeroHeartbeatRequest) returns (ZeroHeartbeatResponse){}
-	//rpc AddWorkerGroup()
+	rpc AddWorkerGroup(ZeroAddWorkerGroupRequest) returns (ZeroAddWorkerGroupResponse) {}
+	//register worker
 }

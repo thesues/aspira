@@ -18,21 +18,23 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/embed"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
+	"github.com/thesues/aspira/utils"
 	_ "github.com/thesues/aspira/utils"
 	"github.com/thesues/aspira/xlog"
 	"github.com/thesues/cannyls-go/util"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-
-	"github.com/coreos/etcd/embed"
 )
 
 var (
@@ -146,12 +148,15 @@ func (z *Zero) audit() {
 	}
 }
 
-func buildGidToWorker(workers map[uint64]*workerProgress) map[uint64][]uint64 {
+//buildGidToWorker needs extern lock
+func (z *Zero) buildGidToWorker() {
 	gidToWorkerId := make(map[uint64][]uint64)
-	for workerId, w := range workers {
-		gidToWorkerId[workerId] = append(gidToWorkerId[workerId], w.workerInfo.WorkId)
+	for _, w := range z.workers {
+		xlog.Logger.Infof("GID is %d ", w.workerInfo.Gid)
+		gidToWorkerId[w.workerInfo.Gid] = append(gidToWorkerId[w.workerInfo.Gid], w.workerInfo.WorkId)
 	}
-	return gidToWorkerId
+
+	z.gidToWorkerID = gidToWorkerId
 }
 
 func (z *Zero) LeaderLoop() {
@@ -163,22 +168,24 @@ func (z *Zero) LeaderLoop() {
 			//became leader
 			if z._amLeader() && atomic.LoadInt32(&z.isLeader) == 0 {
 				//load from etcd
+				xlog.Logger.Infof("new leader, read from etcd")
 				var err error
 				z.Lock()
-				z.stores, err = LoadStores(z.Client)
+				z.stores, err = loadStores(z.Client)
 				if err != nil {
 					xlog.Logger.Warnf("can not load store", err.Error())
 					z.Unlock()
 					continue
 				}
-				z.workers, err = LoadWorkers(z.Client)
+				z.workers, err = loadWorkers(z.Client)
 				if err != nil {
 					xlog.Logger.Warnf("can not load workers", err.Error())
 					z.Unlock()
 					continue
 				}
-				z.gidToWorkerID = buildGidToWorker(z.workers)
+				z.buildGidToWorker()
 				z.Unlock()
+
 				atomic.StoreInt32(&z.isLeader, 1)
 				z.auditStopper.RunWorker(z.audit)
 
@@ -252,9 +259,133 @@ func (z *Zero) buildRaftGroup(stores []*aspirapb.ZeroStoreInfo) error {
 }
 */
 
+var (
+	ErrNotLeader = errors.Errorf("not a leader")
+)
+
+func formatInitalCluster(stores []*aspirapb.ZeroStoreInfo, ids []uint64) string {
+	remotes := make([]string, len(stores))
+	for i := 0; i < len(stores); i++ {
+		remotes[i] = fmt.Sprintf("%d;%s", ids[i], stores[i].Address)
+	}
+	return strings.Join(remotes, ",")
+}
+
+func (z *Zero) AddWorkerGroup(ctx context.Context, req *aspirapb.ZeroAddWorkerGroupRequest) (*aspirapb.ZeroAddWorkerGroupResponse, error) {
+	if !z.amLeader() {
+		return nil, ErrNotLeader
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	alloReq := aspirapb.ZeroAllocIDRequest{
+		Count: 4,
+	}
+	res, err := z.AllocID(ctx, &alloReq)
+	cancel()
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uint64, 4)
+	ids[0] = res.Start
+	for i := 1; i < 4; i++ {
+		ids[i] = ids[i-1] + 1
+	}
+
+	gid := ids[0]
+	ids = ids[1:]
+	//the first id is GID
+
+	var candidatStores []*aspirapb.ZeroStoreInfo
+	z.RLock()
+	for _, store := range z.stores {
+		//if time.Now().Sub(store.lastEcho) < time.Minute {
+		candidatStores = append(candidatStores, proto.Clone(store.storeInfo).(*aspirapb.ZeroStoreInfo))
+		//}
+	}
+	z.RUnlock()
+
+	targetStores := z.policy.AllocNewRaftGroup(ids[0], 3, candidatStores)
+	if targetStores == nil || len(targetStores) != len(ids) {
+		return nil, errors.Errorf("can not alloc enough workers in this cluster")
+	}
+
+	stopper := util.NewStopper()
+	resultChan := make(chan error, len(targetStores))
+	initialCluster := formatInitalCluster(targetStores, ids)
+	//TODO, maybe use hbstream's connect to add worker.
+
+	//TODO call etcdAddWorker, if success, call following rpc...
+	for i := 0; i < len(targetStores); i++ {
+		myTarget := targetStores[i]
+		id := ids[i]
+		stopper.RunWorker(func() {
+			conn, err := grpc.Dial(myTarget.Address, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
+			defer conn.Close()
+			if err != nil {
+				resultChan <- err
+				return
+			}
+			client := aspirapb.NewStoreClient(conn)
+			req := aspirapb.AddWorkerRequest{
+				Gid:            gid,
+				Id:             id,
+				InitialCluster: initialCluster,
+			}
+			xlog.Logger.Infof("AddWorkerRequest %+v", req)
+			_, err = client.AddWorker(context.Background(), &req)
+			if err == nil {
+				//save worker to etcd
+				val := aspirapb.ZeroWorkerInfo{
+					WorkId:  id,
+					StoreId: myTarget.StoreId,
+					Gid:     gid,
+				}
+				data, err := val.Marshal()
+				utils.Check(err)
+
+				err = EtcdSetKV(z.Client, workerKey(id), data)
+
+				if err != nil {
+					resultChan <- err
+					return
+				}
+
+				xlog.Logger.Infof("wrote to etcd %s", workerKey(id))
+				//change memory state
+				z.Lock()
+				z.workers[id] = &workerProgress{
+					workerInfo: &val,
+					progress:   aspirapb.WorkerStatus_Unknown,
+				}
+				z.buildGidToWorker()
+				z.Unlock()
+			} else {
+				resultChan <- nil
+			}
+		})
+	}
+	stopper.Wait()
+	close(resultChan)
+	allSuccess := true
+	for myErr := range resultChan {
+		if myErr != nil {
+			allSuccess = false
+			err = errors.Errorf("[zero], one of remote error: [%+v]", myErr)
+			break
+		}
+	}
+	if allSuccess {
+		return &aspirapb.ZeroAddWorkerGroupResponse{}, nil
+	}
+	xlog.Logger.Warnf("need repair")
+
+	//save the information in etcd, it will be repair int
+	return nil, err
+}
+
 func (z *Zero) RegistStore(ctx context.Context, req *aspirapb.ZeroRegistStoreRequest) (*aspirapb.ZeroRegistStoreResponse, error) {
 	if !z.amLeader() {
-		return &aspirapb.ZeroRegistStoreResponse{}, errors.Errorf("not a leader")
+		return &aspirapb.ZeroRegistStoreResponse{}, ErrNotLeader
 	}
 	z.Lock()
 	defer z.Unlock()
@@ -287,24 +418,6 @@ func (z *Zero) RegistStore(ctx context.Context, req *aspirapb.ZeroRegistStoreReq
 	}
 
 	return &aspirapb.ZeroRegistStoreResponse{}, nil
-	/*
-		var stores []*aspirapb.ZeroStoreInfo
-		for _, v := range z.clusterStore {
-			stores = append(stores, v)
-		}
-
-		targetStore := z.policy.AllocNewRaftGroup(req.Gid, 3, stores)
-		if targetStore == nil {
-			return &aspirapb.ZeroRegistStoreResponse{}, errors.Errorf("can not allocate for %d", req.Gid)
-		}
-
-		//asdf
-		//
-		res := &aspirapb.ZeroRegistStoreResponse{
-			Stores: targetStore,
-		}
-		return res, nil
-	*/
 }
 
 func (z *Zero) AllocID(ctx context.Context, req *aspirapb.ZeroAllocIDRequest) (*aspirapb.ZeroAllocIDResponse, error) {

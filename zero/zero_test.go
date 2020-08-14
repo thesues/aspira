@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/thesues/aspira/protos/aspirapb"
 	zeroclient "github.com/thesues/aspira/zero_client"
+	"gopkg.in/go-playground/assert.v1"
 )
 
 type ZeroTestSuite struct {
@@ -167,4 +168,22 @@ func (suite *ZeroTestSuite) TestRegistStore() {
 
 func TestZeroTestSuite(t *testing.T) {
 	suite.Run(t, new(ZeroTestSuite))
+}
+
+func TestCmpString(t *testing.T) {
+	cases := []struct {
+		a string
+		b string
+		r bool
+	}{
+		{"1", "2", true},
+		{"100", "2", false},
+		{"10", "10", false},
+		{"8", "9", true},
+		{"90", "89", false},
+	}
+	for _, tt := range cases {
+		assert.Equal(t, tt.r, cmpString(tt.a, tt.b))
+	}
+
 }

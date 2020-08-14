@@ -65,7 +65,7 @@ func (suite *EtcdUtilTestSuite) TestLoadStoreWorker() {
 		suite.Nil(err)
 		EtcdSetKV(c, key, val)
 	}
-	stores, err := LoadStores(c)
+	stores, err := loadStores(c)
 	suite.Nil(err)
 
 	suite.Equal(uint64(99), stores[99].storeInfo.StoreId)

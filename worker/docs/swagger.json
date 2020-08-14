@@ -5,53 +5,6 @@
         "license": {}
     },
     "paths": {
-        "/addworker/": {
-            "post": {
-                "summary": "add new worker",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "raft ID",
-                        "name": "id",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Group ID",
-                        "name": "gid",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "remote cluster addr",
-                        "name": "joinCluster",
-                        "in": "formData"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "body"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/del/{gid}/{oid}": {
             "delete": {
                 "summary": "Delete an object",

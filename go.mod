@@ -15,7 +15,7 @@ require (
 	github.com/golang/protobuf v1.3.3
 	github.com/golang/snappy v0.0.1
 	github.com/hashicorp/golang-lru v0.5.0
-	github.com/olekukonko/tablewriter v0.0.0-20170122224234-a0225b3f23b5
+	github.com/olekukonko/tablewriter v0.0.4
 	github.com/pkg/errors v0.8.1
 	github.com/stretchr/testify v1.4.0
 	github.com/swaggo/files v0.0.0-20190704085106-630677cd5c14
@@ -30,6 +30,7 @@ require (
 	go.uber.org/zap v1.14.1
 	golang.org/x/net v0.0.0-20191014212845-da9a3fd4c582
 	google.golang.org/grpc v1.26.0
+	gopkg.in/go-playground/assert.v1 v1.2.1
 )
 
 replace github.com/coreos/bbolt => go.etcd.io/bbolt v1.3.3

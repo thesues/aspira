@@ -102,6 +102,7 @@ func sputAspira(c *cli.Context) error {
 	return nil
 }
 
+/*
 func addWorker(c *cli.Context) error {
 	gid := c.Uint64("gid")
 	id := c.Uint64("id")
@@ -124,6 +125,23 @@ func addWorker(c *cli.Context) error {
 		return err
 	}
 	fmt.Printf("Success\n")
+	return nil
+}
+*/
+
+func addGroup(c *cli.Context) error {
+	cluster := c.String("cluster")
+	conn, err := grpc.Dial(cluster, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client := aspirapb.NewZeroClient(conn)
+
+	if _, err = client.AddWorkerGroup(context.Background(), &aspirapb.ZeroAddWorkerGroupRequest{}); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -207,16 +225,27 @@ func main() {
 			Action: getAspira,
 		},
 		{
-			Name:  "add_worker",
-			Usage: "add_worker --localStore <local> --remoteCluster <remote> --gid <gid> --id <id>",
+			Name:  "zero_add_group",
+			Usage: "zero_add_group --cluster <path>",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "localStore", Required: true},
-				&cli.Uint64Flag{Name: "gid", Required: true},
-				&cli.Uint64Flag{Name: "id", Required: true},
-				&cli.StringFlag{Name: "remoteCluster", Required: false},
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
 			},
-			Action: addWorker,
+			Action: addGroup,
 		},
+		/*
+			{
+				Name:  "add_worker",
+				Usage: "add_worker --localStore <local> --remoteCluster <remote> --gid <gid> --id <id>",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "localStore", Required: true},
+					&cli.Uint64Flag{Name: "gid", Required: true},
+					&cli.Uint64Flag{Name: "id", Required: true},
+					&cli.StringFlag{Name: "remoteCluster", Required: false},
+				},
+				Action: addWorker,
+			},
+		*/
+
 	}
 
 	err := app.Run(os.Args)
