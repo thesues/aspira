@@ -34,43 +34,57 @@ import (
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/conn"
 	"github.com/thesues/aspira/protos/aspirapb"
+	"github.com/thesues/aspira/utils"
 	"github.com/thesues/aspira/xlog"
 	zeroclient "github.com/thesues/aspira/zero_client"
 	otrace "go.opencensus.io/trace"
 	"google.golang.org/grpc"
 )
 
+type Gid uint64
+type Id uint64
+
 type AspiraStore struct {
 	sync.RWMutex
-	addr       string //grpc address
-	httpAddr   string //http address
-	name       string
-	storeId    uint64
-	workers    map[uint64]*AspiraWorker
+	addr     string //grpc address
+	httpAddr string //http address
+	name     string
+	storeId  uint64
+	workers  map[Gid]*AspiraWorker
+	//prepareTasks map[Id]*aspirapb.AddWorkerRequest
 	grpcServer *grpc.Server //internal comms, raftServer is registered on grpcServer
 	httpServer *http.Server
+	zClient    *zeroclient.ZeroClient
+	zeroAddrs  []string
 }
 
-func NewAspiraStore(name, addr, httpAddr string) (*AspiraStore, error) {
+func createDirectoryIfNotExist(path string) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		os.Mkdir(path, 0755)
+	}
+}
+
+func NewAspiraStore(name, addr, httpAddr string, zeroAddrs []string) (*AspiraStore, error) {
 
 	if strings.HasPrefix(addr, ":") {
 		return nil, errors.Errorf("must give full address, your addr is %s", addr)
 	}
 	as := &AspiraStore{
-		addr:     addr,
-		httpAddr: httpAddr,
-		name:     name,
-		workers:  make(map[uint64]*AspiraWorker),
-		//stopper:  util.NewStopper(),
+		addr:      addr,
+		httpAddr:  httpAddr,
+		name:      name,
+		workers:   make(map[Gid]*AspiraWorker),
+		zClient:   zeroclient.NewZeroClient(),
+		zeroAddrs: zeroAddrs,
 	}
-
+	createDirectoryIfNotExist(fmt.Sprintf("%s/prepare", as.name))
 	return as, nil
 }
 
 func (as *AspiraStore) RegisterStore() error {
 	xlog.Logger.Infof("RegisterStore")
-	storeIdPath := fmt.Sprintf("%s/store_id", as.name)
-	idString, err := ioutil.ReadFile(storeIdPath)
+	storeIDPath := fmt.Sprintf("%s/store_id", as.name)
+	idString, err := ioutil.ReadFile(storeIDPath)
 	if err == nil {
 		id, err := strconv.ParseUint(string(idString), 10, 64)
 		if err != nil {
@@ -80,12 +94,8 @@ func (as *AspiraStore) RegisterStore() error {
 		return nil
 	}
 
-	zeroClient := zeroclient.NewZeroClient()
-	if err = zeroClient.Connect([]string{"127.0.0.1:3401", "127.0.0.1:3402", "127.0.0.1:3403"}); err != nil {
-		return err
-	}
 	//TODO loop for a while?
-	ids, err := zeroClient.AllocID(1)
+	ids, err := as.zClient.AllocID(1)
 	if err != nil {
 		return err
 	}
@@ -96,13 +106,13 @@ func (as *AspiraStore) RegisterStore() error {
 		Name:       as.name,
 	}
 
-	if err = zeroClient.RegisterSelfAsStore(&req); err != nil {
+	if err = as.zClient.RegisterSelfAsStore(&req); err != nil {
 		return err
 	}
 
 	as.storeId = ids[0]
 
-	ioutil.WriteFile(storeIdPath, []byte(fmt.Sprintf("%d", as.storeId)), 0644)
+	ioutil.WriteFile(storeIDPath, []byte(fmt.Sprintf("%d", as.storeId)), 0644)
 	xlog.Logger.Infof("success to register to zero")
 	return nil
 }
@@ -150,21 +160,24 @@ func (s *AspiraStore) LoadAndRun() {
 						xlog.Logger.Warnf(err.Error())
 						return
 					}
-					s.Lock()
-					s.workers[gid] = worker
-					s.Unlock()
-
+					s.SetWorker(gid, worker)
 				}()
 			}
 		}
 	}
 }
 
+func (s *AspiraStore) SetWorker(gid uint64, w *AspiraWorker) {
+	s.Lock()
+	defer s.Unlock()
+	s.workers[Gid(gid)] = w
+}
+
 //GetWorker, thread-safe
 func (s *AspiraStore) GetWorker(gid uint64) *AspiraWorker {
 	s.RLock()
 	defer s.RUnlock()
-	n, ok := s.workers[gid]
+	n, ok := s.workers[Gid(gid)]
 	if !ok {
 		return nil
 	}
@@ -207,29 +220,70 @@ func (as *AspiraStore) ServGRPC() {
 }
 
 //getHeartbeatStream must return a valid hearbeat stream
-func (s *AspiraStore) getHeartbeatStream(zeroAddrs []string) (aspirapb.Zero_StreamHeartbeatClient, context.CancelFunc) {
-
-Connect:
-	c := zeroclient.NewZeroClient()
-	for {
-		if err := c.Connect(zeroAddrs); err != nil {
-			xlog.Logger.Warnf("can not connect to any of [%+v]", zeroAddrs)
-			time.Sleep(50 * time.Millisecond)
-		}
-		break
-	}
-
-	stream, cancel, err := c.CreateHeartbeatStream()
+/*
+func (s *AspiraStore) getHeartbeatStream() (aspirapb.Zero_StreamHeartbeatClient, context.CancelFunc) {
+	stream, cancel, err := s.zClient.CreateHeartbeatStream()
 	if err != nil {
 		xlog.Logger.Warnf(err.Error())
-		c.Close()
-		goto Connect
+		for {
+			stream, cancel, err = s.zClient.CreateHeartbeatStream()
+			if err != nil {
+				xlog.Logger.Warnf(err.Error())
+				time.Sleep(1 * time.Second)
+			}
+			break
+		}
+
 	}
 	return stream, cancel
 }
+*/
+
+func (as *AspiraStore) StartCheckPrepare() {
+	ticker := time.NewTicker(5 * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			prepares, err := as.loadPrepares()
+			if err != nil {
+				xlog.Logger.Error(err.Error)
+				continue
+			}
+
+			//addWorker
+			//or delete prepare
+			for _, req := range prepares {
+				res, err := as.zClient.QueryWorker(req.Id, req.Gid, as.storeId)
+				if err != nil || res == aspirapb.TnxType_retry {
+					continue
+				}
+				switch res {
+				case aspirapb.TnxType_commit:
+					err = as.startNewWorker(req.Id, req.Gid, as.addr, req.JoinCluster, req.InitialCluster)
+					if err != nil {
+						xlog.Logger.Warnf("can not start NewWorker")
+					}
+				case aspirapb.TnxType_abort:
+					as.Lock()
+					//delete the prepare file
+					fileName := preparePath(as.name, req.Id)
+					err = os.Remove(fileName)
+					if err != nil {
+						xlog.Logger.Warnf("get above msg, removing file %s failed, [%v]", fileName, err)
+					}
+					as.Unlock()
+				default:
+					xlog.Logger.Warnf("unexpected type %v", res)
+					break
+				}
+
+			}
+		}
+	}
+}
 
 //StartHeartbeat collect local worker info and report to zero
-func (s *AspiraStore) StartHeartbeat(zeroAddrs []string) {
+func (as *AspiraStore) StartHeartbeat() {
 
 	ticker := time.NewTicker(5 * time.Second)
 
@@ -237,26 +291,31 @@ func (s *AspiraStore) StartHeartbeat(zeroAddrs []string) {
 	var cancel context.CancelFunc
 	var err error
 
-	stream, cancel = s.getHeartbeatStream(zeroAddrs)
+	stream, cancel, err = as.zClient.CreateHeartbeatStream()
+
 	for {
 		select {
 		case <-ticker.C:
 			req := aspirapb.ZeroHeartbeatRequest{
-				StoreId: s.storeId,
+				StoreId: as.storeId,
 				Workers: make(map[uint64]*aspirapb.WorkerStatus),
 			}
 
-			s.RLock()
-			for gid, worker := range s.workers {
-				req.Workers[gid] = worker.WorkerStatus()
+			as.RLock()
+			for gid, worker := range as.workers {
+				req.Workers[uint64(gid)] = worker.WorkerStatus()
 			}
-			s.RUnlock()
-
+			as.RUnlock()
+			if stream == nil {
+				xlog.Logger.Errorf("can not send hb to zero")
+				stream, cancel, _ = as.zClient.CreateHeartbeatStream()
+				continue
+			}
 			err = stream.Send(&req)
 			if err != nil {
 				cancel()
-				xlog.Logger.Warnf("heatbeat stream returns %v, try again", err)
-				stream, cancel = s.getHeartbeatStream(zeroAddrs)
+				stream, cancel, _ = as.zClient.CreateHeartbeatStream()
+				continue
 			} else {
 				xlog.Logger.Debugf("Reported to zero %v", req)
 			}
@@ -264,36 +323,98 @@ func (s *AspiraStore) StartHeartbeat(zeroAddrs []string) {
 	}
 }
 
-//startNewWorker non-block
-func (s *AspiraStore) startNewWorker(id, gid uint64, addr, joinAddress string, initialCluster string) error {
+func (as *AspiraStore) removePrepare(id uint64) {
+	if _, err := os.Stat(preparePath(as.name, id)); err == nil {
+		os.Remove(preparePath(as.name, id))
+	}
+}
 
-	if _, ok := s.workers[gid]; ok {
-		s.Unlock()
+//startNewWorker non-block
+func (as *AspiraStore) startNewWorker(id, gid uint64, addr, joinAddress string, initialCluster string) error {
+
+	//if it has prepare task file, delete the file.
+
+	w := as.GetWorker(gid)
+	if w != nil {
+		as.removePrepare(id)
 		return errors.Errorf("can not put the same group[%d] into the same store", gid)
 	}
-	path := fmt.Sprintf("%s/worker_%d_%d/%d.lusf", s.name, gid, id, id)
+
+	as.Lock()
+	path := fmt.Sprintf("%s/worker_%d_%d/%d.lusf", as.name, gid, id, id)
 	if err := os.Mkdir(filepath.Dir(path), 0755); err != nil {
+		as.Unlock()
 		return nil
 	}
 	x, err := NewAspiraWorker(id, gid, addr, path)
 	if err != nil {
-		s.Unlock()
+		as.Unlock()
 		return err
 	}
+
+	as.removePrepare(id)
+
+	as.Unlock()
 	go func() {
 		if err = x.InitAndStart(joinAddress, initialCluster); err != nil {
 			xlog.Logger.Warnf(err.Error())
 			return
 		}
-		s.Lock()
-		s.workers[gid] = x
-		s.Unlock()
+		as.SetWorker(gid, x)
 	}()
 	return nil
 }
 
-func (s *AspiraStore) StopWorker(id, gid uint64) error {
+func (as *AspiraStore) StopWorker(id, gid uint64) error {
 	return nil
+}
+
+func (as *AspiraStore) savePrepare(addWorkerRequest *aspirapb.AddWorkerRequest) error {
+	path := fmt.Sprintf("%s/prepare/prepare_%d", as.name, addWorkerRequest.Id)
+	data, err := addWorkerRequest.Marshal()
+	utils.Check(err)
+
+	file, err := os.OpenFile(path, os.O_SYNC|os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		xlog.Logger.Infof("can not create file %s", path)
+		return err
+	}
+	defer file.Close()
+	_, err = file.Write(data)
+	return err
+
+}
+
+func preparePath(name string, id uint64) string {
+	return fmt.Sprintf("%s/prepare/prepare_%d", name, id)
+}
+func (as *AspiraStore) loadPrepares() (map[Id]*aspirapb.AddWorkerRequest, error) {
+	prepareTasks := make(map[Id]*aspirapb.AddWorkerRequest)
+
+	as.Lock()
+	defer as.Unlock()
+	pattern := fmt.Sprintf("%s/prepare/prepare_*", as.name)
+	paths, err := filepath.Glob(pattern)
+	if err != nil {
+		return prepareTasks, err
+	}
+
+	for _, path := range paths {
+		fileInfo, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if time.Now().Sub(fileInfo.ModTime()) < 30*time.Second { //ignore the latest prepare File
+			continue
+		}
+		data, err := ioutil.ReadFile(path)
+		utils.Check(err)
+		var req aspirapb.AddWorkerRequest
+		err = req.Unmarshal(data)
+		utils.Check(err)
+		prepareTasks[Id(req.Id)] = &req
+	}
+	return prepareTasks, nil
 }
 
 var (
@@ -323,12 +444,14 @@ func main() {
 		logOutputs = append(logOutputs, os.Stdout.Name())
 	}
 
-	//xlog.InitLog(logOutputs)
-	xlog.InitLog(nil)
+	xlog.InitLog(logOutputs)
 
-	as, err := NewAspiraStore(*name, *addr, *httpAddr)
+	as, err := NewAspiraStore(*name, *addr, *httpAddr, []string{"127.0.0.1:3401", "127.0.0.1:3402", "127.0.0.1:3403"})
 	if err != nil {
 		panic(err.Error())
+	}
+	if as.zClient.Connect(as.zeroAddrs) != nil {
+		xlog.Logger.Warnf("can not connected to zeros")
 	}
 	as.ServGRPC()
 	as.ServHTTP()
@@ -340,7 +463,8 @@ func main() {
 
 	as.LoadAndRun()
 
-	go as.StartHeartbeat([]string{"127.0.0.1:3401", "127.0.0.1:3402", "127.0.0.1:3403"})
+	go as.StartHeartbeat()
+	go as.StartCheckPrepare()
 
 	xlog.Logger.Infof("store is ready!")
 	sc := make(chan os.Signal, 1)

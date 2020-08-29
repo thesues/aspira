@@ -14,11 +14,22 @@ import (
 
 // AddWorker
 func (as *AspiraStore) AddWorker(ctx context.Context, request *aspirapb.AddWorkerRequest) (*aspirapb.AddWorkerResponse, error) {
+
+	//check Gid is unique in  AspiraStore
 	if w := as.GetWorker(request.Gid); w != nil {
 		return &aspirapb.AddWorkerResponse{}, errors.Errorf("can not add the same gid into one store")
 	}
-	err := as.startNewWorker(request.Id, request.Gid, as.addr, request.JoinCluster, request.InitialCluster)
-	return &aspirapb.AddWorkerResponse{}, err
+
+	if request.Type == aspirapb.TnxType_commit {
+		err := as.startNewWorker(request.Id, request.Gid, as.addr, request.JoinCluster, request.InitialCluster)
+		return &aspirapb.AddWorkerResponse{}, err
+	} else if request.Type == aspirapb.TnxType_prepare {
+		err := as.savePrepare(request)
+		return &aspirapb.AddWorkerResponse{}, err
+	}
+
+	xlog.Logger.Errorf("AddworkerRequest type is %v", request.Type)
+	return nil, errors.Errorf("AddworkerRequest type is %v", request.Type)
 }
 
 // Put

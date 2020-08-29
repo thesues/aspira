@@ -312,9 +312,7 @@ func (z *Zero) AddWorkerGroup(ctx context.Context, req *aspirapb.ZeroAddWorkerGr
 	stopper := util.NewStopper()
 	resultChan := make(chan error, len(targetStores))
 	initialCluster := formatInitalCluster(targetStores, ids)
-	//TODO, maybe use hbstream's connect to add worker.
 
-	//TODO call etcdAddWorker, if success, call following rpc...
 	for i := 0; i < len(targetStores); i++ {
 		myTarget := targetStores[i]
 		id := ids[i]
@@ -330,57 +328,85 @@ func (z *Zero) AddWorkerGroup(ctx context.Context, req *aspirapb.ZeroAddWorkerGr
 				Gid:            gid,
 				Id:             id,
 				InitialCluster: initialCluster,
+				Type:           aspirapb.TnxType_prepare,
 			}
+
 			xlog.Logger.Infof("AddWorkerRequest %+v", req)
 			_, err = client.AddWorker(context.Background(), &req)
-			if err == nil {
-				//save worker to etcd
-				val := aspirapb.ZeroWorkerInfo{
-					WorkId:  id,
-					StoreId: myTarget.StoreId,
-					Gid:     gid,
-				}
-				data, err := val.Marshal()
-				utils.Check(err)
-
-				err = EtcdSetKV(z.Client, workerKey(id), data)
-
-				if err != nil {
-					resultChan <- err
-					return
-				}
-
-				xlog.Logger.Infof("wrote to etcd %s", workerKey(id))
-				//change memory state
-				z.Lock()
-				z.workers[id] = &workerProgress{
-					workerInfo: &val,
-					progress:   aspirapb.WorkerStatus_Unknown,
-				}
-				z.buildGidToWorker()
-				z.Unlock()
-			} else {
-				resultChan <- nil
-			}
+			resultChan <- err
 		})
 	}
 	stopper.Wait()
 	close(resultChan)
-	allSuccess := true
 	for myErr := range resultChan {
 		if myErr != nil {
-			allSuccess = false
 			err = errors.Errorf("[zero], one of remote error: [%+v]", myErr)
-			break
+			xlog.Logger.Warnf(err.Error())
+			return &aspirapb.ZeroAddWorkerGroupResponse{}, err
 		}
 	}
-	if allSuccess {
-		return &aspirapb.ZeroAddWorkerGroupResponse{}, nil
-	}
-	xlog.Logger.Warnf("need repair")
 
-	//save the information in etcd, it will be repair int
-	return nil, err
+	var ops []clientv3.Op
+	for i := 0; i < len(targetStores); i++ {
+		myTarget := targetStores[i]
+		id := ids[i]
+		val := aspirapb.ZeroWorkerInfo{
+			WorkId:  id,
+			StoreId: myTarget.StoreId,
+			Gid:     gid,
+		}
+		data, err := val.Marshal()
+		utils.Check(err)
+		ops = append(ops, clientv3.OpPut(workerKey(id), string(data)))
+	}
+	err = EtctSetKVS(z.Client, ops)
+	if err != nil {
+		return &aspirapb.ZeroAddWorkerGroupResponse{}, err
+	}
+
+	xlog.Logger.Infof("wrote to etcd")
+
+	//change memory state
+	z.Lock()
+	for i, id := range ids {
+		z.workers[id] = &workerProgress{
+			workerInfo: &aspirapb.ZeroWorkerInfo{
+				WorkId:  id,
+				Gid:     gid,
+				StoreId: targetStores[i].StoreId,
+			},
+			progress: aspirapb.WorkerStatus_Unknown,
+		}
+	}
+	z.buildGidToWorker()
+	z.Unlock()
+
+	//send commit info
+	//TODO reuse conns
+	for i := 0; i < len(targetStores); i++ {
+		myTarget := targetStores[i]
+		id := ids[i]
+		go func() {
+			conn, err := grpc.Dial(myTarget.Address, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
+			defer conn.Close()
+			if err != nil {
+				xlog.Logger.Warnf("can not connect store %s", myTarget.Address)
+				return
+			}
+			client := aspirapb.NewStoreClient(conn)
+			req := aspirapb.AddWorkerRequest{
+				Gid:            gid,
+				Id:             id,
+				InitialCluster: initialCluster,
+				Type:           aspirapb.TnxType_commit,
+			}
+			_, err = client.AddWorker(context.Background(), &req)
+			if err != nil {
+				xlog.Logger.Warnf(err.Error())
+			}
+		}()
+	}
+	return &aspirapb.ZeroAddWorkerGroupResponse{}, nil
 }
 
 func (z *Zero) RegistStore(ctx context.Context, req *aspirapb.ZeroRegistStoreRequest) (*aspirapb.ZeroRegistStoreResponse, error) {
@@ -458,4 +484,17 @@ func (z *Zero) AllocID(ctx context.Context, req *aspirapb.ZeroAllocIDRequest) (*
 		return nil, errors.New("generate id failed, we may not leader")
 	}
 	return &aspirapb.ZeroAllocIDResponse{Start: curr, End: curr + uint64(req.Count)}, nil
+}
+
+func (z *Zero) QueryWorker(ctx context.Context, req *aspirapb.ZeroQueryWorkerRequest) (*aspirapb.ZeroQueryWorkerResponse, error) {
+	z.RLock()
+	defer z.RLocker()
+	p, ok := z.workers[req.Id]
+	if !ok {
+		return &aspirapb.ZeroQueryWorkerResponse{Type: aspirapb.TnxType_abort}, nil
+	}
+	if p.workerInfo.Gid == req.Gid && p.workerInfo.StoreId == req.StoreId {
+		return &aspirapb.ZeroQueryWorkerResponse{Type: aspirapb.TnxType_commit}, nil
+	}
+	return &aspirapb.ZeroQueryWorkerResponse{Type: aspirapb.TnxType_abort}, nil
 }

@@ -208,7 +208,7 @@ func (as *AspiraStore) list(c *gin.Context) {
 	var gids []uint64
 	as.RLock()
 	for k := range as.workers {
-		gids = append(gids, k)
+		gids = append(gids, uint64(k))
 	}
 	as.RUnlock()
 	c.JSON(200, gids)

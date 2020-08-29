@@ -37,6 +37,11 @@ func (client *ZeroClient) Close() {
 	for _, c := range client.Conns {
 		c.Close()
 	}
+	client.Conns = nil
+}
+
+func (client *ZeroClient) Alive() bool {
+	return len(client.Conns) > 0
 }
 
 // Connect to Zero's grpc service, if all of connect failed to connnect, return error
@@ -103,11 +108,38 @@ func (client *ZeroClient) CreateHeartbeatStream() (aspirapb.Zero_StreamHeartbeat
 				loop++
 				current = (current + 1) % len(client.Conns)
 				if loop > 3*len(client.Conns) {
-					return nil, nil, errors.Errorf("RegisterSelfAsStore failed")
+					return nil, nil, errors.Errorf("CreateHeartbeatStream failed")
 				}
 				continue
 			}
 			return stream, cancel, nil
+		}
+	}
+}
+
+func (client *ZeroClient) QueryWorker(id, gid, storeID uint64) (aspirapb.TnxType, error) {
+	loop := 0
+	current := client.lastLeader
+	for {
+		if client.Conns != nil && client.Conns[current] != nil {
+			zc := aspirapb.NewZeroClient(client.Conns[current])
+			ctx, cancel := context.WithCancel(context.Background())
+			req := aspirapb.ZeroQueryWorkerRequest{
+				Id:      id,
+				Gid:     gid,
+				StoreId: storeID,
+			}
+			res, err := zc.QueryWorker(ctx, &req)
+			cancel()
+			if err != nil {
+				current = (current + 1) % len(client.Conns)
+				loop++
+				if loop > len(client.Conns)*2 {
+					return aspirapb.TnxType_retry, errors.Errorf("QueryWorker failed")
+				}
+				continue
+			}
+			return res.Type, nil
 		}
 	}
 }

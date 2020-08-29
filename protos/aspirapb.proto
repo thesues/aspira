@@ -121,11 +121,20 @@ service Raft {
 
 
 
+enum TnxType {
+		prepare = 0;
+		commit = 1;
+		abort = 3;
+		retry = 4;
+}
+
+
 message AddWorkerRequest {
 	uint64 gid = 1;
  	uint64 id = 2;
 	string joinCluster = 3;
 	string initialCluster = 4;
+	TnxType type = 5;
 }
 
 message AddWorkerResponse {
@@ -235,11 +244,23 @@ message ZeroAddWorkerGroupRequest{
 message ZeroAddWorkerGroupResponse {
 }
 
+
+message ZeroQueryWorkerRequest {
+	uint64 gid = 1;
+ 	uint64 id = 2;
+	uint64 storeId = 3;
+}
+
+message ZeroQueryWorkerResponse {
+	TnxType type = 1;
+
+}
+
 //zero service
 service Zero {
 	rpc AllocID(ZeroAllocIDRequest) returns (ZeroAllocIDResponse){}
 	rpc RegistStore(ZeroRegistStoreRequest) returns (ZeroRegistStoreResponse) {}
 	rpc StreamHeartbeat(stream ZeroHeartbeatRequest) returns (ZeroHeartbeatResponse){}
 	rpc AddWorkerGroup(ZeroAddWorkerGroupRequest) returns (ZeroAddWorkerGroupResponse) {}
-	//register worker
+	rpc QueryWorker(ZeroQueryWorkerRequest) returns (ZeroQueryWorkerResponse) {} 
 }

@@ -312,13 +312,6 @@ func (aw *AspiraWorker) Run() {
 				p := make(map[uint64]aspirapb.WorkerStatus_ProgressType)
 
 				for id, progress := range n.Raft().Status().Progress {
-					/*
-						if id == n.Id {
-							xlog.Logger.Infof("%d is now %+v", id, true)
-							continue
-						}
-						xlog.Logger.Infof("%d is now %+v", id, progress.RecentActive)
-					*/
 					switch progress.State {
 					case raft.ProgressStateProbe:
 						p[id] = aspirapb.WorkerStatus_Probe
