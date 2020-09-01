@@ -67,13 +67,15 @@ type Zero struct {
 	Cfg         *ZeroConfig
 	allocIdLock sync.Mutex //used in AllocID
 
-	sync.RWMutex //protect gidToWorkerID, workers, stores
+	sync.RWMutex //protect gidToWorkerID, workers, stores, gidFreeBytes
 	isLeader     int32
 	auditStopper *util.Stopper
 
-	gidToWorkerID map[uint64][]uint64        //gid => workerID
-	workers       map[uint64]*workerProgress //workerID => workinfo{storeID, gid}, "progress", where workinfo is saved in etcd.
-	stores        map[uint64]*storeProgress  //storeID=> storeInfo{name, address}, "last echo" where storeInfo is saved in etcd.
+	gidToWorkerID map[uint64][]uint64 //gid => workerID, update when AllocWorked is commited.
+	gidFreeBytes  *sync.Map           //gid => FreeBytes, update when get heartbeat from worker.
+
+	workers map[uint64]*workerProgress //workerID => workinfo{storeID, gid}, "progress", where workinfo is saved in etcd.
+	stores  map[uint64]*storeProgress  //storeID=> storeInfo{name, address}, "last echo" where storeInfo is saved in etcd.
 
 	policy RebalancePolicy
 }
@@ -119,21 +121,6 @@ func (z *Zero) _amLeader() bool {
 func (z *Zero) amLeader() bool {
 	return atomic.LoadInt32(&z.isLeader) == 1
 }
-
-/*
-func (z *Zero) Report() {
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			if z.amLeader() {
-				xlog.Logger.Infof("I am leader %d", z.Id)
-			}
-		}
-	}
-}
-*/
 
 func (z *Zero) audit() {
 	ticker := time.NewTicker(time.Second)
@@ -186,6 +173,7 @@ func (z *Zero) LeaderLoop() {
 				z.buildGidToWorker()
 				z.Unlock()
 
+				z.gidFreeBytes = new(sync.Map)
 				atomic.StoreInt32(&z.isLeader, 1)
 				z.auditStopper.RunWorker(z.audit)
 
@@ -497,4 +485,48 @@ func (z *Zero) QueryWorker(ctx context.Context, req *aspirapb.ZeroQueryWorkerReq
 		return &aspirapb.ZeroQueryWorkerResponse{Type: aspirapb.TnxType_commit}, nil
 	}
 	return &aspirapb.ZeroQueryWorkerResponse{Type: aspirapb.TnxType_abort}, nil
+}
+
+//func (z *Zero)
+func (z *Zero) ClusterStatus(ctx context.Context, request *aspirapb.ClusterStatusRequest) (*aspirapb.ClusterStatusResponse, error) {
+	z.RLock()
+	defer z.RUnlock()
+	var groups []*aspirapb.GroupStatus
+	for gid, workers := range z.gidToWorkerID {
+		gs := aspirapb.GroupStatus{
+			Gid:       gid,
+			FreeBytes: z.getFreeBytes(gid),
+		}
+		var stores []*aspirapb.ZeroStoreInfo //leader is the first, if no leader, continue
+
+		//one group has 3 workers, find the corresponding store respectly.
+		var hasLeader bool
+		for _, workerID := range workers {
+			w := z.workers[workerID]
+
+			//assert
+			if w.workerInfo.Gid != gid {
+				xlog.Logger.Warnf("internal data maybe not corrent")
+				continue
+			}
+			s := z.stores[w.workerInfo.StoreId].storeInfo
+			//if the worker is leader, put the leader in front
+			if w.progress == aspirapb.WorkerStatus_Leader {
+				stores = append([]*aspirapb.ZeroStoreInfo{s}, stores...)
+				hasLeader = true
+			} else {
+				stores = append(stores, s)
+			}
+		}
+		if !hasLeader {
+			xlog.Logger.Infof("group [%d] has not leader", gid)
+			continue
+		}
+		gs.Stores = stores
+		groups = append(groups, &gs)
+	}
+
+	return &aspirapb.ClusterStatusResponse{
+		Groups: groups,
+	}, nil
 }

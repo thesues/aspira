@@ -67,6 +67,13 @@ func (z *Zero) DisplayStore() string {
 	return string(output.Bytes())
 
 }
+
+func (z *Zero) getFreeBytes(gid uint64) uint64 {
+	value, _ := z.gidFreeBytes.Load(gid)
+	freeBytes := value.(uint64)
+	return freeBytes
+}
+
 func (z *Zero) DisplayWorker() string {
 	output := new(bytes.Buffer)
 	var data [][]string
@@ -74,7 +81,7 @@ func (z *Zero) DisplayWorker() string {
 	z.RLock()
 	defer z.RUnlock()
 	//table.SetAutoMergeCells(true)
-	table.SetHeader([]string{"GID", "WorkerID", "StoreID", "StoreAddress", "Progress"})
+	table.SetHeader([]string{"GID", "WorkerID", "StoreID", "StoreAddress", "Progress", "FreeBytes"})
 	//table.SetRowLine(true)
 
 	xlog.Logger.Infof("%+v", z.workers)
@@ -82,12 +89,15 @@ func (z *Zero) DisplayWorker() string {
 
 	for _, w := range z.workers {
 		var row []string
+
 		row = append(row, []string{
 			fmt.Sprintf("%d", w.workerInfo.Gid),
 			fmt.Sprintf("%d", w.workerInfo.WorkId),
 			fmt.Sprintf("%d", w.workerInfo.StoreId),
 			z.stores[w.workerInfo.StoreId].storeInfo.Address,
-			w.progress.String()}...)
+			w.progress.String(),
+			fmt.Sprintf("%d", z.getFreeBytes(w.workerInfo.Gid)),
+		}...)
 		data = append(data, row)
 	}
 

@@ -63,7 +63,8 @@ func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error
 			if status == nil {
 				continue
 			}
-
+			//update raft group usage
+			z.gidFreeBytes.Store(gid, status.DataFreeBytes)
 			for _, workerID := range z.gidToWorkerID[gid] {
 				z.RLock()
 				worker := z.workers[workerID]
@@ -74,9 +75,12 @@ func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error
 					worker.progress = aspirapb.WorkerStatus_Leader
 					continue
 				}
+
 				p, ok := status.Progress[workerID]
+
 				if !ok {
-					z.workers[workerID].progress = aspirapb.WorkerStatus_Unknown
+					worker.progress = aspirapb.WorkerStatus_Unknown
+					//z.workers[workerID].progress = aspirapb.WorkerStatus_Unknown
 					//worker missing on report...set this worker missing in the futhure.
 					continue
 				}
@@ -91,7 +95,8 @@ func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error
 					)
 					continue
 				}
-				z.workers[workerID].progress = p
+				worker.progress = p
+				//z.workers[workerID].progress = p
 			}
 		}
 	}

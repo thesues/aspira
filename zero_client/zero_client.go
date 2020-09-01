@@ -20,7 +20,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
-	"github.com/thesues/aspira/xlog"
 	"google.golang.org/grpc"
 )
 
@@ -85,6 +84,7 @@ func (client *ZeroClient) AllocID(count int) ([]uint64, error) {
 				if loop > len(client.Conns)*2 {
 					return nil, errors.Errorf("AllocID failed")
 				}
+				time.Sleep(50 * time.Millisecond)
 				continue
 			}
 			return []uint64{res.Start, res.End}, nil
@@ -104,12 +104,12 @@ func (client *ZeroClient) CreateHeartbeatStream() (aspirapb.Zero_StreamHeartbeat
 			stream, err := zc.StreamHeartbeat(ctx)
 			if err != nil {
 				cancel()
-				xlog.Logger.Warnf(err.Error())
 				loop++
 				current = (current + 1) % len(client.Conns)
 				if loop > 3*len(client.Conns) {
 					return nil, nil, errors.Errorf("CreateHeartbeatStream failed")
 				}
+				time.Sleep(50 * time.Millisecond)
 				continue
 			}
 			return stream, cancel, nil
@@ -137,6 +137,7 @@ func (client *ZeroClient) QueryWorker(id, gid, storeID uint64) (aspirapb.TnxType
 				if loop > len(client.Conns)*2 {
 					return aspirapb.TnxType_retry, errors.Errorf("QueryWorker failed")
 				}
+				time.Sleep(50 * time.Millisecond)
 				continue
 			}
 			return res.Type, nil
@@ -156,7 +157,6 @@ func (client *ZeroClient) RegisterSelfAsStore(req *aspirapb.ZeroRegistStoreReque
 			_, err := zc.RegistStore(ctx, req)
 			cancel()
 			if err != nil {
-				xlog.Logger.Warnf(err.Error())
 				loop++
 				current = (current + 1) % len(client.Conns)
 				if loop > 3*len(client.Conns) {
@@ -171,4 +171,26 @@ func (client *ZeroClient) RegisterSelfAsStore(req *aspirapb.ZeroRegistStoreReque
 	}
 }
 
-//FIXME, receive AddWorker command
+func (client *ZeroClient) ClusterStatus() ([]*aspirapb.GroupStatus, error) {
+	loop := 0
+	current := client.lastLeader
+
+	for {
+		if client.Conns != nil && client.Conns[current] != nil {
+			zc := aspirapb.NewZeroClient(client.Conns[current])
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			res, err := zc.ClusterStatus(ctx, &aspirapb.ClusterStatusRequest{})
+			cancel()
+			if err != nil {
+				loop++
+				current = (current + 1) % len(client.Conns)
+				if loop > 3*len(client.Conns) {
+					return nil, errors.Errorf("Get ClusterStatus failed")
+				}
+				continue
+			}
+			client.lastLeader = current
+			return res.Groups, nil
+		}
+	}
+}

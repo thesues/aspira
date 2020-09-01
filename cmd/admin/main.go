@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/utils"
+	zeroclient "github.com/thesues/aspira/zero_client"
 	"github.com/urfave/cli/v2"
 	"google.golang.org/grpc"
 )
@@ -43,29 +49,40 @@ func putAspira(c *cli.Context) error {
 	return nil
 }
 
-func sputAspira(c *cli.Context) error {
-	gid := c.Uint64("gid")
-	cluster := c.String("cluster")
-	fileName := c.Args().First()
+func streamDateToLocal(writer io.Writer, conn *grpc.ClientConn, gid, oid uint64) error {
 
-	conn, err := grpc.Dial(cluster, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
-
+	client := aspirapb.NewStoreClient(conn)
+	getStream, err := client.Get(context.Background(), &aspirapb.GetRequest{
+		Gid: gid,
+		Oid: oid,
+	})
 	if err != nil {
 		return err
 	}
 
-	f, err := os.Open(fileName)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+	for {
+		payload, err := getStream.Recv()
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if payload != nil {
+			if _, err = writer.Write(payload.Data); err != nil {
+				return err
+			}
 
+		} else {
+			break
+		}
+	}
+	return nil
+}
+func streamDataToRemote(reader io.Reader, conn *grpc.ClientConn, gid uint64) (uint64, uint64, error) {
 	client := aspirapb.NewStoreClient(conn)
 
 	putStream, err := client.PutStream(context.Background())
 
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	req := aspirapb.PutStreamRequest{
@@ -78,7 +95,7 @@ func sputAspira(c *cli.Context) error {
 	utils.Check(err)
 	buf := make([]byte, 64<<10)
 	for {
-		n, err := f.Read(buf)
+		n, err := reader.Read(buf)
 		if err != nil && err != io.EOF {
 			panic("read file err")
 		}
@@ -97,37 +114,31 @@ func sputAspira(c *cli.Context) error {
 		utils.Check(err)
 	}
 	res, err := putStream.CloseAndRecv()
-	utils.Check(err)
-	fmt.Printf("%+v", res)
-	return nil
+	return res.Gid, res.Oid, err
 }
 
-/*
-func addWorker(c *cli.Context) error {
+func sputAspiraWorker(c *cli.Context) error {
 	gid := c.Uint64("gid")
-	id := c.Uint64("id")
-	localStore := c.String("localStore")
-	remoteCluster := c.String("remoteCluster")
-	conn, err := grpc.Dial(localStore, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
+	cluster := c.String("cluster")
+	fileName := c.Args().First()
+
+	conn, err := grpc.Dial(cluster, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
+
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
-	client := aspirapb.NewStoreClient(conn)
-	//block until raft group started
-	req := aspirapb.AddWorkerRequest{
-		Gid:         gid,
-		Id:          id,
-		JoinCluster: remoteCluster,
-	}
-	_, err = client.AddWorker(context.Background(), &req)
+
+	f, err := os.Open(fileName)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Success\n")
-	return nil
+	defer f.Close()
+
+	gid, oid, err := streamDataToRemote(f, conn, gid)
+
+	fmt.Printf("gid :%d, oid : %d, [%v]", gid, oid, err)
+	return err
 }
-*/
 
 func addGroup(c *cli.Context) error {
 	cluster := c.String("cluster")
@@ -146,23 +157,55 @@ func addGroup(c *cli.Context) error {
 }
 
 func getAspira(c *cli.Context) error {
-
 	gid := c.Uint64("gid")
 	oid := c.Uint64("oid")
 	cluster := c.String("cluster")
 	fileName := c.Args().First()
-
+	if fileName == "" {
+		return errors.Errorf("fileName is required")
+	}
 	conn, err := grpc.Dial(cluster, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	client := aspirapb.NewStoreClient(conn)
-	getStream, err := client.Get(context.Background(), &aspirapb.GetRequest{
-		Gid: gid,
-		Oid: oid,
-	})
+	f, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return streamDateToLocal(f, conn, gid, oid)
+}
+
+func sgetFile(c *cli.Context) (err error) {
+	gid := c.Uint64("gid")
+	oid := c.Uint64("oid")
+	code := c.String("code")
+	fileName := c.Args().First()
+	//valid the input
+	if code != "" {
+		gid, oid, err = decodeGidOid(code)
+		if err != nil {
+			return err
+		}
+	} else if gid == 0 && oid == 0 {
+		return errors.Errorf("gid/oid or code must be set")
+	}
+
+	if fileName == "" {
+		return errors.Errorf("fileName is required")
+	}
+	//get groups
+	zClient := zeroclient.NewZeroClient()
+	zeroAddrs := strings.Split(c.String("cluster"), ",")
+
+	err = zClient.Connect(zeroAddrs)
+	if err != nil {
+		return err
+	}
+	groups, err := zClient.ClusterStatus()
 	if err != nil {
 		return err
 	}
@@ -173,21 +216,101 @@ func getAspira(c *cli.Context) error {
 	}
 	defer f.Close()
 
-	for {
-		payload, err := getStream.Recv()
-		if err != nil && err != io.EOF {
-			return err
-		}
-		if payload != nil {
-			if _, err = f.Write(payload.Data); err != nil {
-				return err
-			}
-
-		} else {
+	//find gid in groups and get data from stores
+	var group *aspirapb.GroupStatus
+	for i := range groups {
+		if groups[i].Gid == gid {
+			group = groups[i]
 			break
 		}
 	}
+	if group == nil {
+		return errors.Errorf("can not find gid %d", gid)
+	}
+
+	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	j := rand.Intn(len(group.Stores))
+	loop := 0
+	for loop < 3 {
+		conn, err := grpc.Dial(group.Stores[j].Address, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
+		if err != nil {
+			continue
+		}
+		err = streamDateToLocal(f, conn, gid, oid)
+		if err == nil {
+			fmt.Printf("download success")
+			return nil
+		}
+		conn.Close()
+		j = (j + 1) % len(group.Stores)
+		loop++
+	}
+	return errors.Errorf("can not download remote file")
+}
+
+func sputFile(c *cli.Context) error {
+	zClient := zeroclient.NewZeroClient()
+	zeroAddrs := strings.Split(c.String("cluster"), ",")
+	fileName := c.Args().First()
+	err := zClient.Connect(zeroAddrs)
+	if err != nil {
+		return err
+	}
+	groups, err := zClient.ClusterStatus()
+	if err != nil {
+		return err
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].FreeBytes > groups[j].FreeBytes
+	})
+	//sort groups by freeBytes, get 3 max data_free_bytes, and random choose one of it, if failed.
+
+	selectedGroup := groups[:utils.Min(3, len(groups))]
+	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	n := rand.Intn(len(selectedGroup))
+	loop := 0
+	for loop < 3 {
+		storeAddr := selectedGroup[n].Stores[0].Address
+		gid := selectedGroup[n].Gid
+		conn, err := grpc.Dial(storeAddr, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
+		if err != nil {
+			return err
+		}
+		f, err := os.Open(fileName)
+		if err != nil {
+			return err
+		}
+		_, oid, err := streamDataToRemote(f, conn, gid)
+
+		conn.Close()
+		f.Close()
+		if err == nil {
+			fmt.Printf("gid :%d, oid : %d, code : %s", gid, oid, encodeGidOid(gid, oid))
+			return nil
+		}
+		n = (n + 1) % len(selectedGroup)
+		loop++
+	}
+	fmt.Printf("upload failed")
 	return nil
+}
+
+func decodeGidOid(s string) (gid uint64, oid uint64, err error) {
+	parts := strings.Split(s, ":")
+	gid, err = strconv.ParseUint(parts[0], 36, 64)
+	if err != nil {
+		return 0, 0, err
+	}
+	oid, err = strconv.ParseUint(parts[1], 36, 64)
+	if err != nil {
+		return 0, 0, err
+	}
+	return gid, oid, nil
+}
+
+func encodeGidOid(gid, oid uint64) string {
+	return strconv.FormatUint(gid, 36) + ":" + strconv.FormatUint(oid, 36)
+	return fmt.Sprintf("%x:%x", gid, oid)
 }
 
 func main() {
@@ -197,8 +320,8 @@ func main() {
 	app.Usage = "admin subcommand"
 	app.Commands = []*cli.Command{
 		{
-			Name:  "put",
-			Usage: "put --cluster <path> --gid <gid>  <file>",
+			Name:  "directput",
+			Usage: "directput --cluster <path> --gid <gid>  <file>",
 			Flags: []cli.Flag{
 				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3301"},
 				&cli.Uint64Flag{Name: "gid"},
@@ -206,17 +329,17 @@ func main() {
 			Action: putAspira,
 		},
 		{
-			Name:  "sput",
-			Usage: "sput --cluster <path> --gid <gid> <file>",
+			Name:  "directsput",
+			Usage: "directsput --cluster <path> --gid <gid> <file>",
 			Flags: []cli.Flag{
 				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3301"},
 				&cli.Uint64Flag{Name: "gid"},
 			},
-			Action: sputAspira,
+			Action: sputAspiraWorker,
 		},
 		{
-			Name:  "get",
-			Usage: "get --cluster <path> --gid <gid> --oid <oid> <file>",
+			Name:  "directget",
+			Usage: "directget --cluster <path> --gid <gid> --oid <oid> <file>",
 			Flags: []cli.Flag{
 				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3301"},
 				&cli.Uint64Flag{Name: "gid"},
@@ -232,20 +355,25 @@ func main() {
 			},
 			Action: addGroup,
 		},
-		/*
-			{
-				Name:  "add_worker",
-				Usage: "add_worker --localStore <local> --remoteCluster <remote> --gid <gid> --id <id>",
-				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "localStore", Required: true},
-					&cli.Uint64Flag{Name: "gid", Required: true},
-					&cli.Uint64Flag{Name: "id", Required: true},
-					&cli.StringFlag{Name: "remoteCluster", Required: false},
-				},
-				Action: addWorker,
+		{
+			Name:  "sput",
+			Usage: "sput --cluster <path> <file>",
+			Flags: []cli.Flag{
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
 			},
-		*/
-
+			Action: sputFile,
+		},
+		{
+			Name:  "sget",
+			Usage: "sget --cluster <path> --gid <gid> --oid <oid> --code <base64> <file>",
+			Flags: []cli.Flag{
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
+				&cli.Uint64Flag{Name: "gid"},
+				&cli.Uint64Flag{Name: "oid"},
+				&cli.StringFlag{Name: "code"},
+			},
+			Action: sgetFile,
+		},
 	}
 
 	err := app.Run(os.Args)

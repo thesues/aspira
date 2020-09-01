@@ -306,6 +306,7 @@ func (as *AspiraStore) StartHeartbeat() {
 				req.Workers[uint64(gid)] = worker.WorkerStatus()
 			}
 			as.RUnlock()
+
 			if stream == nil {
 				xlog.Logger.Errorf("can not send hb to zero")
 				stream, cancel, _ = as.zClient.CreateHeartbeatStream()

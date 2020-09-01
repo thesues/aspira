@@ -199,6 +199,8 @@ message WorkerStatus {
 	//workerid => progressType
 	map<uint64,ProgressType> progress = 1;
 	RaftContext raftContext = 2;
+	//usage infomation
+	uint64 DataFreeBytes = 3;
 }
 
 
@@ -253,14 +255,27 @@ message ZeroQueryWorkerRequest {
 
 message ZeroQueryWorkerResponse {
 	TnxType type = 1;
+}
 
+message GroupStatus {
+	uint64 gid = 1;
+	uint64 freeBytes = 2;
+	repeated ZeroStoreInfo stores = 3; //leader store is the first
+}
+
+message ClusterStatusRequest {
+}
+
+message ClusterStatusResponse {
+	repeated GroupStatus groups = 1;
 }
 
 //zero service
 service Zero {
-	rpc AllocID(ZeroAllocIDRequest) returns (ZeroAllocIDResponse){}
-	rpc RegistStore(ZeroRegistStoreRequest) returns (ZeroRegistStoreResponse) {}
-	rpc StreamHeartbeat(stream ZeroHeartbeatRequest) returns (ZeroHeartbeatResponse){}
-	rpc AddWorkerGroup(ZeroAddWorkerGroupRequest) returns (ZeroAddWorkerGroupResponse) {}
-	rpc QueryWorker(ZeroQueryWorkerRequest) returns (ZeroQueryWorkerResponse) {} 
+	rpc AllocID(ZeroAllocIDRequest) returns (ZeroAllocIDResponse){} //admin
+	rpc RegistStore(ZeroRegistStoreRequest) returns (ZeroRegistStoreResponse) {} //store call 
+	rpc StreamHeartbeat(stream ZeroHeartbeatRequest) returns (ZeroHeartbeatResponse){} //store call
+	rpc AddWorkerGroup(ZeroAddWorkerGroupRequest) returns (ZeroAddWorkerGroupResponse) {} //admin
+	rpc QueryWorker(ZeroQueryWorkerRequest) returns (ZeroQueryWorkerResponse) {}  //store call
+	rpc ClusterStatus(ClusterStatusRequest) returns (ClusterStatusResponse) {} //aspira client call
 }

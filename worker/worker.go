@@ -89,8 +89,9 @@ func (aw *AspiraWorker) WorkerStatus() *aspirapb.WorkerStatus {
 func (aw *AspiraWorker) SetWorkerStatus(p map[uint64]aspirapb.WorkerStatus_ProgressType) {
 	if p != nil {
 		info := &aspirapb.WorkerStatus{
-			RaftContext: proto.Clone(aw.Node.RaftContext).(*aspirapb.RaftContext),
-			Progress:    p,
+			RaftContext:   proto.Clone(aw.Node.RaftContext).(*aspirapb.RaftContext),
+			Progress:      p,
+			DataFreeBytes: aw.store.DB().Usage().DataFreeBytes,
 		}
 		atomic.StorePointer(&aw.info, unsafe.Pointer(info))
 		return
