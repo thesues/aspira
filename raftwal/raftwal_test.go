@@ -23,9 +23,13 @@ import (
 	raft "github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/stretchr/testify/assert"
+	"github.com/thesues/aspira/xlog"
 	cannyls "github.com/thesues/cannyls-go/storage"
 )
 
+func init() {
+	xlog.InitLog(nil)
+}
 func TestStorageTerm(t *testing.T) {
 	ents := []raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
 	tests := []struct {
@@ -100,6 +104,7 @@ func TestStorageEntries(t *testing.T) {
 	for i, tt := range tests {
 		wal.reset(ents)
 		entries, _ := wal.Entries(tt.lo, tt.hi, tt.maxsize)
+		//the etcd library does not limit the maxSize, so wal.Entries will set max size of maxSize is 128M
 		/*
 			if err != tt.werr {
 				t.Errorf("#%d: err = %v, want %v", i, err, tt.werr)
@@ -188,13 +193,11 @@ func TestStorageCreateSnapshot(t *testing.T) {
 
 	for i, tt := range tests {
 		wal.reset(ents)
-		snap, err := wal.CreateSnapshot(tt.i, cs, data)
+		created, err := wal.CreateSnapshot(tt.i, cs, data)
 		if err != tt.werr {
 			t.Errorf("#%d: err = %v, want %v", i, err, tt.werr)
 		}
-		if !reflect.DeepEqual(snap, tt.wsnap) {
-			t.Errorf("#%d: snap = %+v, want %+v", i, snap, tt.wsnap)
-		}
+		assert.Equal(t, true, created)
 	}
 }
 

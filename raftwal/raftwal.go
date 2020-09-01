@@ -442,7 +442,9 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 
 func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 
-	maxSize = 128 << 20
+	if maxSize > (128 << 20) {
+		maxSize = (128 << 20)
+	}
 	xlog.Logger.Debugf("search entries %d=>%d\n", lo, hi)
 	first, err := wal.FirstIndex()
 	if err != nil {
@@ -511,6 +513,7 @@ func (wal *WAL) Term(idx uint64) (uint64, error) {
 
 }
 
+//if CreateSnapshot is done, it means we have synced the database, so the raft worker do not have to sync again
 func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (created bool, err error) {
 
 	var snap raftpb.Snapshot
