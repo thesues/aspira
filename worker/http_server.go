@@ -182,7 +182,7 @@ func (as *AspiraStore) get(c *gin.Context) {
 	defer cancel()
 	data, err := w.getAndWait(ctx, id)
 	if err != nil {
-		xlog.Logger.Errorf(err.Error())
+		xlog.Logger.Info(err.Error())
 		c.String(500, err.Error())
 		return
 	}

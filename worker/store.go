@@ -389,6 +389,7 @@ func (as *AspiraStore) savePrepare(addWorkerRequest *aspirapb.AddWorkerRequest) 
 func preparePath(name string, id uint64) string {
 	return fmt.Sprintf("%s/prepare/prepare_%d", name, id)
 }
+
 func (as *AspiraStore) loadPrepares() (map[Id]*aspirapb.AddWorkerRequest, error) {
 	prepareTasks := make(map[Id]*aspirapb.AddWorkerRequest)
 

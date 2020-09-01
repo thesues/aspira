@@ -41,11 +41,11 @@ func (suite *StoreTestSuite) SetupSuite() {
 		os.Mkdir(dir, 0755)
 		//defer os.RemoveAll(dir)
 	}
-	s1, err := NewAspiraStore("db1", "127.0.0.1:3301", ":8081")
+	s1, err := NewAspiraStore("db1", "127.0.0.1:3301", ":8081", nil)
 	suite.Nil(err)
-	s2, err := NewAspiraStore("db2", "127.0.0.1:3302", ":8082")
+	s2, err := NewAspiraStore("db2", "127.0.0.1:3302", ":8082", nil)
 	suite.Nil(err)
-	s3, err := NewAspiraStore("db3", "127.0.0.1:3303", ":8083")
+	s3, err := NewAspiraStore("db3", "127.0.0.1:3303", ":8083", nil)
 	suite.Nil(err)
 
 	ss := []*AspiraStore{s1, s2, s3}
@@ -64,10 +64,17 @@ func (suite *StoreTestSuite) SetupSuite() {
 	c2 := aspirapb.NewStoreClient(conn2)
 	c3 := aspirapb.NewStoreClient(conn3)
 	//create a single node raft group at store1
-	c1.AddWorker(context.Background(), &aspirapb.AddWorkerRequest{Gid: 200, Id: 1})
+	_, err = c1.AddWorker(context.Background(), &aspirapb.AddWorkerRequest{Gid: 200, Id: 1, Type: aspirapb.TnxType_commit})
+	suite.Nil(err)
+
 	time.Sleep(2 * time.Second)
-	c2.AddWorker(context.Background(), &aspirapb.AddWorkerRequest{Gid: 200, Id: 2, JoinCluster: "127.0.0.1:3301"})
-	c3.AddWorker(context.Background(), &aspirapb.AddWorkerRequest{Gid: 200, Id: 3, JoinCluster: "127.0.0.1:3301"})
+
+	_, err = c2.AddWorker(context.Background(), &aspirapb.AddWorkerRequest{Gid: 200, Id: 2, JoinCluster: "127.0.0.1:3301", Type: aspirapb.TnxType_commit})
+	suite.Nil(err)
+
+	_, err = c3.AddWorker(context.Background(), &aspirapb.AddWorkerRequest{Gid: 200, Id: 3, JoinCluster: "127.0.0.1:3301", Type: aspirapb.TnxType_commit})
+	suite.Nil(err)
+
 	time.Sleep(10 * time.Second)
 	suite.conns = []*grpc.ClientConn{conn1, conn2, conn3}
 	suite.stores = []*AspiraStore{s1, s2, s3}
@@ -178,9 +185,9 @@ func TestStoreInitialCluster(t *testing.T) {
 		os.Mkdir(dir, 0755)
 		defer os.RemoveAll(dir)
 	}
-	s1, _ := NewAspiraStore("db1", "127.0.0.1:3301", ":8081")
-	s2, _ := NewAspiraStore("db2", "127.0.0.1:3302", ":8082")
-	s3, _ := NewAspiraStore("db3", "127.0.0.1:3303", ":8083")
+	s1, _ := NewAspiraStore("db1", "127.0.0.1:3301", ":8081", nil)
+	s2, _ := NewAspiraStore("db2", "127.0.0.1:3302", ":8082", nil)
+	s3, _ := NewAspiraStore("db3", "127.0.0.1:3303", ":8083", nil)
 	ss := []*AspiraStore{s1, s2, s3}
 	for k := range ss {
 		ss[k].ServGRPC()
@@ -194,6 +201,7 @@ func TestStoreInitialCluster(t *testing.T) {
 			Id:             uint64(i),
 			JoinCluster:    "",
 			InitialCluster: cluster,
+			Type:           aspirapb.TnxType_commit,
 		}
 		ss[i-1].AddWorker(context.Background(), &req)
 	}

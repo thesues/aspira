@@ -69,7 +69,10 @@ func (z *Zero) DisplayStore() string {
 }
 
 func (z *Zero) getFreeBytes(gid uint64) uint64 {
-	value, _ := z.gidFreeBytes.Load(gid)
+	value, ok := z.gidFreeBytes.Load(gid)
+	if !ok {
+		return 0
+	}
 	freeBytes := value.(uint64)
 	return freeBytes
 }
