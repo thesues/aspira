@@ -95,10 +95,15 @@ func (as *AspiraStore) RegisterStore() error {
 	}
 
 	//TODO loop for a while?
-	ids, err := as.zClient.AllocID(1)
-	if err != nil {
-		return err
+	var ids []uint64
+	for loop := 0; loop < 3; loop++ {
+		ids, err = as.zClient.AllocID(1)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Second)
 	}
+
 	req := aspirapb.ZeroRegistStoreRequest{
 		Address:    as.addr,
 		StoreId:    ids[0],

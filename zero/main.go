@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"path/filepath"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -17,7 +18,8 @@ func (z *Zero) Serve(config *ZeroConfig) {
 		xlog.Logger.Fatal(err)
 	}
 	e, err := embed.StartEtcd(cfg)
-	xlog.InitLog([]string{cfg.Name + ".log"})
+
+	xlog.InitLog([]string{filepath.Join(cfg.Dir, cfg.Name+".log")})
 	if err != nil {
 		log.Fatal(err)
 	}

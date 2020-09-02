@@ -146,7 +146,12 @@ func (ac *AspiraClient) PullStream(writer io.Writer, gid, oid uint64) error {
 	if i, ok = ag.index[gid]; !ok {
 		return errors.Errorf("can not find gid [%d]", gid)
 	}
-	targetStores := ag.groups[i].Stores //
+
+	targetStores := ag.groups[i].Stores
+	if len(targetStores) == 0 {
+		return errors.Errorf("no group found")
+	}
+
 	n := ac.rand.Intn(len(targetStores))
 	var err error
 	for loop := 0; loop < 3; loop++ {
@@ -194,6 +199,9 @@ func (ac *AspiraClient) pull(writer io.Writer, conn *grpc.ClientConn, gid, oid u
 func (ac *AspiraClient) PushStream(reader io.Reader) (uint64, uint64, error) {
 	groups := ac.Groups().groups
 	selectedGroup := groups[:utils.Min(3, len(groups))]
+	if len(selectedGroup) <= 0 {
+		return 0, 0, errors.Errorf("no group found")
+	}
 	n := ac.rand.Intn(len(selectedGroup))
 
 	for loop := 0; loop < 3; loop++ {

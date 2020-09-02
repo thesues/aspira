@@ -162,6 +162,7 @@ func (client *ZeroClient) RegisterSelfAsStore(req *aspirapb.ZeroRegistStoreReque
 				if loop > 3*len(client.Conns) {
 					return errors.Errorf("RegisterSelfAsStore failed")
 				}
+				time.Sleep(time.Second)
 				continue
 
 			}

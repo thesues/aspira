@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0
-	github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc
+	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/coreos/bbolt v0.0.0-00010101000000-000000000000 // indirect
 	github.com/coreos/etcd v3.3.22+incompatible
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
@@ -20,8 +20,8 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/swaggo/files v0.0.0-20190704085106-630677cd5c14
 	github.com/swaggo/gin-swagger v1.2.0
-	github.com/swaggo/swag v1.5.1
-	github.com/thesues/cannyls-go v0.2.1-0.20200714020537-b5127d67bbe4
+	github.com/swaggo/swag v1.6.7
+	github.com/thesues/cannyls-go v0.2.1-0.20200805232646-3020a5d3518d
 	github.com/urfave/cli v1.20.0
 	github.com/urfave/cli/v2 v2.2.0
 	go.etcd.io/etcd v3.3.22+incompatible

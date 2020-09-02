@@ -39,7 +39,7 @@ func parseUrls(s string) (ret []url.URL, err error) {
 func (config *ZeroConfig) GetEmbedConfig() (*embed.Config, error) {
 	embedConfig := embed.NewConfig()
 	embedConfig.Name = config.Name
-	embedConfig.Dir = fmt.Sprintf("%s.db", config.Name)
+	embedConfig.Dir = config.Dir
 	embedConfig.ClusterState = config.InitialClusterState
 	embedConfig.InitialClusterToken = config.ClusterToken
 	embedConfig.InitialCluster = config.InitialCluster
@@ -77,6 +77,12 @@ func NewConfig() *ZeroConfig {
 	app := &cli.App{
 		HelpName: "zero",
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "dir",
+				Usage:       "dir for etcd",
+				Destination: &config.Dir,
+				Required:    true,
+			},
 			&cli.StringFlag{
 				Name:        "name",
 				Usage:       "human-readable name for etcd",
@@ -141,8 +147,6 @@ func NewConfig() *ZeroConfig {
 		fmt.Println(app.Usage)
 		panic(fmt.Sprintf("%v", err))
 	}
-	fmt.Printf("%+v\n", config)
-
 	//xlog.Logger.Infof("%+v", config)
 	return &config
 }
