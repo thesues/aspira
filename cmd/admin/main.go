@@ -5,17 +5,15 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/rand"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
+	aspiraclient "github.com/thesues/aspira/aspira_client"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/utils"
-	zeroclient "github.com/thesues/aspira/zero_client"
 	"github.com/urfave/cli/v2"
 	"google.golang.org/grpc"
 )
@@ -184,6 +182,7 @@ func sgetFile(c *cli.Context) (err error) {
 	oid := c.Uint64("oid")
 	code := c.String("code")
 	fileName := c.Args().First()
+	zeroAddrs := strings.Split(c.String("cluster"), ",")
 	//valid the input
 	if code != "" {
 		gid, oid, err = decodeGidOid(code)
@@ -197,18 +196,6 @@ func sgetFile(c *cli.Context) (err error) {
 	if fileName == "" {
 		return errors.Errorf("fileName is required")
 	}
-	//get groups
-	zClient := zeroclient.NewZeroClient()
-	zeroAddrs := strings.Split(c.String("cluster"), ",")
-
-	err = zClient.Connect(zeroAddrs)
-	if err != nil {
-		return err
-	}
-	groups, err := zClient.ClusterStatus()
-	if err != nil {
-		return err
-	}
 
 	f, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
@@ -216,83 +203,37 @@ func sgetFile(c *cli.Context) (err error) {
 	}
 	defer f.Close()
 
-	//find gid in groups and get data from stores
-	var group *aspirapb.GroupStatus
-	for i := range groups {
-		if groups[i].Gid == gid {
-			group = groups[i]
-			break
-		}
+	client := aspiraclient.NewAspiraClient(zeroAddrs)
+	if err = client.Connect(); err != nil {
+		return err
 	}
-	if group == nil {
-		return errors.Errorf("can not find gid %d", gid)
-	}
-
-	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	j := rand.Intn(len(group.Stores))
-	loop := 0
-	for loop < 3 {
-		conn, err := grpc.Dial(group.Stores[j].Address, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
-		if err != nil {
-			continue
-		}
-		err = streamDateToLocal(f, conn, gid, oid)
-		if err == nil {
-			fmt.Printf("download success")
-			return nil
-		}
-		conn.Close()
-		j = (j + 1) % len(group.Stores)
-		loop++
-	}
-	return errors.Errorf("can not download remote file")
+	err = client.PullStream(f, gid, oid)
+	return err
 }
 
 func sputFile(c *cli.Context) error {
-	zClient := zeroclient.NewZeroClient()
 	zeroAddrs := strings.Split(c.String("cluster"), ",")
 	fileName := c.Args().First()
-	err := zClient.Connect(zeroAddrs)
+
+	f, err := os.Open(fileName)
 	if err != nil {
 		return err
 	}
-	groups, err := zClient.ClusterStatus()
-	if err != nil {
+	defer f.Close()
+	client := aspiraclient.NewAspiraClient(zeroAddrs)
+
+	if err := client.Connect(); err != nil {
 		return err
 	}
-	sort.Slice(groups, func(i, j int) bool {
-		return groups[i].FreeBytes > groups[j].FreeBytes
-	})
-	//sort groups by freeBytes, get 3 max data_free_bytes, and random choose one of it, if failed.
 
-	selectedGroup := groups[:utils.Min(3, len(groups))]
-	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	n := rand.Intn(len(selectedGroup))
-	loop := 0
-	for loop < 3 {
-		storeAddr := selectedGroup[n].Stores[0].Address
-		gid := selectedGroup[n].Gid
-		conn, err := grpc.Dial(storeAddr, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
-		if err != nil {
-			return err
-		}
-		f, err := os.Open(fileName)
-		if err != nil {
-			return err
-		}
-		_, oid, err := streamDataToRemote(f, conn, gid)
+	gid, oid, err := client.PushStream(f)
 
-		conn.Close()
-		f.Close()
-		if err == nil {
-			fmt.Printf("gid :%d, oid : %d, code : %s", gid, oid, encodeGidOid(gid, oid))
-			return nil
-		}
-		n = (n + 1) % len(selectedGroup)
-		loop++
+	if err == nil {
+		fmt.Printf("gid :%d, oid : %d, code : %s\n", gid, oid, encodeGidOid(gid, oid))
+		return nil
 	}
-	fmt.Printf("upload failed")
-	return nil
+	return err
+
 }
 
 func decodeGidOid(s string) (gid uint64, oid uint64, err error) {

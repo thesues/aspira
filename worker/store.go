@@ -296,6 +296,12 @@ func (as *AspiraStore) StartHeartbeat() {
 	for {
 		select {
 		case <-ticker.C:
+			if stream == nil {
+				xlog.Logger.Errorf("can not send hb to zero")
+				stream, cancel, _ = as.zClient.CreateHeartbeatStream()
+				continue
+			}
+			//TODO: use a sync.Pool to new ZeroHeartbeatRequest each time.
 			req := aspirapb.ZeroHeartbeatRequest{
 				StoreId: as.storeId,
 				Workers: make(map[uint64]*aspirapb.WorkerStatus),
@@ -307,11 +313,6 @@ func (as *AspiraStore) StartHeartbeat() {
 			}
 			as.RUnlock()
 
-			if stream == nil {
-				xlog.Logger.Errorf("can not send hb to zero")
-				stream, cancel, _ = as.zClient.CreateHeartbeatStream()
-				continue
-			}
 			err = stream.Send(&req)
 			if err != nil {
 				cancel()
