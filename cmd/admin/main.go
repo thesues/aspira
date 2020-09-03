@@ -225,7 +225,7 @@ func sputFile(c *cli.Context) error {
 	if err := client.Connect(); err != nil {
 		return err
 	}
-
+	f.Seek(0,io.SeekEnd)
 	gid, oid, err := client.PushStream(f)
 
 	if err == nil {

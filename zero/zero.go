@@ -263,10 +263,11 @@ func (z *Zero) AddWorkerGroup(ctx context.Context, req *aspirapb.ZeroAddWorkerGr
 	if !z.amLeader() {
 		return nil, ErrNotLeader
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	alloReq := aspirapb.ZeroAllocIDRequest{
 		Count: 4,
 	}
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+
 	res, err := z.AllocID(ctx, &alloReq)
 	cancel()
 	if err != nil {

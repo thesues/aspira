@@ -368,7 +368,7 @@ func (as *AspiraStore) startNewWorker(id, gid uint64, addr, joinAddress string, 
 	as.Unlock()
 	go func() {
 		if err = x.InitAndStart(joinAddress, initialCluster); err != nil {
-			xlog.Logger.Warnf(err.Error())
+			xlog.Logger.Error(err.Error())
 			return
 		}
 		as.SetWorker(gid, x)
@@ -456,7 +456,7 @@ func main() {
 		logOutputs = append(logOutputs, os.Stdout.Name())
 	}
 
-	xlog.InitLog(logOutputs, zapcore.WarnLevel)
+	xlog.InitLog(logOutputs, zapcore.ErrorLevel)
 
 	as, err := NewAspiraStore(*name, *addr, *httpAddr, []string{"127.0.0.1:3401", "127.0.0.1:3402", "127.0.0.1:3403"})
 	if err != nil {

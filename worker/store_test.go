@@ -15,6 +15,7 @@ import (
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/utils"
 	"github.com/thesues/aspira/xlog"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 )
 
@@ -33,13 +34,14 @@ func (suite *StoreTestSuite) TearDownSuite() {
 	}
 }
 
+func init() {
+	xlog.InitLog([]string{"test.log"}, zapcore.DebugLevel)
+}
 func (suite *StoreTestSuite) SetupSuite() {
 
 	fmt.Println("SETUP SUITE")
-	xlog.InitLog([]string{"test.log"})
 	for _, dir := range []string{"db1", "db2", "db3"} {
 		os.Mkdir(dir, 0755)
-		//defer os.RemoveAll(dir)
 	}
 	s1, err := NewAspiraStore("db1", "127.0.0.1:3301", ":8081", nil)
 	suite.Nil(err)
@@ -180,7 +182,6 @@ func TestStoreTestSuite(t *testing.T) {
 }
 
 func TestStoreInitialCluster(t *testing.T) {
-	xlog.InitLog([]string{"test.log"})
 	for _, dir := range []string{"db1", "db2", "db3"} {
 		os.Mkdir(dir, 0755)
 		defer os.RemoveAll(dir)

@@ -28,6 +28,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/raftwal"
@@ -38,7 +39,7 @@ import (
 )
 
 func init() {
-	xlog.InitLog(nil)
+	xlog.InitLog(nil, zapcore.PanicLevel)
 }
 
 func (n *Node) run(wg *sync.WaitGroup) {

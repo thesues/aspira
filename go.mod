@@ -21,7 +21,7 @@ require (
 	github.com/swaggo/files v0.0.0-20190704085106-630677cd5c14
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.7
-	github.com/thesues/cannyls-go v0.2.1-0.20200903010503-450e632245ad
+	github.com/thesues/cannyls-go v0.2.1-0.20200805232646-3020a5d3518d
 	github.com/urfave/cli v1.20.0
 	github.com/urfave/cli/v2 v2.2.0
 	go.etcd.io/etcd v3.3.22+incompatible

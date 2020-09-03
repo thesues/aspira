@@ -115,7 +115,10 @@ func splitAndTrim(s string, sep string) []string {
 //if initialCluster != "",  start worker in the initialCluster, the format of initialCluster is "100;127.0.0.1:3301,  101;127.0.0.1:3302, 104;127.0.0.1:3304" => ID;addr, ID;addr, ID;addr
 //if joinClusterAddr != "", join the remote addr(must be leader)
 func (aw *AspiraWorker) InitAndStart(joinClusterAddr, initialCluster string) error {
-	restart := aw.store.PastLife()
+	restart, err := aw.store.PastLife()
+	if err != nil {
+		return err
+	}
 	if restart {
 		snap, err := aw.store.Snapshot()
 		utils.Check(err)
@@ -207,6 +210,7 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr, initialCluster string) err
 			// JoinCluster can block indefinitely, raft ignores conf change proposal
 			// if it has pending configuration.
 			_, err := c.JoinCluster(ctx, aw.Node.RaftContext)
+			cancel()
 			if err == nil {
 				xlog.Logger.Infof("Success to joining cluster: %v\n")
 				cancel()
@@ -661,9 +665,13 @@ func (aw *AspiraWorker) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 
 	db, err := cannyls.OpenCannylsStorage(aw.storePath)
 	if err != nil {
-		panic("can not open downloaded cannylsdb")
+		return err
 	}
 	aw.store.SetDB(db)
+	restart, err := aw.store.PastLife()
+	if !restart || err != nil {
+		return errors.Errorf("can not initial and replay backup snapshot")
+	}
 	sa, _ := aw.store.Snapshot()
 	xlog.Logger.Infof("get snapshot %d", sa.Metadata.Index)
 	return nil

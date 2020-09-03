@@ -25,11 +25,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/thesues/aspira/xlog"
 	cannyls "github.com/thesues/cannyls-go/storage"
+	"go.uber.org/zap/zapcore"
 )
 
 func init() {
-	xlog.InitLog(nil)
+	xlog.InitLog([]string{"test.log"}, zapcore.ErrorLevel)
 }
+
 func TestStorageTerm(t *testing.T) {
 	ents := []raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
 	tests := []struct {
@@ -82,15 +84,19 @@ func TestStorageEntries(t *testing.T) {
 		werr     error
 		wentries []raftpb.Entry
 	}{
+
 		{2, 6, math.MaxUint64, raft.ErrCompacted, nil},
 		{3, 4, math.MaxUint64, raft.ErrCompacted, nil},
 		{4, 5, math.MaxUint64, nil, []raftpb.Entry{{Index: 4, Term: 4}}},
 		{4, 6, math.MaxUint64, nil, []raftpb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
 		{4, 7, math.MaxUint64, nil, []raftpb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}},
+
 		// even if maxsize is zero, the first entry should be returned
 		{4, 7, 0, nil, []raftpb.Entry{{Index: 4, Term: 4}}},
+
 		// limit to 2
 		{4, 7, uint64(ents[1].Size() + ents[2].Size()), nil, []raftpb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
+
 		// limit to 2
 		{4, 7, uint64(ents[1].Size() + ents[2].Size() + ents[3].Size()/2), nil, []raftpb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
 		{4, 7, uint64(ents[1].Size() + ents[2].Size() + ents[3].Size() - 1), nil, []raftpb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
@@ -105,13 +111,6 @@ func TestStorageEntries(t *testing.T) {
 		wal.reset(ents)
 		entries, _ := wal.Entries(tt.lo, tt.hi, tt.maxsize)
 		//the etcd library does not limit the maxSize, so wal.Entries will set max size of maxSize is 128M
-		/*
-			if err != tt.werr {
-				t.Errorf("#%d: err = %v, want %v", i, err, tt.werr)
-			}
-		*/
-		assert.Equal(t, entries, tt.wentries)
-
 		if !reflect.DeepEqual(entries, tt.wentries) {
 			t.Errorf("#%d: entries = %v, want %v", i, entries, tt.wentries)
 		}
@@ -133,7 +132,7 @@ func TestStorageLastIndex(t *testing.T) {
 		t.Errorf("last = %d, want %d", last, 5)
 	}
 
-	wal.addEntries([]raftpb.Entry{{Index: 6, Term: 5}}, true)
+	wal.addEntries([]raftpb.Entry{{Index: 6, Term: 5}})
 	last, err = wal.LastIndex()
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
@@ -214,6 +213,7 @@ func TestStorageAppend(t *testing.T) {
 		werr     error
 		wentries []raftpb.Entry
 	}{
+
 		{
 			[]raftpb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}},
 			nil,
@@ -234,19 +234,23 @@ func TestStorageAppend(t *testing.T) {
 			nil,
 			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 5}},
 		},
-		// truncate incoming entries, truncate the existing entries and append
+		//truncate incoming entries, truncate the existing entries and append
 		{
 			[]raftpb.Entry{{Index: 2, Term: 3}, {Index: 3, Term: 3}, {Index: 4, Term: 5}},
 			nil,
 			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 5}},
 		},
-		// truncate the existing entries and append
+
 		{
 			[]raftpb.Entry{{Index: 4, Term: 5}},
 			nil,
 			[]raftpb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 5}},
 		},
+
+		// truncate the existing entries and append
+
 		// direct append
+
 		{
 			[]raftpb.Entry{{Index: 6, Term: 5}},
 			nil,
@@ -256,13 +260,16 @@ func TestStorageAppend(t *testing.T) {
 
 	for i, tt := range tests {
 		wal.reset(ents)
-		err := wal.addEntries(tt.entries, true)
+		err := wal.addEntries(tt.entries)
 		if err != tt.werr {
 			t.Errorf("#%d: err = %v, want %v", i, err, tt.werr)
 		}
-		entries, err := wal.AllEntries(0, maxKey, math.MaxUint64)
+
+		//get all entries, including the dummy index.
+		entries, err := wal.AllEntries(wal.firstIndex(), wal.lastIndex()+1, math.MaxUint64)
 		assert.Nil(t, err)
-		if !reflect.DeepEqual(entries, tt.wentries) {
+		//fmt.Printf("i %d\n", wal.firstIndex()-1)
+		if !reflect.DeepEqual(entries, tt.wentries[1:]) {
 			t.Errorf("#%d: entries = %v, want %v", i, entries, tt.wentries)
 		}
 	}
@@ -290,13 +297,62 @@ func TestConfChange(t *testing.T) {
 	}
 
 	wal.reset(entries)
-	es, err := wal.AllEntries(0, keyMask, math.MaxUint64)
+	es, err := wal.AllEntries(wal.firstIndex(), wal.lastIndex()+1, math.MaxUint64)
 	assert.Nil(t, err)
-	for i := range es {
+
+	for i := 0; i < 2; i++ {
 		var cc raftpb.ConfChange
 		cc.Unmarshal(es[i].Data)
-		assert.Equal(t, uint64(i+1), cc.NodeID)
+		assert.Equal(t, uint64(i+2), cc.NodeID)
 	}
+}
+
+func TestWALSnapshot(t *testing.T) {
+	db, err := cannyls.CreateCannylsStorage("wal.lusf", 10<<20, 0.1)
+	defer os.Remove("wal.lusf")
+	assert.Nil(t, err)
+	wal := Init(db)
+	restart, err := wal.PastLife()
+	assert.Nil(t, err)
+	assert.False(t, restart)
+	wal.addEntries([]raftpb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 3}})
+	wal.CreateSnapshot(3, nil, nil)
+	wal.CloseDB()
+
+	db, err = cannyls.OpenCannylsStorage("wal.lusf")
+	assert.Nil(t, err)
+	wal = Init(db)
+	restart, err = wal.PastLife()
+	assert.Nil(t, err)
+	assert.True(t, restart)
+	assert.Equal(t, uint64(4), wal.firstIndex())
+	assert.Equal(t, uint64(3), wal.lastIndex())
+
+}
+func TestWALRestart(t *testing.T) {
+	db, err := cannyls.CreateCannylsStorage("wal.lusf", 10<<20, 0.1)
+	defer os.Remove("wal.lusf")
+	assert.Nil(t, err)
+	wal := Init(db)
+	entries := []raftpb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 3}}
+	wal.addEntries(entries)
+	assert.Equal(t, uint64(1), wal.firstIndex())
+	assert.Equal(t, uint64(3), wal.lastIndex())
+	wal.Sync()
+	wal.CloseDB()
+
+	db, err = cannyls.OpenCannylsStorage("wal.lusf")
+	assert.Nil(t, err)
+	wal = Init(db)
+	restart, err := wal.PastLife()
+	assert.Nil(t, err)
+	assert.True(t, restart)
+	assert.Equal(t, uint64(1), wal.firstIndex())
+	assert.Equal(t, uint64(3), wal.lastIndex())
+	es, err := wal.Entries(wal.firstIndex(), wal.lastIndex()+1, math.MaxUint64)
+	assert.Nil(t, err)
+	assert.Equal(t, entries, es)
+	db.Close()
 }
 
 /*
