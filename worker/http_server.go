@@ -88,6 +88,7 @@ func (as *AspiraStore) put(c *gin.Context) {
 
 	if w == nil {
 		c.String(400, "can not find gid %d", gid)
+		return
 	}
 
 	if header.Size > (0xFFFF*(512) - 2) {
@@ -223,7 +224,7 @@ func (as *AspiraStore) ServHTTP() {
 	pprof.Register(r)
 
 	r.Use(gin.Recovery())
-	r.Use(logToZap)
+	//r.Use(logToZap)
 
 	r.DELETE("/del/:gid/:oid", as.del)
 	r.POST("/put/:gid/", as.put)

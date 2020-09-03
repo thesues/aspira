@@ -38,6 +38,7 @@ import (
 	"github.com/thesues/aspira/xlog"
 	zeroclient "github.com/thesues/aspira/zero_client"
 	otrace "go.opencensus.io/trace"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 )
 
@@ -117,7 +118,10 @@ func (as *AspiraStore) RegisterStore() error {
 
 	as.storeId = ids[0]
 
-	ioutil.WriteFile(storeIDPath, []byte(fmt.Sprintf("%d", as.storeId)), 0644)
+	err = ioutil.WriteFile(storeIDPath, []byte(fmt.Sprintf("%d", as.storeId)), 0644)
+	if err != nil {
+		return err
+	}
 	xlog.Logger.Infof("success to register to zero")
 	return nil
 }
@@ -452,7 +456,7 @@ func main() {
 		logOutputs = append(logOutputs, os.Stdout.Name())
 	}
 
-	xlog.InitLog(logOutputs)
+	xlog.InitLog(logOutputs, zapcore.WarnLevel)
 
 	as, err := NewAspiraStore(*name, *addr, *httpAddr, []string{"127.0.0.1:3401", "127.0.0.1:3402", "127.0.0.1:3403"})
 	if err != nil {
