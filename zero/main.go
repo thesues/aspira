@@ -9,6 +9,7 @@ import (
 	"github.com/coreos/etcd/embed"
 	"github.com/thesues/aspira/utils"
 	"github.com/thesues/aspira/xlog"
+	"go.uber.org/zap/zapcore"
 )
 
 //block function
@@ -19,7 +20,7 @@ func (z *Zero) Serve(config *ZeroConfig) {
 	}
 	e, err := embed.StartEtcd(cfg)
 
-	xlog.InitLog([]string{filepath.Join(cfg.Dir, cfg.Name+".log")})
+	xlog.InitLog([]string{filepath.Join(cfg.Dir, cfg.Name+".log")}, zapcore.ErrorLevel)
 	if err != nil {
 		log.Fatal(err)
 	}

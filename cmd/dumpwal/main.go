@@ -11,6 +11,7 @@ import (
 	"github.com/thesues/aspira/xlog"
 	"github.com/thesues/cannyls-go/lump"
 	"github.com/thesues/cannyls-go/storage"
+	"go.uber.org/zap/zapcore"
 )
 
 func snapshotKey() (ret lump.LumpId) {
@@ -74,7 +75,7 @@ func main() {
 	store, err := storage.OpenCannylsStorage(os.Args[1])
 	utils.Check(err)
 
-	xlog.InitLog(nil)
+	xlog.InitLog(nil, zapcore.ErrorLevel)
 	//snapshot key
 	fmt.Printf("SNAPSHOT : ")
 	data, err := store.Get(snapshotKey())
