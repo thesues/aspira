@@ -239,7 +239,11 @@ func (ac *AspiraClient) push(reader io.Reader, conn *grpc.ClientConn, gid uint64
 	}
 
 	err = putStream.Send(&req)
-	utils.Check(err)
+
+	if err != nil {
+		return 0, 0, err
+	}
+
 	buf := make([]byte, 64<<10)
 	for {
 		n, err := reader.Read(buf)
@@ -249,7 +253,6 @@ func (ac *AspiraClient) push(reader io.Reader, conn *grpc.ClientConn, gid uint64
 		if n == 0 {
 			break
 		}
-
 		req := aspirapb.PutStreamRequest{
 			Data: &aspirapb.PutStreamRequest_Payload{
 				Payload: &aspirapb.Payload{
@@ -258,8 +261,14 @@ func (ac *AspiraClient) push(reader io.Reader, conn *grpc.ClientConn, gid uint64
 			},
 		}
 		err = putStream.Send(&req)
-		utils.Check(err)
+		if err != nil {
+			return 0, 0, err
+		}
 	}
 	res, err := putStream.CloseAndRecv()
-	return res.Gid, res.Oid, err
+	if err == nil {
+		return res.Gid, res.Oid, err
+	} else {
+		return 0, 0, err
+	}
 }

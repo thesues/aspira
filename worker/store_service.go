@@ -91,6 +91,11 @@ func (as *AspiraStore) PutStream(stream aspirapb.Store_PutStreamServer) error {
 		}
 	}
 	p.Data = buf.Bytes()
+	if buf.Len() == 0 {
+		return errors.Errorf("upload data is empty")
+	}
+
+	xlog.Logger.Infof("size is %d\n", buf.Len())
 	p.ProposalType = aspirapb.AspiraProposal_Put
 
 	start := time.Now()

@@ -456,7 +456,7 @@ func main() {
 		logOutputs = append(logOutputs, os.Stdout.Name())
 	}
 
-	xlog.InitLog(logOutputs, zapcore.ErrorLevel)
+	xlog.InitLog(logOutputs, zapcore.InfoLevel)
 
 	as, err := NewAspiraStore(*name, *addr, *httpAddr, []string{"127.0.0.1:3401", "127.0.0.1:3402", "127.0.0.1:3403"})
 	if err != nil {
