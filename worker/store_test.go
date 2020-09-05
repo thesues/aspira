@@ -37,6 +37,7 @@ func (suite *StoreTestSuite) TearDownSuite() {
 func init() {
 	xlog.InitLog([]string{"test.log"}, zapcore.DebugLevel)
 }
+
 func (suite *StoreTestSuite) SetupSuite() {
 
 	fmt.Println("SETUP SUITE")

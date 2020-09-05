@@ -141,7 +141,7 @@ func (wal *WAL) Save(hd raftpb.HardState, entries []raftpb.Entry) (err error) {
 //reset for test only
 func (wal *WAL) reset(entries []raftpb.Entry) {
 	wal.ents = nil
-	wal.DeleteFrom(0)
+	wal.deleteFrom(0)
 	wal.entryCache.Purge()
 	for _, e := range entries {
 		var m aspirapb.EntryMeta
@@ -318,7 +318,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 
 // Delete entries in the range of index [from, inf).
 // both LOG and extendLOG will be removed
-func (wal *WAL) DeleteFrom(from uint64) error {
+func (wal *WAL) deleteFrom(from uint64) error {
 	logStart := wal.EntryKey(from)
 	logEnd := lump.FromU64(0, ^uint64(0)) //0xFFFFFFFFFFFFFFFF
 
@@ -374,38 +374,28 @@ func (wal *WAL) loadEntries(index uint64) (bool, error) {
 //PastLife load entries into memory and return if it is a RESTART
 func (wal *WAL) PastLife() (bool, error) {
 	xlog.Logger.Info("replaying WAL")
+
 	data, err := wal.DB().Get(wal.snapshotKey())
 	if err != nil {
 		//nosnapshot so far
 		return wal.loadEntries(1)
 	}
+
 	var snap raftpb.Snapshot
 	err = snap.Unmarshal(data)
 	if err != nil {
 		return false, err
 	}
+
 	if raft.IsEmptySnap(snap) {
 		return wal.loadEntries(1)
 	}
+
 	wal.snapshot = snap
 	wal.ents[0].Index = snap.Metadata.Index
 	wal.ents[0].Term = snap.Metadata.Term
+
 	return wal.loadEntries(snap.Metadata.Index + 1)
-
-	/*
-		snap, _ := wal.Snapshot()
-		if !raft.IsEmptySnap(snap) {
-			return true
-		}
-		_, err := wal.hardState()
-		if err != nil {
-			return false
-		}
-		first, _ := wal.FirstIndex()
-		last, _ := wal.LastIndex()
-
-		return last >= first
-	*/
 }
 
 func (wal *WAL) fromMetaToRaftEntry(meta aspirapb.EntryMeta) (e raftpb.Entry) {
@@ -541,6 +531,22 @@ func (wal *WAL) Term(i uint64) (uint64, error) {
 	return wal.ents[i-offset].Term, nil
 }
 
+func (wal *WAL) ApplySnapshot(snap raftpb.Snapshot) {
+	wal.Lock()
+	defer wal.Unlock()
+	if raft.IsEmptySnap(snap) {
+		return
+	}
+	wal.snapshot = snap
+	wal.ents = []aspirapb.EntryMeta{{Term: snap.Metadata.Term, Index: snap.Metadata.Index}}
+	//save to disk.
+
+	wal.deleteFrom(snap.Metadata.Index)
+	//set snapshot key
+	data, _ := wal.snapshot.Marshal()
+	wal.DB().PutEmbed(wal.snapshotKey(), data)
+}
+
 //CreateSnapshot, if createSnapshot
 // is done, it means we have synced the database, so the raft worker do not have to sync again
 func (wal *WAL) CreateSnapshot(compactIndex uint64, cs *raftpb.ConfState, udata []byte) (created bool, err error) {
@@ -593,6 +599,11 @@ func (wal *WAL) CreateSnapshot(compactIndex uint64, cs *raftpb.ConfState, udata 
 	if err = wal.deleteUntil(compactIndex + 1); err != nil {
 		return
 	}
+	/*
+		if err = wal.deleteUntil(compactIndex + 1); err != nil {
+			return
+		}
+	*/
 	return true, nil
 }
 
@@ -666,6 +677,6 @@ func (wal *WAL) SetDB(db *cannyls.Storage) {
 func (wal *WAL) CloseDB() {
 	wal.DB().Close()
 	wal.entryCache.Purge()
-	wal.ents = make([]aspirapb.EntryMeta, 1, 2000)
+	//wal.ents = make([]aspirapb.EntryMeta, 1, 2000)
 	wal.snapshot = raftpb.Snapshot{}
 }

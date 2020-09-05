@@ -202,6 +202,10 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr, initialCluster string) err
 			}
 		}
 
+		restart, err := aw.store.PastLife()
+		if !restart || err != nil {
+			return errors.Errorf("can not initial and replay backup snapshot")
+		}
 		c := aspirapb.NewRaftClient(p.Get())
 		retry = 1
 		for {
@@ -347,13 +351,17 @@ func (aw *AspiraWorker) Run() {
 
 				xlog.Logger.Infof("---> SNAPSHOT: %+v. DONE.\n", rd.Snapshot)
 
-				snapOnDisk, _ := aw.store.Snapshot()
+				aw.store.ApplySnapshot(rd.Snapshot)
+				/*
+					snapOnDisk, _ := aw.store.Snapshot()
 
-				if snapOnDisk.Metadata.Index != rd.Snapshot.Metadata.Index || snapOnDisk.Metadata.Term != rd.Snapshot.Metadata.Term {
-					panic("for loop, try again")
-				}
-
-				aw.store.DeleteFrom(rd.Snapshot.Metadata.Index + 1)
+					if snapOnDisk.Metadata.Index != rd.Snapshot.Metadata.Index || snapOnDisk.Metadata.Term != rd.Snapshot.Metadata.Term {
+						xlog.Logger.Errorf("[] snapshot not match... quit", n.RaftContext.Id)
+						return
+					}
+				*/
+				aw.Node.Applied.Done(rd.Snapshot.Metadata.Index)
+				//aw.store.DeleteFrom(rd.Snapshot.Metadata.Index + 1)
 				aw.Node.SetConfState(&rd.Snapshot.Metadata.ConfState)
 			}
 
@@ -668,10 +676,13 @@ func (aw *AspiraWorker) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 		return err
 	}
 	aw.store.SetDB(db)
-	restart, err := aw.store.PastLife()
-	if !restart || err != nil {
-		return errors.Errorf("can not initial and replay backup snapshot")
-	}
+
+	/*
+		restart, err := aw.store.PastLife()
+		if !restart || err != nil {
+			return errors.Errorf("can not initial and replay backup snapshot")
+		}
+	*/
 	sa, _ := aw.store.Snapshot()
 	xlog.Logger.Infof("get snapshot %d", sa.Metadata.Index)
 	return nil
