@@ -371,7 +371,7 @@ func (aw *AspiraWorker) Run() {
 
 			synced := false
 			if createSnapshot {
-				synced = aw.trySnapshot(300)
+				synced = aw.trySnapshot(5000)
 			}
 
 			if rd.MustSync && !synced {

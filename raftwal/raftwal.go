@@ -15,7 +15,6 @@
 package raftwal
 
 import (
-	"fmt"
 	"io"
 	"math"
 	"sync"
@@ -419,6 +418,7 @@ func (wal *WAL) fromMetaToRaftEntry(meta aspirapb.EntryMeta) (e raftpb.Entry) {
 
 		//build data
 		e.Type = raftpb.EntryNormal
+
 		extData, err := wal.DB().Get(wal.ExtKey(meta.Index))
 		if err != nil {
 			xlog.Logger.Warnf("Get extdata failed %+v", err)
@@ -577,7 +577,7 @@ func (wal *WAL) CreateSnapshot(compactIndex uint64, cs *raftpb.ConfState, udata 
 
 	offset := wal.ents[0].Index
 	if compactIndex > wal.lastIndex() {
-		panic(fmt.Sprintf("snapshot %d is out of bound lastindex(%d)", compactIndex, wal.lastIndex()))
+		return false, errors.Errorf("snapshot %d is out of bound lastindex(%d)", compactIndex, wal.lastIndex())
 	}
 
 	wal.snapshot.Metadata.Index = compactIndex
@@ -607,21 +607,13 @@ func (wal *WAL) CreateSnapshot(compactIndex uint64, cs *raftpb.ConfState, udata 
 	ents = append(ents, wal.ents[i+1:]...)
 	wal.ents = ents
 
+	//disk
 	if err = wal.deleteUntil(compactIndex + 1); err != nil {
 		return
 	}
-	/*
-		if err = wal.deleteUntil(compactIndex + 1); err != nil {
-			return
-		}
-	*/
 	return true, nil
 }
 
-/*
-ApplyPut and ApplyPutWithOffset do not need a DB lock, because before receiving the snapshot,
-worker will drain the applyMessage channel
-*/
 func (wal *WAL) ApplyPut(e raftpb.Entry) error {
 	if len(e.Data) <= 0 {
 		return errors.Errorf("data len is 0")
@@ -668,6 +660,7 @@ func (wal *WAL) GetData(index uint64) ([]byte, error) {
 func (wal *WAL) GetStreamReader() (io.Reader, error) {
 	wal.dbLock.Lock()
 	defer wal.dbLock.Unlock()
+
 	reader, err := wal.DB().GetSnapshotReader()
 	if err != nil {
 		return nil, err
