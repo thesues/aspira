@@ -269,7 +269,7 @@ func (aw *AspiraWorker) applyProposal(e raftpb.Entry) (string, error) {
 	var err error
 	switch p.ProposalType {
 	case aspirapb.AspiraProposal_Put:
-		err = aw.store.ApplyPut(e.Index)
+		err = aw.store.ApplyPut(e)
 	case aspirapb.AspiraProposal_Delete:
 		err = aw.store.Delete(p.Key)
 	case aspirapb.AspiraProposal_PutWithOffset:

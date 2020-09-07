@@ -37,6 +37,7 @@ import (
 type WAL struct {
 	p          unsafe.Pointer //the type is *cannyls.Storage
 	ab         *block.AlignedBytes
+	sab        *block.AlignedBytes
 	dbLock     *sync.Mutex //protect readCounts
 	readCounts int
 	// Protects access to all fields. Most methods of MemoryStorage are
@@ -53,6 +54,7 @@ var (
 	maxKey      = keyMask
 	endOfList   = errors.Errorf("end of list of keys")
 	errNotFound = errors.New("Unable to find raft entry")
+	throttle    = (40 << 10)
 )
 
 func Init(db *cannyls.Storage) *WAL {
@@ -64,6 +66,7 @@ func Init(db *cannyls.Storage) *WAL {
 	}
 	wal := &WAL{
 		ab:         block.NewAlignedBytes(512, block.Min()),
+		sab:        block.NewAlignedBytes(512, block.Min()),
 		readCounts: 0,
 		dbLock:     new(sync.Mutex),
 		entryCache: entryCache,
@@ -276,7 +279,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 		case raftpb.EntryConfChange:
 			entryMeta.EntryType = aspirapb.EntryMeta_ConfChange
 		case raftpb.EntryNormal:
-			if len(e.Data) > (50 << 10) {
+			if len(e.Data) > throttle {
 				var proposal aspirapb.AspiraProposal
 				err := proposal.Unmarshal(e.Data)
 				utils.Check(err)
@@ -619,13 +622,27 @@ func (wal *WAL) CreateSnapshot(compactIndex uint64, cs *raftpb.ConfState, udata 
 ApplyPut and ApplyPutWithOffset do not need a DB lock, because before receiving the snapshot,
 worker will drain the applyMessage channel
 */
-func (wal *WAL) ApplyPut(index uint64) error {
+func (wal *WAL) ApplyPut(e raftpb.Entry) error {
+	if len(e.Data) <= 0 {
+		return errors.Errorf("data len is 0")
+	}
+	if len(e.Data) > throttle {
+		dataPortion, err := wal.DB().GetRecord(wal.ExtKey(e.Index))
+		if err != nil {
+			return err
+		}
+		return wal.DB().WriteRecord(lump.FromU64(0, e.Index), *dataPortion)
+	}
 
-	dataPortion, err := wal.DB().GetRecord(wal.ExtKey(index))
+	var p aspirapb.AspiraProposal
+	err := p.Unmarshal(e.Data)
 	if err != nil {
 		return err
 	}
-	return wal.DB().WriteRecord(lump.FromU64(0, index), *dataPortion)
+	wal.sab.Resize(uint32(len(p.Data)))
+	copy(wal.sab.AsBytes(), p.Data)
+	_, err = wal.DB().Put(lump.FromU64(0, e.Index), lump.NewLumpDataWithAb(wal.sab))
+	return err
 }
 
 func (wal *WAL) ApplyPutWithOffset(index uint64) error {
