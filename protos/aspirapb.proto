@@ -243,6 +243,7 @@ message ZeroAddWorkerGroupRequest{
 }
 
 message ZeroAddWorkerGroupResponse {
+	uint64 gid = 1;
 }
 
 

@@ -331,7 +331,7 @@ func (z *Zero) AddWorkerGroup(ctx context.Context, req *aspirapb.ZeroAddWorkerGr
 		if myErr != nil {
 			err = errors.Errorf("[zero], one of remote error: [%+v]", myErr)
 			xlog.Logger.Warnf(err.Error())
-			return &aspirapb.ZeroAddWorkerGroupResponse{}, err
+			return &aspirapb.ZeroAddWorkerGroupResponse{Gid: gid}, err
 		}
 	}
 

@@ -148,9 +148,12 @@ func addGroup(c *cli.Context) error {
 
 	client := aspirapb.NewZeroClient(conn)
 
-	if _, err = client.AddWorkerGroup(context.Background(), &aspirapb.ZeroAddWorkerGroupRequest{}); err != nil {
+	res, err := client.AddWorkerGroup(context.Background(), &aspirapb.ZeroAddWorkerGroupRequest{})
+	if err != nil {
 		return err
 	}
+
+	fmt.Printf("Gid %d created\n", res.Gid)
 	return nil
 }
 
