@@ -149,7 +149,7 @@ func (wal *WAL) reset(entries []raftpb.Entry) {
 		case raftpb.EntryConfChange:
 			m = aspirapb.EntryMeta{Index: e.Index, Term: e.Term, EntryType: aspirapb.EntryMeta_ConfChange, Data: e.Data}
 		case raftpb.EntryNormal:
-			m = aspirapb.EntryMeta{Index: e.Index, Term: e.Term, EntryType: aspirapb.EntryMeta_LeaderCommit, Data: e.Data}
+			m = aspirapb.EntryMeta{Index: e.Index, Term: e.Term, EntryType: aspirapb.EntryMeta_NormalOther, Data: e.Data}
 		}
 		wal.ents = append(wal.ents, m)
 		data, _ := m.Marshal()
@@ -271,13 +271,17 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 		var entryMeta aspirapb.EntryMeta
 		entryMeta.Term = e.Term
 		entryMeta.Index = e.Index
+		//bigger than 50KB
 		switch e.Type {
+		case raftpb.EntryConfChange:
+			entryMeta.EntryType = aspirapb.EntryMeta_ConfChange
 		case raftpb.EntryNormal:
-			if len(e.Data) != 0 {
+			if len(e.Data) > (50 << 10) {
 				var proposal aspirapb.AspiraProposal
-				proposal.Unmarshal(e.Data)
+				err := proposal.Unmarshal(e.Data)
+				utils.Check(err)
 				if proposal.ProposalType == aspirapb.AspiraProposal_Put {
-					entryMeta.EntryType = aspirapb.EntryMeta_Put
+					entryMeta.EntryType = aspirapb.EntryMeta_NormalPutBig
 					entryMeta.AssociateKey = proposal.AssociateKey
 					wal.ab.Resize(uint32(len(proposal.Data)))
 					copy(wal.ab.AsBytes(), proposal.Data)
@@ -286,19 +290,17 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 					if err != nil {
 						return err
 					}
+					xlog.Logger.Debugf("cached %d", e.Index)
+					wal.entryCache.Add(e.Index, e)
 				} else {
-					entryMeta.EntryType = aspirapb.EntryMeta_PutWithOffset
-					entryMeta.Data = e.Data
+					panic("must be AspiraProposal_Put")
 				}
 			} else {
-				entryMeta.EntryType = aspirapb.EntryMeta_LeaderCommit
+				entryMeta.EntryType = aspirapb.EntryMeta_NormalOther
 				entryMeta.Data = e.Data
 			}
-		case raftpb.EntryConfChange:
-			entryMeta.EntryType = aspirapb.EntryMeta_ConfChange
-			entryMeta.Data = e.Data
 		default:
-			panic("meet new type")
+			xlog.Logger.Fatal("meet new raftpb type")
 		}
 
 		data, err := entryMeta.Marshal()
@@ -309,9 +311,6 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 			return err
 		}
 		wal.ents = append(wal.ents, entryMeta)
-		xlog.Logger.Debugf("cached %d", e.Index)
-		wal.entryCache.Add(e.Index, e)
-
 	}
 	return nil
 }
@@ -399,11 +398,22 @@ func (wal *WAL) PastLife() (bool, error) {
 }
 
 func (wal *WAL) fromMetaToRaftEntry(meta aspirapb.EntryMeta) (e raftpb.Entry) {
+
 	switch meta.EntryType {
-	case aspirapb.EntryMeta_PutWithOffset:
+	case aspirapb.EntryMeta_ConfChange:
+		e.Type = raftpb.EntryConfChange
+		e.Data = meta.Data
+	case aspirapb.EntryMeta_NormalOther:
 		e.Type = raftpb.EntryNormal
 		e.Data = meta.Data
-	case aspirapb.EntryMeta_Put:
+	case aspirapb.EntryMeta_NormalPutBig:
+
+		if v, ok := wal.entryCache.Get(meta.Index); ok {
+			e = v.(raftpb.Entry)
+			xlog.Logger.Debugf("cache hit for %d", meta.Index)
+			return e
+		}
+
 		//build data
 		e.Type = raftpb.EntryNormal
 		extData, err := wal.DB().Get(wal.ExtKey(meta.Index))
@@ -418,12 +428,6 @@ func (wal *WAL) fromMetaToRaftEntry(meta aspirapb.EntryMeta) (e raftpb.Entry) {
 		data, err := proposal.Marshal()
 		utils.Check(err)
 		e.Data = data
-	case aspirapb.EntryMeta_LeaderCommit:
-		e.Type = raftpb.EntryNormal
-		e.Data = nil
-	case aspirapb.EntryMeta_ConfChange:
-		e.Type = raftpb.EntryConfChange
-		e.Data = meta.Data
 	default:
 		xlog.Logger.Fatalf("unknow type read from %+v", meta)
 	}
@@ -451,13 +455,17 @@ func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error
 	size := 0
 	var e raftpb.Entry
 	for i := range ents {
-		id := ents[i].Index
-		if v, ok := wal.entryCache.Get(id); ok {
-			e = v.(raftpb.Entry)
-			xlog.Logger.Debugf("cache hit for %d", id)
-		} else {
-			e = wal.fromMetaToRaftEntry(ents[i])
-		}
+		//id := ents[i].Index
+
+		e = wal.fromMetaToRaftEntry(ents[i])
+		/*
+			if v, ok := wal.entryCache.Get(id); ok {
+				e = v.(raftpb.Entry)
+				xlog.Logger.Debugf("cache hit for %d", id)
+			} else {
+				e = wal.fromMetaToRaftEntry(ents[i])
+			}
+		*/
 		es = append(es, e)
 		size += e.Size()
 		//if maxSize is 0, we still want to return at lease one entry

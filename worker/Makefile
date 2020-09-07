@@ -1,5 +1,5 @@
 .PHONY: clean, profile
-all:
+all: *.go
 	swag init -g http_server.go
 	go build
 profile:

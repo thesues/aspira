@@ -56,6 +56,15 @@ func ExtKey(idx uint64) lump.LumpId {
 
 }
 
+func hasExt(store *storage.Storage, index uint64) bool {
+	id := ExtKey(index)
+	_, err := store.Get(id)
+	if err != nil {
+		return false
+	}
+	return true
+}
+
 func memberShipKey() (ret lump.LumpId) {
 	var buf [8]byte
 	buf[0] = 0x80
@@ -102,6 +111,7 @@ func main() {
 
 	//entries
 	wal := raftwal.Init(store)
+	wal.PastLife()
 
 	fmt.Printf("ENTRIES: \n")
 	first, err := wal.FirstIndex()
@@ -109,7 +119,7 @@ func main() {
 	last, err := wal.LastIndex()
 	fmt.Printf("LastIndex  : %d\n", last)
 	for {
-		es, err := wal.AllEntries(first, (^uint64(0) >> 2), 10<<20)
+		es, err := wal.AllEntries(first, last+1, 10<<20)
 		if err != nil {
 			panic(err.Error())
 		}
@@ -125,7 +135,7 @@ func main() {
 			default:
 				var p aspirapb.AspiraProposal
 				p.Unmarshal(es[i].Data)
-				fmt.Printf("index: %d, term: %d , %+v\n", es[i].Index, es[i].Term, p.ProposalType)
+				fmt.Printf("index: %d, term: %d , [%+v, %v]\n", es[i].Index, es[i].Term, p.ProposalType, hasExt(store, es[i].Index))
 			}
 
 		}
