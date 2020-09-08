@@ -19,6 +19,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/coreos/etcd/raft"
@@ -45,6 +46,7 @@ type WAL struct {
 	// ents[i] has raft log position i+snapshot.Metadata.Index
 	ents       []aspirapb.EntryMeta //only cache EntryMeta
 	entryCache *lru.Cache           //full cache contains user data
+	lastWrite  int64                //seconds
 }
 
 var (
@@ -71,35 +73,27 @@ func Init(db *cannyls.Storage) *WAL {
 		entryCache: entryCache,
 		ents:       make([]aspirapb.EntryMeta, 1, 2000),
 		snapshot:   raftpb.Snapshot{},
+		lastWrite:  time.Now().Unix(),
 	}
 	atomic.StorePointer(&wal.p, unsafe.Pointer(db))
 
-	/*
-		snap, err := wal.Snapshot()
-
-		if err != nil {
-			panic("failed to read snapshot")
-		}
-
-		if !raft.IsEmptySnap(snap) { //if have snapshot
-			return wal
-		}
-
-
-			_, err = wal.FirstIndex()
-
-			if err == errNotFound {
-				ents := make([]raftpb.Entry, 1)
-				ents[0].Type = raftpb.EntryNormal
-				wal.reset(ents)
+	//if db is silent, run SideJob
+	go func() {
+		ticker := time.NewTicker(3 * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				if time.Now().Unix()-atomic.LoadInt64(&wal.lastWrite) > 3 {
+					db := wal.DB()
+					if db != nil {
+						db.RunSideJobOnce(128)
+					}
+				}
 			}
 
-			//if has snapshot, run DeleteUntil()
-			//optional
-			if err = wal.deleteUntil(snap.Metadata.Index); err != nil {
-				panic("raftwal: Init failed")
-			}
-	*/
+		}
+	}()
+
 	return wal
 }
 
@@ -135,7 +129,6 @@ func (wal *WAL) Save(hd raftpb.HardState, entries []raftpb.Entry) (err error) {
 		return err
 	}
 	if err = wal.addEntries(entries); err != nil {
-		return err
 	}
 	return nil
 }
@@ -186,7 +179,10 @@ func (wal *WAL) setHardState(st raftpb.HardState) (err error) {
 	if err != nil {
 		return errors.Wrapf(err, "wal.Store: While marshal hardstate")
 	}
+
 	_, err = wal.DB().PutEmbed(wal.hardStateKey(), data)
+	atomic.StoreInt64(&wal.lastWrite, time.Now().Unix())
+
 	return
 }
 
@@ -376,6 +372,10 @@ func (wal *WAL) loadEntries(index uint64) (bool, error) {
 func (wal *WAL) PastLife() (bool, error) {
 	xlog.Logger.Info("replaying WAL")
 
+	xlog.Logger.Info("run JournalGC")
+	wal.DB().JournalGC()
+	xlog.Logger.Info("end run JournalGC")
+
 	data, err := wal.DB().Get(wal.snapshotKey())
 	if err != nil {
 		//nosnapshot so far
@@ -552,6 +552,7 @@ func (wal *WAL) ApplySnapshot(snap raftpb.Snapshot) {
 	wal.ents = []aspirapb.EntryMeta{{Term: snap.Metadata.Term, Index: snap.Metadata.Index}}
 	//save to disk.
 
+	wal.DB().JournalGC()
 	wal.deleteFrom(snap.Metadata.Index)
 	//set snapshot key
 	data, _ := wal.snapshot.Marshal()

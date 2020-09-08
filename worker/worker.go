@@ -296,10 +296,6 @@ func (aw *AspiraWorker) Run() {
 			return
 		case <-ticker.C:
 			n.Raft().Tick()
-
-		case <-time.After(15 * time.Second):
-			aw.store.DB().RunSideJobOnce()
-
 		case rd := <-n.Raft().Ready():
 			_, span := otrace.StartSpan(ctx, "Ready.Loop", otrace.WithSampler(otrace.ProbabilitySampler(0.1)))
 
@@ -369,7 +365,11 @@ func (aw *AspiraWorker) Run() {
 				aw.Node.SetConfState(&rd.Snapshot.Metadata.ConfState)
 			}
 
-			n.SaveToStorage(rd.HardState, rd.Entries)
+			err := n.SaveToStorage(rd.HardState, rd.Entries)
+			if err != nil {
+				xlog.Logger.Errorf("While trying to save Raft update: %v. Retrying...", err)
+				return
+			}
 
 			span.Annotatef(nil, "Saved to storage")
 
