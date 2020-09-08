@@ -132,12 +132,12 @@ func (wal *WAL) hardStateKey() (ret lump.LumpId) {
 func (wal *WAL) Save(hd raftpb.HardState, entries []raftpb.Entry) (err error) {
 
 	if err = wal.setHardState(hd); err != nil {
-		return
+		return err
 	}
 	if err = wal.addEntries(entries); err != nil {
-		return
+		return err
 	}
-	return
+	return nil
 }
 
 //reset for test only

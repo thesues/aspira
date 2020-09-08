@@ -118,8 +118,8 @@ func (ac *AspiraClient) Connect() error {
 //GetConn get grpc.Connection from pool, if not connected, create new
 func (ac *AspiraClient) GetConn(addr string) (*grpc.ClientConn, error) {
 	ac.RLock()
-	defer ac.RUnlock()
 	conn, ok := ac.conns[addr]
+	ac.RUnlock()
 	if ok {
 		return conn, nil
 	}
@@ -133,7 +133,11 @@ func (ac *AspiraClient) GetConn(addr string) (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	ac.Lock()
 	ac.conns[addr] = conn
+	ac.Unlock()
+
 	return conn, nil
 }
 
@@ -196,7 +200,15 @@ func (ac *AspiraClient) pull(writer io.Writer, conn *grpc.ClientConn, gid, oid u
 	return nil
 }
 
+func (ac *AspiraClient) PushData(data []byte) (uint64, uint64, error) {
+	return ac.selectGidAndPush(false, nil, data)
+}
+
 func (ac *AspiraClient) PushStream(reader io.Reader) (uint64, uint64, error) {
+	return ac.selectGidAndPush(true, reader, nil)
+}
+
+func (ac *AspiraClient) selectGidAndPush(stream bool, reader io.Reader, udata []byte) (uint64, uint64, error) {
 	groups := ac.Groups().groups
 	selectedGroup := groups[:utils.Min(3, len(groups))]
 	if len(selectedGroup) <= 0 {
@@ -213,7 +225,15 @@ func (ac *AspiraClient) PushStream(reader io.Reader) (uint64, uint64, error) {
 			n = (n + 1) % len(selectedGroup)
 			continue
 		}
-		_, oid, err := ac.push(reader, conn, gid)
+		var oid uint64
+		if stream && reader != nil {
+			_, oid, err = ac.pushStream(reader, conn, gid)
+		} else if !stream && len(udata) > 0 {
+			_, oid, err = ac.pushData(udata, conn, gid)
+		} else {
+			return 0, 0, errors.Errorf("API input error")
+		}
+
 		if err == nil {
 			return gid, oid, err
 		}
@@ -223,8 +243,20 @@ func (ac *AspiraClient) PushStream(reader io.Reader) (uint64, uint64, error) {
 
 }
 
-func (ac *AspiraClient) push(reader io.Reader, conn *grpc.ClientConn, gid uint64) (uint64, uint64, error) {
+func (ac *AspiraClient) pushData(data []byte, conn *grpc.ClientConn, gid uint64) (uint64, uint64, error) {
+	client := aspirapb.NewStoreClient(conn)
 
+	res, err := client.Put(context.Background(), &aspirapb.PutRequest{
+		Gid:     gid,
+		Payload: &aspirapb.Payload{Data: data},
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return res.Gid, res.Oid, nil
+}
+
+func (ac *AspiraClient) pushStream(reader io.Reader, conn *grpc.ClientConn, gid uint64) (uint64, uint64, error) {
 	client := aspirapb.NewStoreClient(conn)
 	putStream, err := client.PutStream(context.Background())
 
@@ -250,9 +282,11 @@ func (ac *AspiraClient) push(reader io.Reader, conn *grpc.ClientConn, gid uint64
 		if err != nil && err != io.EOF {
 			return 0, 0, err
 		}
+
 		if n == 0 {
 			break
 		}
+
 		req := aspirapb.PutStreamRequest{
 			Data: &aspirapb.PutStreamRequest_Payload{
 				Payload: &aspirapb.Payload{
@@ -266,9 +300,8 @@ func (ac *AspiraClient) push(reader io.Reader, conn *grpc.ClientConn, gid uint64
 		}
 	}
 	res, err := putStream.CloseAndRecv()
-	if err == nil {
-		return res.Gid, res.Oid, err
-	} else {
+	if err != nil {
 		return 0, 0, err
 	}
+	return res.Gid, res.Oid, nil
 }

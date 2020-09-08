@@ -57,7 +57,7 @@ func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker
 
 	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
-		if db, err = cannyls.CreateCannylsStorage(path, 8<<30, 0.05); err != nil {
+		if db, err = cannyls.CreateCannylsStorage(path, 8<<30, 0.15); err != nil {
 			return
 		}
 	} else {
@@ -296,6 +296,10 @@ func (aw *AspiraWorker) Run() {
 			return
 		case <-ticker.C:
 			n.Raft().Tick()
+
+		case <-time.After(15 * time.Second):
+			aw.store.DB().RunSideJobOnce()
+
 		case rd := <-n.Raft().Ready():
 			_, span := otrace.StartSpan(ctx, "Ready.Loop", otrace.WithSampler(otrace.ProbabilitySampler(0.1)))
 
@@ -371,7 +375,7 @@ func (aw *AspiraWorker) Run() {
 
 			synced := false
 			if createSnapshot {
-				synced = aw.trySnapshot(5000)
+				synced = aw.trySnapshot(10000)
 			}
 
 			if rd.MustSync && !synced {

@@ -40,7 +40,7 @@
                 }
             }
         },
-        "/get/{gid}/{id}": {
+        "/get/{gid}/{oid}": {
             "get": {
                 "produces": [
                     "application/octet-stream",

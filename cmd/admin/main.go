@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/pkg/errors"
@@ -254,7 +258,100 @@ func decodeGidOid(s string) (gid uint64, oid uint64, err error) {
 
 func encodeGidOid(gid, oid uint64) string {
 	return strconv.FormatUint(gid, 36) + ":" + strconv.FormatUint(oid, 36)
-	return fmt.Sprintf("%x:%x", gid, oid)
+}
+
+func setRandStringBytes(data []byte) {
+	rand.NewSource(time.Now().Unix())
+	letterBytes := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	for i := range data {
+		data[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+}
+
+func wbench(c *cli.Context) error {
+	size := c.Int("size")
+	threadNum := c.Int("thread")
+	cluster := c.String("cluster")
+	duration := c.Int("duration")
+	return bench("wbench", size, threadNum, cluster, duration)
+}
+
+func rbench(c *cli.Context) error {
+	return nil
+}
+
+func wrbench(c *cli.Context) error {
+	return nil
+}
+
+func bench(benchType string, size int, threadNum int, clusterAddr string, duration int) error {
+	stopper := utils.NewStopper()
+
+	zeroAddrs := strings.Split(clusterAddr, ",")
+
+	data := make([]byte, size)
+	setRandStringBytes(data)
+	client := aspiraclient.NewAspiraClient(zeroAddrs)
+	if err := client.Connect(); err != nil {
+		return err
+	}
+	start := time.Now()
+
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM,
+		syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGUSR1)
+
+	var count uint64
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < threadNum; i++ {
+			stopper.RunWorker(func() {
+				for {
+					select {
+					case <-stopper.ShouldStop():
+						return
+					default:
+						_, _, err := client.PushData(data)
+						if err != nil {
+							fmt.Println(err)
+							return
+						}
+
+						atomic.AddUint64(&count, 1)
+					}
+				}
+
+			})
+		}
+		stopper.Wait()
+		close(done)
+	}()
+
+	timeout := time.After(time.Duration(duration) * time.Second)
+	select {
+	case <-sc:
+		stopper.Stop()
+	case <-timeout:
+		stopper.Stop()
+	case <-done:
+		break
+	}
+
+	printSummary(time.Now().Sub(start), atomic.LoadUint64(&count), size, threadNum)
+	return nil
+}
+
+func printSummary(elapsed time.Duration, totalCount uint64, size int, threadNum int) {
+	if int(elapsed.Seconds()) == 0 {
+		return
+	}
+	fmt.Printf("Summary\n")
+	fmt.Printf("Threads :%d\n", threadNum)
+	fmt.Printf("Size    :%d\n", size)
+	fmt.Printf("Time taken for tests :%v seconds\n", elapsed.Seconds())
+	fmt.Printf("Complete requests :%d\n", totalCount)
+	fmt.Printf("Total transferred :%d bytes\n", totalCount*uint64(size))
+	fmt.Printf("Requests per second :%d [#/sec]\n", totalCount/uint64(elapsed.Seconds()))
 }
 
 func main() {
@@ -318,9 +415,32 @@ func main() {
 			},
 			Action: sgetFile,
 		},
+
 		{
-			Name: "bench"
-		}
+			Name: "wbench",
+			Flags: []cli.Flag{
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
+				&cli.IntFlag{Name: "size", Value: 4096},
+				&cli.IntFlag{Name: "thread", Value: 128},
+				&cli.IntFlag{Name: "duration", Value: 10},
+			},
+			Action: wbench,
+		},
+
+		{
+			Name: "rbench",
+			Flags: []cli.Flag{
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
+			},
+			Action: rbench,
+		},
+		{
+			Name: "wrbench",
+			Flags: []cli.Flag{
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
+			},
+			Action: wrbench,
+		},
 	}
 
 	err := app.Run(os.Args)
