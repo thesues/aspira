@@ -395,7 +395,7 @@ func (z *Zero) AddWorkerGroup(ctx context.Context, req *aspirapb.ZeroAddWorkerGr
 			}
 		}()
 	}
-	return &aspirapb.ZeroAddWorkerGroupResponse{}, nil
+	return &aspirapb.ZeroAddWorkerGroupResponse{Gid: gid}, nil
 }
 
 func (z *Zero) RegistStore(ctx context.Context, req *aspirapb.ZeroRegistStoreRequest) (*aspirapb.ZeroRegistStoreResponse, error) {

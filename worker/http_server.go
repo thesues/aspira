@@ -160,7 +160,7 @@ func (as *AspiraStore) add(c *gin.Context) {
 // @Success 200 {body} string ""
 // @Failure 400 {string} string ""
 // @Failure 500 {string} string ""
-// @Router /get/{gid}/{id} [get]
+// @Router /get/{gid}/{oid} [get]
 func (as *AspiraStore) get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("oid"), 10, 64)
 	if err != nil {

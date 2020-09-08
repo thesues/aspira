@@ -292,8 +292,8 @@ func main() {
 			Action: getAspira,
 		},
 		{
-			Name:  "zero_add_group",
-			Usage: "zero_add_group --cluster <path>",
+			Name:  "add_group",
+			Usage: "add_group --cluster <path>",
 			Flags: []cli.Flag{
 				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
 			},
@@ -318,6 +318,9 @@ func main() {
 			},
 			Action: sgetFile,
 		},
+		{
+			Name: "bench"
+		}
 	}
 
 	err := app.Run(os.Args)
