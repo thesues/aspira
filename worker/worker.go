@@ -52,6 +52,10 @@ type AspiraWorker struct {
 	lastSnap  time.Time
 }
 
+var (
+	defaultSnapshotCount = uint64(3000)
+)
+
 func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker, err error) {
 
 	var db *cannyls.Storage
@@ -79,7 +83,6 @@ func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker
 		store:     store,
 		storePath: path,
 		//state:      &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
-		lastSnap: time.Now(),
 	}
 	return as, nil
 }
@@ -373,7 +376,7 @@ func (aw *AspiraWorker) Run() {
 
 			synced := false
 			if createSnapshot {
-				synced = aw.trySnapshot(5000)
+				synced = aw.trySnapshot(defaultSnapshotCount)
 			}
 
 			if rd.MustSync && !synced {
@@ -427,17 +430,21 @@ func (aw *AspiraWorker) trySnapshot(skip uint64) (created bool) {
 	si := existing.Metadata.Index
 	doneUntil := aw.Node.Applied.DoneUntil()
 
-	if doneUntil < si+skip || time.Now().Sub(aw.lastSnap) < time.Minute {
+	if doneUntil < si+skip {
 		return
 	}
+
+	if doneUntil < si+skip {
+		return
+	}
+
 	data, err := aw.Node.State.Marshal()
 	utils.Check(err)
-	xlog.Logger.Infof("Writing snapshot at index:%d\n", doneUntil-skip/2)
-	created, err = aw.store.CreateSnapshot(doneUntil-skip/2, aw.Node.ConfState(), data)
+	xlog.Logger.Infof("Writing snapshot at index:%d\n", doneUntil)
+	created, err = aw.store.CreateSnapshot(doneUntil, aw.Node.ConfState(), data)
 	if err != nil {
 		xlog.Logger.Warnf("trySnapshot have error %+v", err)
 	}
-	aw.lastSnap = time.Now()
 	return created
 }
 
@@ -529,6 +536,7 @@ func (aw *AspiraWorker) proposeAndWait(ctx context.Context, proposal *aspirapb.A
 			return 0, errInternalRetry
 		}
 	}
+
 	var index uint64
 	err := errInternalRetry
 	timeout := 4 * time.Second

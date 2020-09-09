@@ -420,9 +420,9 @@ func main() {
 			Name: "wbench",
 			Flags: []cli.Flag{
 				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
-				&cli.IntFlag{Name: "size", Value: 4096},
-				&cli.IntFlag{Name: "thread", Value: 128},
-				&cli.IntFlag{Name: "duration", Value: 10},
+				&cli.IntFlag{Name: "size", Value: 4096, Aliases: []string{"s"}},
+				&cli.IntFlag{Name: "thread", Value: 128, Aliases: []string{"t"}},
+				&cli.IntFlag{Name: "duration", Value: 10, Aliases: []string{"d"}},
 			},
 			Action: wbench,
 		},

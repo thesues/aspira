@@ -55,7 +55,7 @@ func (as *AspiraStore) del(c *gin.Context) {
 		c.String(400, err.Error())
 		return
 	}
-	xlog.Logger.Infof("time eslpated %+v\n", time.Since(start))
+	xlog.Logger.Infof("time elapsed %+v\n", time.Since(start))
 	c.String(200, "delete %d", id)
 }
 
@@ -115,7 +115,7 @@ func (as *AspiraStore) put(c *gin.Context) {
 		c.String(400, err.Error())
 		return
 	}
-	xlog.Logger.Infof("time eslpated %+v\n", time.Since(start))
+	xlog.Logger.Infof("time elapsed %+v\n", time.Since(start))
 	c.String(200, "wrote to %d", index)
 }
 

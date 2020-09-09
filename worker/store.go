@@ -39,6 +39,7 @@ import (
 	zeroclient "github.com/thesues/aspira/zero_client"
 	otrace "go.opencensus.io/trace"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 )
 
@@ -57,6 +58,7 @@ type AspiraStore struct {
 	httpServer *http.Server
 	zClient    *zeroclient.ZeroClient
 	zeroAddrs  []string
+	limiter    *rate.Limiter
 }
 
 func createDirectoryIfNotExist(path string) {
@@ -77,7 +79,9 @@ func NewAspiraStore(name, addr, httpAddr string, zeroAddrs []string) (*AspiraSto
 		workers:   make(map[Gid]*AspiraWorker),
 		zClient:   zeroclient.NewZeroClient(),
 		zeroAddrs: zeroAddrs,
+		limiter:   rate.NewLimiter(600, 600),
 	}
+
 	createDirectoryIfNotExist(fmt.Sprintf("%s/prepare", as.name))
 	return as, nil
 }

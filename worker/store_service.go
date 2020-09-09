@@ -39,7 +39,19 @@ func (as *AspiraStore) Put(ctx context.Context, req *aspirapb.PutRequest) (*aspi
 	if w == nil {
 		return &aspirapb.PutResponse{}, errors.Errorf("do not have such gid %d", gid)
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+
+	//rate limit
+
+	loop := 0
+	for !as.limiter.Allow() && loop < 3 {
+		time.Sleep(500 * time.Millisecond)
+		loop++
+	}
+	if loop == 3 {
+		return nil, errInternalRetry
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	var p aspirapb.AspiraProposal
 	p.Data = req.Payload.Data
@@ -50,7 +62,7 @@ func (as *AspiraStore) Put(ctx context.Context, req *aspirapb.PutRequest) (*aspi
 	if err != nil {
 		return &aspirapb.PutResponse{}, err
 	}
-	xlog.Logger.Infof("time eslpated %+v\n", time.Since(start))
+	xlog.Logger.Infof("time elapsed %+v\n", time.Since(start))
 	res := aspirapb.PutResponse{
 		Gid: gid,
 		Oid: index,
@@ -104,7 +116,7 @@ func (as *AspiraStore) PutStream(stream aspirapb.Store_PutStreamServer) error {
 		xlog.Logger.Errorf(err.Error())
 		return err
 	}
-	xlog.Logger.Infof("time eslpated %+v\n", time.Since(start))
+	xlog.Logger.Infof("time elapsed %+v\n", time.Since(start))
 	res := aspirapb.PutResponse{
 		Gid: gid,
 		Oid: index,

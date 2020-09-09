@@ -50,12 +50,13 @@ type WAL struct {
 }
 
 var (
-	keyMask     = (^uint64(0) >> 2) //0x3FFFFFFFFFFFFFFF, the first two bits are zero
-	minimalKey  = ^keyMask
-	maxKey      = keyMask
-	endOfList   = errors.Errorf("end of list of keys")
-	errNotFound = errors.New("Unable to find raft entry")
-	throttle    = (40 << 10)
+	keyMask                = (^uint64(0) >> 2) //0x3FFFFFFFFFFFFFFF, the first two bits are zero
+	minimalKey             = ^keyMask
+	maxKey                 = keyMask
+	endOfList              = errors.Errorf("end of list of keys")
+	errNotFound            = errors.New("Unable to find raft entry")
+	throttle               = (40 << 10)
+	snapshotCatchUpEntries = uint64(5000)
 )
 
 func Init(db *cannyls.Storage) *WAL {
@@ -562,28 +563,25 @@ func (wal *WAL) ApplySnapshot(snap raftpb.Snapshot) {
 
 //CreateSnapshot, if createSnapshot
 // is done, it means we have synced the database, so the raft worker do not have to sync again
-func (wal *WAL) CreateSnapshot(compactIndex uint64, cs *raftpb.ConfState, udata []byte) (created bool, err error) {
+func (wal *WAL) CreateSnapshot(snapi uint64, cs *raftpb.ConfState, udata []byte) (created bool, err error) {
 
-	wal.dbLock.Lock()
-	defer wal.dbLock.Unlock()
-
-	if wal.readCounts > 0 {
+	if wal.InflightSnapshot() {
 		return false, errors.Errorf("followers are reading snapshot, deter the snapshot")
 	}
 
 	wal.Lock()
 	defer wal.Unlock()
-	if compactIndex <= wal.snapshot.Metadata.Index {
+	if snapi <= wal.snapshot.Metadata.Index {
 		return false, raft.ErrSnapOutOfDate
 	}
 
 	offset := wal.ents[0].Index
-	if compactIndex > wal.lastIndex() {
-		return false, errors.Errorf("snapshot %d is out of bound lastindex(%d)", compactIndex, wal.lastIndex())
+	if snapi > wal.lastIndex() {
+		return false, errors.Errorf("snapshot %d is out of bound lastindex(%d)", snapi, wal.lastIndex())
 	}
 
-	wal.snapshot.Metadata.Index = compactIndex
-	wal.snapshot.Metadata.Term = wal.ents[compactIndex-offset].Term
+	wal.snapshot.Metadata.Index = snapi
+	wal.snapshot.Metadata.Term = wal.ents[snapi-offset].Term
 	if cs != nil {
 		wal.snapshot.Metadata.ConfState = *cs
 	}
@@ -601,6 +599,14 @@ func (wal *WAL) CreateSnapshot(compactIndex uint64, cs *raftpb.ConfState, udata 
 		return false, err
 	}
 
+	compactIndex := uint64(1)
+	if snapi > snapshotCatchUpEntries {
+		compactIndex = snapi - snapshotCatchUpEntries
+	}
+
+	if compactIndex <= offset {
+		return
+	}
 	//compact ents and cannyls
 	i := compactIndex - offset
 	ents := make([]aspirapb.EntryMeta, 1, 1+uint64(len(wal.ents))-i)
@@ -659,6 +665,12 @@ func (wal *WAL) GetData(index uint64) ([]byte, error) {
 	return wal.DB().Get(lump.FromU64(0, index))
 }
 
+func (wal *WAL) InflightSnapshot() bool {
+	wal.dbLock.Lock()
+	wal.dbLock.Unlock()
+	return wal.readCounts > 0
+
+}
 func (wal *WAL) GetStreamReader() (io.Reader, error) {
 	wal.dbLock.Lock()
 	defer wal.dbLock.Unlock()

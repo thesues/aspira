@@ -29,6 +29,7 @@ require (
 	go.opencensus.io v0.22.4
 	go.uber.org/zap v1.14.1
 	golang.org/x/net v0.0.0-20191014212845-da9a3fd4c582
+	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
 	google.golang.org/grpc v1.26.0
 	gopkg.in/go-playground/assert.v1 v1.2.1
 )
