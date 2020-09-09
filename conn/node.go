@@ -297,8 +297,15 @@ func (n *Node) Snapshot() (raftpb.Snapshot, error) {
 }
 
 // SaveToStorage saves the hard state, entries, and snapshot to persistent storage, in that order.
-func (n *Node) SaveToStorage(h raftpb.HardState, es []raftpb.Entry) error {
-	return n.Store.Save(h, es)
+func (n *Node) SaveToStorage(h raftpb.HardState, es []raftpb.Entry) {
+	for {
+		if err := n.Store.Save(h, es); err != nil {
+			xlog.Logger.Errorf("While trying to save Raft update: %v. Retrying...", err)
+			time.Sleep(3 * time.Second)
+		} else {
+			return
+		}
+	}
 }
 
 // PastLife returns the index of the snapshot before the restart (if any) and whether there was

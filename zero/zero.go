@@ -395,6 +395,7 @@ func (z *Zero) AddWorkerGroup(ctx context.Context, req *aspirapb.ZeroAddWorkerGr
 			}
 		}()
 	}
+	xlog.Logger.Infof("CREATE [%d]", gid)
 	return &aspirapb.ZeroAddWorkerGroupResponse{Gid: gid}, nil
 }
 

@@ -86,7 +86,7 @@ func Init(db *cannyls.Storage) *WAL {
 				if time.Now().Unix()-atomic.LoadInt64(&wal.lastWrite) > 3 {
 					db := wal.DB()
 					if db != nil {
-						db.RunSideJobOnce(128)
+						db.RunSideJobOnce(64)
 					}
 				}
 			}

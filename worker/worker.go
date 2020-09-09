@@ -365,17 +365,13 @@ func (aw *AspiraWorker) Run() {
 				aw.Node.SetConfState(&rd.Snapshot.Metadata.ConfState)
 			}
 
-			err := n.SaveToStorage(rd.HardState, rd.Entries)
-			if err != nil {
-				xlog.Logger.Errorf("While trying to save Raft update: %v. Retrying...", err)
-				return
-			}
+			n.SaveToStorage(rd.HardState, rd.Entries)
 
 			span.Annotatef(nil, "Saved to storage")
 
 			synced := false
 			if createSnapshot {
-				synced = aw.trySnapshot(10000)
+				synced = aw.trySnapshot(5000)
 			}
 
 			if rd.MustSync && !synced {
@@ -435,7 +431,7 @@ func (aw *AspiraWorker) trySnapshot(skip uint64) (created bool) {
 	data, err := aw.Node.State.Marshal()
 	utils.Check(err)
 	xlog.Logger.Infof("Writing snapshot at index:%d\n", doneUntil-skip/2)
-	created, err = aw.store.CreateSnapshot(doneUntil-skip/2, aw.Node.ConfState(), data)
+	created, err = aw.store.CreateSnapshot(doneUntil, aw.Node.ConfState(), data)
 	if err != nil {
 		xlog.Logger.Warnf("trySnapshot have error %+v", err)
 	}
