@@ -49,6 +49,7 @@ type AspiraWorker struct {
 	stopper   *utils.Stopper
 	storePath string
 	info      unsafe.Pointer // *aspirapb.WorkerInfo
+	lastSnap  time.Time
 }
 
 func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker, err error) {
@@ -78,6 +79,7 @@ func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker
 		store:     store,
 		storePath: path,
 		//state:      &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
+		lastSnap: time.Now(),
 	}
 	return as, nil
 }
@@ -425,16 +427,17 @@ func (aw *AspiraWorker) trySnapshot(skip uint64) (created bool) {
 	si := existing.Metadata.Index
 	doneUntil := aw.Node.Applied.DoneUntil()
 
-	if doneUntil < si+skip {
+	if doneUntil < si+skip || time.Now().Sub(aw.lastSnap) < time.Minute {
 		return
 	}
 	data, err := aw.Node.State.Marshal()
 	utils.Check(err)
 	xlog.Logger.Infof("Writing snapshot at index:%d\n", doneUntil-skip/2)
-	created, err = aw.store.CreateSnapshot(doneUntil, aw.Node.ConfState(), data)
+	created, err = aw.store.CreateSnapshot(doneUntil-skip/2, aw.Node.ConfState(), data)
 	if err != nil {
 		xlog.Logger.Warnf("trySnapshot have error %+v", err)
 	}
+	aw.lastSnap = time.Now()
 	return created
 }
 

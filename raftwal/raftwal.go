@@ -78,6 +78,7 @@ func Init(db *cannyls.Storage) *WAL {
 	atomic.StorePointer(&wal.p, unsafe.Pointer(db))
 
 	//if db is silent, run SideJob
+
 	go func() {
 		ticker := time.NewTicker(3 * time.Second)
 		for {
@@ -86,7 +87,7 @@ func Init(db *cannyls.Storage) *WAL {
 				if time.Now().Unix()-atomic.LoadInt64(&wal.lastWrite) > 3 {
 					db := wal.DB()
 					if db != nil {
-						db.RunSideJobOnce(64)
+						db.RunSideJobOnce(128)
 					}
 				}
 			}
@@ -372,9 +373,9 @@ func (wal *WAL) loadEntries(index uint64) (bool, error) {
 func (wal *WAL) PastLife() (bool, error) {
 	xlog.Logger.Info("replaying WAL")
 
-	xlog.Logger.Info("run JournalGC")
-	wal.DB().JournalGC()
-	xlog.Logger.Info("end run JournalGC")
+	//xlog.Logger.Info("run JournalGC")
+	//wal.DB().JournalGC()
+	//xlog.Logger.Info("end run JournalGC")
 
 	data, err := wal.DB().Get(wal.snapshotKey())
 	if err != nil {
@@ -552,7 +553,7 @@ func (wal *WAL) ApplySnapshot(snap raftpb.Snapshot) {
 	wal.ents = []aspirapb.EntryMeta{{Term: snap.Metadata.Term, Index: snap.Metadata.Index}}
 	//save to disk.
 
-	wal.DB().JournalGC()
+	//wal.DB().JournalGC()
 	wal.deleteFrom(snap.Metadata.Index)
 	//set snapshot key
 	data, _ := wal.snapshot.Marshal()
