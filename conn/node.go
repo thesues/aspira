@@ -301,7 +301,6 @@ func (n *Node) SaveToStorage(h raftpb.HardState, es []raftpb.Entry) {
 	for {
 		if err := n.Store.Save(h, es); err != nil {
 			xlog.Logger.Errorf("While trying to save Raft update: %v. Retrying...", err)
-			time.Sleep(3 * time.Second)
 		} else {
 			return
 		}

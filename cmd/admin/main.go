@@ -2,14 +2,18 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -175,7 +179,7 @@ func getAspira(c *cli.Context) error {
 	}
 	defer conn.Close()
 
-	f, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
+	f, err := os.OpenFile(fileName, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		return err
 	}
@@ -273,7 +277,7 @@ func wbench(c *cli.Context) error {
 	threadNum := c.Int("thread")
 	cluster := c.String("cluster")
 	duration := c.Int("duration")
-	return bench("wbench", size, threadNum, cluster, duration)
+	return bench("wbench", size, threadNum, cluster, duration, true)
 }
 
 func rbench(c *cli.Context) error {
@@ -284,7 +288,14 @@ func wrbench(c *cli.Context) error {
 	return nil
 }
 
-func bench(benchType string, size int, threadNum int, clusterAddr string, duration int) error {
+type Result struct {
+	Gid       uint64
+	Oid       uint64
+	StartTime float64 //time.Now().Second
+	Elapsed   float64
+}
+
+func bench(benchType string, size int, threadNum int, clusterAddr string, duration int, recordLantency bool) error {
 	stopper := utils.NewStopper()
 
 	zeroAddrs := strings.Split(clusterAddr, ",")
@@ -297,12 +308,29 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 	}
 	start := time.Now()
 
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM,
-		syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGUSR1)
-
 	var count uint64
 	done := make(chan struct{})
+
+	livePrint := func() {
+		ticker := time.NewTicker(time.Second)
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				//https://stackoverflow.com/questions/56103775/how-to-print-formatted-string-to-the-same-line-in-stdout-with-go
+				//how to print in one line
+				fmt.Print("\033[u\033[K") // restore the cursor position and clear the line
+				ops := atomic.LoadUint64(&count) / uint64(time.Now().Sub(start).Seconds())
+				fmt.Printf("ops:%d/s  throughput:%s", ops, humanReadableTroughput(float64(size)*float64(ops)))
+			}
+		}
+	}
+
+	var lock sync.Mutex
+	var results []Result
+	benchStartTime := time.Now()
+
 	go func() {
 		for i := 0; i < threadNum; i++ {
 			stopper.RunWorker(func() {
@@ -311,10 +339,22 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 					case <-stopper.ShouldStop():
 						return
 					default:
-						_, _, err := client.PushData(data)
+						start := time.Now()
+						gid, oid, err := client.PushData(data)
 						if err != nil {
 							fmt.Println(err)
 							return
+						}
+						end := time.Now()
+						if recordLantency {
+							lock.Lock()
+							results = append(results, Result{
+								Gid:       gid,
+								Oid:       oid,
+								StartTime: start.Sub(benchStartTime).Seconds(),
+								Elapsed:   end.Sub(start).Seconds(),
+							})
+							lock.Unlock()
 						}
 
 						atomic.AddUint64(&count, 1)
@@ -327,31 +367,62 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 		close(done)
 	}()
 
-	timeout := time.After(time.Duration(duration) * time.Second)
+	go livePrint()
+
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM,
+		syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGUSR1)
 	select {
 	case <-sc:
 		stopper.Stop()
-	case <-timeout:
+	case <-time.After(time.Duration(duration) * time.Second):
 		stopper.Stop()
 	case <-done:
 		break
+	}
+
+	if recordLantency {
+		sort.Slice(results, func(i, j int) bool {
+			return results[i].StartTime < results[i].StartTime
+		})
+		f, err := os.OpenFile("result.json", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
+		defer f.Close()
+		if err == nil {
+			out, err := json.Marshal(results)
+			if err == nil {
+				f.Write(out)
+			} else {
+				fmt.Println("failed to write result.json")
+			}
+		}
 	}
 
 	printSummary(time.Now().Sub(start), atomic.LoadUint64(&count), size, threadNum)
 	return nil
 }
 
+func humanReadableTroughput(t float64) string {
+	units := []string{"B", "KB", "MB", "GB", "TB", "PB", "EB"}
+	power := int(math.Log10(t) / 3)
+	if power >= len(units) {
+		return ""
+	}
+	return fmt.Sprintf("%.2f%s/sec", t/math.Pow(1000, float64(power)), units[power])
+}
+
 func printSummary(elapsed time.Duration, totalCount uint64, size int, threadNum int) {
 	if int(elapsed.Seconds()) == 0 {
 		return
 	}
-	fmt.Printf("Summary\n")
+	fmt.Printf("\nSummary\n")
 	fmt.Printf("Threads :%d\n", threadNum)
 	fmt.Printf("Size    :%d\n", size)
 	fmt.Printf("Time taken for tests :%v seconds\n", elapsed.Seconds())
 	fmt.Printf("Complete requests :%d\n", totalCount)
 	fmt.Printf("Total transferred :%d bytes\n", totalCount*uint64(size))
 	fmt.Printf("Requests per second :%d [#/sec]\n", totalCount/uint64(elapsed.Seconds()))
+	t := float64(totalCount*uint64(size)) / elapsed.Seconds()
+	fmt.Printf("Thoughput per sencond :%s\n", humanReadableTroughput(t))
 }
 
 func main() {
@@ -421,10 +492,14 @@ func main() {
 			Flags: []cli.Flag{
 				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
 				&cli.IntFlag{Name: "size", Value: 4096, Aliases: []string{"s"}},
-				&cli.IntFlag{Name: "thread", Value: 128, Aliases: []string{"t"}},
+				&cli.IntFlag{Name: "thread", Value: 8, Aliases: []string{"t"}},
 				&cli.IntFlag{Name: "duration", Value: 10, Aliases: []string{"d"}},
 			},
 			Action: wbench,
+		},
+		{
+			Name:   "plot",
+			Action: plot,
 		},
 
 		{
