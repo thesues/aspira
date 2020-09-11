@@ -60,12 +60,10 @@ func (as *AspiraStore) Put(ctx context.Context, req *aspirapb.PutRequest) (*aspi
 	p.Data = req.Payload.Data
 	p.ProposalType = aspirapb.AspiraProposal_Put
 
-	start := time.Now()
 	index, err := w.proposeAndWait(ctx, &p)
 	if err != nil {
 		return &aspirapb.PutResponse{}, err
 	}
-	xlog.Logger.Infof("time elapsed %+v\n", time.Since(start))
 	res := aspirapb.PutResponse{
 		Gid: gid,
 		Oid: index,

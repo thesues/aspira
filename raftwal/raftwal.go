@@ -56,7 +56,7 @@ var (
 	endOfList              = errors.Errorf("end of list of keys")
 	errNotFound            = errors.New("Unable to find raft entry")
 	throttle               = (40 << 10)
-	snapshotCatchUpEntries = uint64(5000)
+	snapshotCatchUpEntries = uint64(3000)
 )
 
 func Init(db *cannyls.Storage) *WAL {
@@ -594,7 +594,6 @@ func (wal *WAL) CreateSnapshot(snapi uint64, cs *raftpb.ConfState, udata []byte)
 	}
 
 	wal.DB().Sync()
-	wal.entryCache.Purge()
 	if _, err = wal.DB().PutEmbed(wal.snapshotKey(), data); err != nil {
 		return false, err
 	}

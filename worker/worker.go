@@ -50,6 +50,7 @@ type AspiraWorker struct {
 	storePath string
 	info      unsafe.Pointer // *aspirapb.WorkerInfo
 	lastSnap  time.Time
+	applyCh   chan []raftpb.Entry
 }
 
 var (
@@ -83,6 +84,7 @@ func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker
 		store:     store,
 		storePath: path,
 		//state:      &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
+		applyCh: make(chan []raftpb.Entry, 600),
 	}
 	return as, nil
 }
@@ -249,28 +251,40 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr, initialCluster string) err
 	aw.stopper.RunWorker(func() {
 		aw.Node.BatchAndSendMessages(aw.stopper)
 	})
-	/*
-		as.stopper.RunWorker(func() {
-			as.node.ReportRaftComms(as.stopper)
-		})
-	*/
+	aw.stopper.RunWorker(aw.processApplyCh)
 	aw.stopper.RunWorker(aw.Run)
+
 	return nil
 }
 
 var errInvalidProposal = errors.New("Invalid group proposal")
 
-func (aw *AspiraWorker) applyProposal(e raftpb.Entry) (string, error) {
-	var p aspirapb.AspiraProposal
-	xlog.Logger.Infof("apply commit %d: data is %d", e.Index, e.Size())
-	//leader's first commit
-	if len(e.Data) == 0 {
-		return p.AssociateKey, nil
+func (aw *AspiraWorker) processApplyCh() {
+	for {
+		select {
+		case <-aw.stopper.ShouldStop():
+			return
+		case entries, ok := <-aw.applyCh:
+			if !ok {
+				return
+			}
+			for i := range entries {
+				aw.applyProposal(entries[i])
+			}
+		}
 	}
+}
+
+func (aw *AspiraWorker) applyProposal(e raftpb.Entry) {
+	var p aspirapb.AspiraProposal
+	xlog.Logger.Debugf("apply commit %d: data is %d", e.Index, e.Size())
+
 	utils.Check(p.Unmarshal(e.Data))
 	if len(p.AssociateKey) == 0 {
-		return p.AssociateKey, errInvalidProposal
+		xlog.Logger.Warn("not find AssociateKey")
+		return
 	}
+
 	var err error
 	switch p.ProposalType {
 	case aspirapb.AspiraProposal_Put:
@@ -282,7 +296,8 @@ func (aw *AspiraWorker) applyProposal(e raftpb.Entry) (string, error) {
 	default:
 		xlog.Logger.Fatalf("unkonw type %+v", p.ProposalType)
 	}
-	return p.AssociateKey, err
+	aw.Node.Applied.Done(e.Index)
+	aw.Node.Proposals.Done(p.AssociateKey, e.Index, err)
 }
 
 func (aw *AspiraWorker) Run() {
@@ -293,7 +308,6 @@ func (aw *AspiraWorker) Run() {
 	defer ticker.Stop()
 	n := aw.Node
 	loop := uint64(0)
-
 	for {
 		select {
 		case <-aw.stopper.ShouldStop():
@@ -348,6 +362,7 @@ func (aw *AspiraWorker) Run() {
 			if !raft.IsEmptySnap(rd.Snapshot) {
 
 				//drain the applied messages
+				aw.drainApplyChan()
 				xlog.Logger.Infof("I Got snapshot %+v", rd.Snapshot.Metadata)
 				err := aw.receiveSnapshot(rd.Snapshot)
 				if err != nil {
@@ -390,24 +405,27 @@ func (aw *AspiraWorker) Run() {
 
 			span.Annotatef(nil, "Sync files done")
 
+			var entries []raftpb.Entry
 			for _, entry := range rd.CommittedEntries {
 				n.Applied.Begin(entry.Index)
 				switch {
 				case entry.Type == raftpb.EntryConfChange:
 					aw.applyConfChange(entry)
-				case entry.Type == raftpb.EntryNormal:
-					uniqKey, err := aw.applyProposal(entry)
-					if err != nil {
-						xlog.Logger.Errorf("While applying proposal: %v\n", err)
-					}
-					n.Proposals.Done(uniqKey, entry.Index, err)
+					n.Applied.Done(entry.Index)
+				case len(entry.Data) == 0:
+					n.Applied.Done(entry.Index)
+				case entry.Type == raftpb.EntryNormal && len(entry.Data) != 0:
+					entries = append(entries, entry)
 				default:
 					xlog.Logger.Warnf("Unhandled entry: %+v\n", entry)
 				}
-				xlog.Logger.Infof("commit index:%d, size:%d\n", entry.Index, entry.Size())
-				n.Applied.Done(entry.Index)
+				xlog.Logger.Debugf("commit index:%d, size:%d\n", entry.Index, entry.Size())
 			}
 			span.Annotatef(nil, "Applied %d CommittedEntries", len(rd.CommittedEntries))
+
+			if len(entries) > 0 {
+				aw.applyCh <- entries
+			}
 
 			if !leader {
 				for i := range rd.Messages {
@@ -434,14 +452,17 @@ func (aw *AspiraWorker) trySnapshot(skip uint64) (created bool) {
 		return
 	}
 
-	if doneUntil < si+skip {
-		return
-	}
-
 	data, err := aw.Node.State.Marshal()
 	utils.Check(err)
-	xlog.Logger.Infof("Writing snapshot at index:%d\n", doneUntil)
+	var x string = "\n"
+	for id, progress := range aw.Node.Raft().Status().Progress {
+		x += fmt.Sprintf("PROGRESS : %d, %d, %s\n", id, progress.Next, progress.State.String())
+	}
+	xlog.Logger.Info(x)
+	start := time.Now()
 	created, err = aw.store.CreateSnapshot(doneUntil, aw.Node.ConfState(), data)
+	xlog.Logger.Infof("Writing snapshot at index:%d, time [%v]", doneUntil, time.Now().Sub(start))
+
 	if err != nil {
 		xlog.Logger.Warnf("trySnapshot have error %+v", err)
 	}
@@ -450,6 +471,16 @@ func (aw *AspiraWorker) trySnapshot(skip uint64) (created bool) {
 
 func (aw *AspiraWorker) AmLeader() bool {
 	return aw.Node.AmLeader()
+}
+
+func (aw *AspiraWorker) drainApplyChan() {
+	for {
+		select {
+		case <-aw.applyCh:
+		default:
+			return
+		}
+	}
 }
 
 var errInternalRetry = errors.New("Retry Raft proposal internally")

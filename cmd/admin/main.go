@@ -404,7 +404,7 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 func humanReadableTroughput(t float64) string {
 	units := []string{"B", "KB", "MB", "GB", "TB", "PB", "EB"}
 	power := int(math.Log10(t) / 3)
-	if power >= len(units) {
+	if power >= len(units) || power == 0 {
 		return ""
 	}
 	return fmt.Sprintf("%.2f%s/sec", t/math.Pow(1000, float64(power)), units[power])
