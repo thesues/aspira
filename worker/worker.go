@@ -306,7 +306,6 @@ func (aw *AspiraWorker) Run() {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	n := aw.Node
-	loop := uint64(0)
 	for {
 		select {
 		case <-aw.stopper.ShouldStop():
@@ -321,23 +320,16 @@ func (aw *AspiraWorker) Run() {
 			if rd.SoftState != nil {
 				leader = rd.RaftState == raft.StateLeader
 			}
-
 			createSnapshot = true
-			loop++
 			if leader {
-				if loop%1000 == 0 {
-					xlog.Logger.Infof("I am leader")
-				}
 				for i := range rd.Messages {
-					aw.Node.Send(&rd.Messages[i])
-					if !raft.IsEmptySnap(rd.Messages[i].Snapshot) {
-						createSnapshot = true
-						//xlog.Logger.Warnf("from %d to %d, snap is %v", rd.Messages[i].From, rd.Messages[i].To, rd.Messages[i].Snapshot)
+					if rd.Messages[i].Type == raftpb.MsgSnap {
+						createSnapshot = false
 					}
+					aw.Node.Send(&rd.Messages[i])
 				}
 
 				p := make(map[uint64]aspirapb.WorkerStatus_ProgressType)
-
 				for id, progress := range n.Raft().Status().Progress {
 					switch progress.State {
 					case raft.ProgressStateProbe:
@@ -349,11 +341,6 @@ func (aw *AspiraWorker) Run() {
 					default:
 						xlog.Logger.Fatal("unkown status type")
 					}
-
-					if progress.State == raft.ProgressStateSnapshot {
-						createSnapshot = false
-					}
-
 				}
 				aw.SetWorkerStatus(p)
 			}

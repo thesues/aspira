@@ -46,5 +46,6 @@ func (w *RaftServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb.Ra
 		}
 		time.Sleep(1 * time.Millisecond)
 	}
+	node.Raft().ReportSnapshot(in.Id, raft.SnapshotFinish)
 	return nil
 }

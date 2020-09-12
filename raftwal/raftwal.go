@@ -566,10 +566,6 @@ func (wal *WAL) ApplySnapshot(snap raftpb.Snapshot) {
 // is done, it means we have synced the database, so the raft worker do not have to sync again
 func (wal *WAL) CreateSnapshot(snapi uint64, cs *raftpb.ConfState, udata []byte) (created bool, err error) {
 
-	if wal.InflightSnapshot() {
-		return false, errors.Errorf("followers are reading snapshot, deter the snapshot")
-	}
-
 	wal.Lock()
 	defer wal.Unlock()
 	if snapi <= wal.snapshot.Metadata.Index {
@@ -599,6 +595,10 @@ func (wal *WAL) CreateSnapshot(snapi uint64, cs *raftpb.ConfState, udata []byte)
 		return false, err
 	}
 
+	if wal.InflightSnapshot() {
+		return true, nil
+	}
+
 	compactIndex := uint64(1)
 	if snapi > snapshotCatchUpEntries {
 		compactIndex = snapi - snapshotCatchUpEntries
@@ -607,6 +607,8 @@ func (wal *WAL) CreateSnapshot(snapi uint64, cs *raftpb.ConfState, udata []byte)
 	if compactIndex <= offset {
 		return
 	}
+
+	xlog.Logger.Infof("snapshot compact log at [%d]", compactIndex)
 	//compact ents and cannyls
 	i := compactIndex - offset
 	ents := make([]aspirapb.EntryMeta, 1, 1+uint64(len(wal.ents))-i)

@@ -303,7 +303,6 @@ func (as *AspiraStore) StartHeartbeat() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-
 	var stream aspirapb.Zero_StreamHeartbeatClient
 	var cancel context.CancelFunc
 	var err error
@@ -449,7 +448,6 @@ var (
 func main() {
 	//1 => 127.0.0.1:3301
 	//2 => 127.0.0.1:3302
-
 	flag.Parse()
 	if *hasJaeger {
 		je, _ := jaeger.NewExporter(jaeger.Options{
