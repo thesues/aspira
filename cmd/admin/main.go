@@ -313,6 +313,7 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 
 	livePrint := func() {
 		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-done:

@@ -254,6 +254,8 @@ func (s *AspiraStore) getHeartbeatStream() (aspirapb.Zero_StreamHeartbeatClient,
 
 func (as *AspiraStore) StartCheckPrepare() {
 	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ticker.C:
@@ -299,6 +301,8 @@ func (as *AspiraStore) StartCheckPrepare() {
 func (as *AspiraStore) StartHeartbeat() {
 
 	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
 
 	var stream aspirapb.Zero_StreamHeartbeatClient
 	var cancel context.CancelFunc

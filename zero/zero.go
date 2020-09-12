@@ -124,6 +124,7 @@ func (z *Zero) amLeader() bool {
 
 func (z *Zero) audit() {
 	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-z.auditStopper.ShouldStop():

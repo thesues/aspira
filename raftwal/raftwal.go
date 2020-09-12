@@ -82,6 +82,7 @@ func Init(db *cannyls.Storage) *WAL {
 
 	go func() {
 		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:

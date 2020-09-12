@@ -49,7 +49,6 @@ type AspiraWorker struct {
 	stopper   *utils.Stopper
 	storePath string
 	info      unsafe.Pointer // *aspirapb.WorkerInfo
-	lastSnap  time.Time
 	applyCh   chan []raftpb.Entry
 }
 
