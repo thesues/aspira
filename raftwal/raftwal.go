@@ -16,7 +16,6 @@ package raftwal
 
 import (
 	"io"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,7 +23,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/pkg/errors"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/utils"
@@ -35,18 +33,21 @@ import (
 )
 
 type WAL struct {
-	p          unsafe.Pointer //the type is *cannyls.Storage
-	ab         *block.AlignedBytes
-	sab        *block.AlignedBytes
+	p   unsafe.Pointer //the type is *cannyls.Storage
+	ab  *block.AlignedBytes
+	sab *block.AlignedBytes
+
+	//sab        *block.AlignedBytes
 	dbLock     *sync.Mutex //protect readCounts
 	readCounts int
 	// Protects access to all fields. Most methods of MemoryStorage are
 	sync.Mutex
 	snapshot raftpb.Snapshot
 	// ents[i] has raft log position i+snapshot.Metadata.Index
-	ents       []aspirapb.EntryMeta //only cache EntryMeta
-	entryCache *lru.Cache           //full cache contains user data
-	lastWrite  int64                //seconds
+	firstIndex uint64
+	lastIndex  uint64
+	cache      *FifoCache
+	lastWrite  int64 //seconds
 }
 
 var (
@@ -56,25 +57,19 @@ var (
 	endOfList              = errors.Errorf("end of list of keys")
 	errNotFound            = errors.New("Unable to find raft entry")
 	throttle               = (40 << 10)
-	snapshotCatchUpEntries = uint64(3000)
+	snapshotCatchUpEntries = uint64(10000)
 )
 
 func Init(db *cannyls.Storage) *WAL {
 
-	entryCache, err := lru.New(4)
-	if err != nil {
-		xlog.Logger.Errorf("can not create LRU %+v", err)
-		return nil
-	}
 	wal := &WAL{
 		ab:         block.NewAlignedBytes(512, block.Min()),
 		sab:        block.NewAlignedBytes(512, block.Min()),
 		readCounts: 0,
 		dbLock:     new(sync.Mutex),
-		entryCache: entryCache,
-		ents:       make([]aspirapb.EntryMeta, 1, 2000),
 		snapshot:   raftpb.Snapshot{},
 		lastWrite:  time.Now().Unix(),
+		cache:      NewFifoCache(16),
 	}
 	atomic.StorePointer(&wal.p, unsafe.Pointer(db))
 
@@ -128,19 +123,17 @@ func (wal *WAL) hardStateKey() (ret lump.LumpId) {
 
 func (wal *WAL) Save(hd raftpb.HardState, entries []raftpb.Entry) (err error) {
 
+	if err = wal.addEntries(entries); err != nil {
+	}
 	if err = wal.setHardState(hd); err != nil {
 		return err
-	}
-	if err = wal.addEntries(entries); err != nil {
 	}
 	return nil
 }
 
 //reset for test only
 func (wal *WAL) reset(entries []raftpb.Entry) {
-	wal.ents = nil
 	wal.deleteFrom(0)
-	wal.entryCache.Purge()
 	for _, e := range entries {
 		var m aspirapb.EntryMeta
 		switch e.Type {
@@ -149,7 +142,6 @@ func (wal *WAL) reset(entries []raftpb.Entry) {
 		case raftpb.EntryNormal:
 			m = aspirapb.EntryMeta{Index: e.Index, Term: e.Term, EntryType: aspirapb.EntryMeta_NormalOther, Data: e.Data}
 		}
-		wal.ents = append(wal.ents, m)
 		data, _ := m.Marshal()
 		wal.DB().PutEmbed(wal.EntryKey(e.Index), data)
 	}
@@ -218,22 +210,14 @@ func (wal *WAL) EntryKey(idx uint64) lump.LumpId {
 func (wal *WAL) LastIndex() (uint64, error) {
 	wal.Lock()
 	defer wal.Unlock()
-	return wal.lastIndex(), nil
-}
-
-func (wal *WAL) lastIndex() uint64 {
-	return wal.ents[0].Index + uint64(len(wal.ents)) - 1
+	return wal.lastIndex, nil
 }
 
 // FirstIndex implements the Storage interface.
 func (wal *WAL) FirstIndex() (uint64, error) {
 	wal.Lock()
 	defer wal.Unlock()
-	return wal.firstIndex(), nil
-}
-
-func (wal *WAL) firstIndex() uint64 {
-	return wal.ents[0].Index + 1
+	return wal.firstIndex, nil
 }
 
 func (wal *WAL) addEntries(entries []raftpb.Entry) error {
@@ -243,7 +227,9 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 	wal.Lock()
 	defer wal.Unlock()
 
-	first := wal.firstIndex()
+	xlog.Logger.Infof("save entries %d => %d", entries[0].Index, entries[len(entries)-1].Index)
+
+	first := wal.firstIndex
 	last := entries[0].Index + uint64(len(entries)) - 1
 	// shortcut if there is no new entry.
 	if last < first {
@@ -255,17 +241,19 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 		entries = entries[first-entries[0].Index:]
 	}
 
-	offset := entries[0].Index - wal.ents[0].Index
+	//offset := entries[0].Index - wal.ents[0].Index
 
-	if uint64(len(wal.ents)) > offset {
+	if wal.lastIndex <= entries[0].Index {
 		//have overlap with current log, truncate current log
-		wal.ents = append([]aspirapb.EntryMeta{}, wal.ents[:offset]...)
-		//wal.DeleteFrom(entries[0].Index)
-	} else if uint64(len(wal.ents)) == offset {
+		//wal.ents = append([]aspirapb.EntryMeta{}, wal.ents[:offset]...)
+		//remove cache
+		wal.cache.PurgeFrom(entries[0].Index)
+		wal.deleteFrom(entries[0].Index)
+	} else if wal.lastIndex+1 == entries[0].Index {
 		//normal append
 	} else {
 		xlog.Logger.Panicf("missing log entry [last: %d, append at: %d]",
-			wal.lastIndex(), entries[0].Index)
+			wal.lastIndex, entries[0].Index)
 	}
 
 	for _, e := range entries {
@@ -292,7 +280,6 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 						return err
 					}
 					xlog.Logger.Debugf("cached %d", e.Index)
-					wal.entryCache.Add(e.Index, e)
 				} else {
 					panic("must be AspiraProposal_Put")
 				}
@@ -311,7 +298,8 @@ func (wal *WAL) addEntries(entries []raftpb.Entry) error {
 		if _, err = wal.DB().PutEmbed(wal.EntryKey(entryMeta.Index), data); err != nil {
 			return err
 		}
-		wal.ents = append(wal.ents, entryMeta)
+		wal.lastIndex = entryMeta.Index
+		wal.cache.Add(e)
 	}
 	return nil
 }
@@ -345,30 +333,21 @@ func (wal *WAL) InitialState() (hs raftpb.HardState, cs raftpb.ConfState, err er
 	return hs, snap.Metadata.ConfState, nil
 }
 
-//loadEntries read EntryMeta from index. Append into wal.ents, and
-//then array index starts from 1
-func (wal *WAL) loadEntries(index uint64) (bool, error) {
-	var err error
-	var data []byte
-	id, hasData := wal.DB().MaxId()
-	if !hasData {
-		return false, nil
+func (wal *WAL) readFirstIndex() (uint64, bool) {
+	idx, err := wal.DB().First(wal.EntryKey(0))
+	if err != nil {
+		return 0, false
 	}
-	lo := index
-	hi := (id.U64() & keyMask) + 1
-	//debug
-	//data range [lo, hi)
-	for _, id := range wal.DB().ListRange(wal.EntryKey(lo), wal.EntryKey(hi), math.MaxUint64) {
-		if data, err = wal.DB().Get(id); err != nil {
-			return false, err
-		}
-		var meta aspirapb.EntryMeta
-		if err = meta.Unmarshal(data); err != nil {
-			return false, err
-		}
-		wal.ents = append(wal.ents, meta)
+	return (idx.U64() & keyMask) + 1, true
+}
+
+func (wal *WAL) readLastIndex() (uint64, bool) {
+	id, ok := wal.DB().MaxId()
+	if !ok || id.U64() < minimalKey {
+		return 0, false
 	}
-	return true, nil
+	return id.U64() & keyMask, true
+
 }
 
 //PastLife load entries into memory and return if it is a RESTART
@@ -381,25 +360,47 @@ func (wal *WAL) PastLife() (bool, error) {
 
 	data, err := wal.DB().Get(wal.snapshotKey())
 	if err != nil {
-		//nosnapshot so far
-		return wal.loadEntries(1)
+		idx, ok := wal.readFirstIndex()
+		if !ok {
+			//if wal is emtpy, initialize db, and set
+			wal.firstIndex = 1
+			wal.lastIndex = 0
+			//write empty Entry to keep the invarant rule
+			e := raftpb.Entry{}
+			data, err := e.Marshal()
+			if _, err = wal.DB().PutEmbed(wal.EntryKey(0), data); err != nil {
+				return false, err
+			}
+			return false, nil
+		}
+
+		wal.firstIndex = idx
+		idx, ok = wal.readLastIndex()
+		if !ok {
+			return false, errors.Errorf("if wal has a snapshot, it must have a fake snapshot entry")
+		}
+		wal.lastIndex = idx
+		return true, nil
 	}
 
+	//has snapshot
 	var snap raftpb.Snapshot
 	err = snap.Unmarshal(data)
 	if err != nil {
 		return false, err
 	}
-
-	if raft.IsEmptySnap(snap) {
-		return wal.loadEntries(1)
-	}
-
 	wal.snapshot = snap
-	wal.ents[0].Index = snap.Metadata.Index
-	wal.ents[0].Term = snap.Metadata.Term
+	wal.firstIndex = snap.Metadata.Index + 1
 
-	return wal.loadEntries(snap.Metadata.Index + 1)
+	idx, ok := wal.readLastIndex()
+	if !ok {
+		return false, errors.Errorf("if wal has a snapshot, it must have a fake snapshot entry")
+		//wal.lastIndex = snap.Metadata.Index
+	}
+	wal.lastIndex = idx
+	//read lastIndex from DB
+
+	return true, nil
 }
 
 func (wal *WAL) fromMetaToRaftEntry(meta aspirapb.EntryMeta) (e raftpb.Entry) {
@@ -412,13 +413,6 @@ func (wal *WAL) fromMetaToRaftEntry(meta aspirapb.EntryMeta) (e raftpb.Entry) {
 		e.Type = raftpb.EntryNormal
 		e.Data = meta.Data
 	case aspirapb.EntryMeta_NormalPutBig:
-
-		if v, ok := wal.entryCache.Get(meta.Index); ok {
-			e = v.(raftpb.Entry)
-			xlog.Logger.Debugf("cache hit for %d", meta.Index)
-			return e
-		}
-
 		//build data
 		e.Type = raftpb.EntryNormal
 
@@ -444,36 +438,41 @@ func (wal *WAL) fromMetaToRaftEntry(meta aspirapb.EntryMeta) (e raftpb.Entry) {
 
 func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 
+	xlog.Logger.Infof("all entries %d => %d", lo, hi)
 	wal.Lock()
 	defer wal.Unlock()
-	offset := wal.ents[0].Index
-	if lo <= offset {
+
+	if lo < wal.firstIndex {
 		return nil, raft.ErrCompacted
 	}
-	if hi > wal.lastIndex()+1 {
-		xlog.Logger.Panicf("entries' hi(%d) is out of bound lastindex(%d)", hi, wal.lastIndex())
+	if hi > wal.lastIndex+1 {
+		xlog.Logger.Panicf("entries' hi(%d) is out of bound lastindex(%d)", hi, wal.lastIndex)
 	}
 	// only contains dummy entries.
-	if len(wal.ents) == 1 {
+	if wal.lastIndex == 0 {
 		return nil, raft.ErrUnavailable
 	}
-	ents := wal.ents[lo-offset : hi-offset]
 	size := 0
-	var e raftpb.Entry
-	for i := range ents {
-		//id := ents[i].Index
-
-		e = wal.fromMetaToRaftEntry(ents[i])
-		/*
-			if v, ok := wal.entryCache.Get(id); ok {
-				e = v.(raftpb.Entry)
-				xlog.Logger.Debugf("cache hit for %d", id)
-			} else {
-				e = wal.fromMetaToRaftEntry(ents[i])
+	for _, id := range wal.DB().ListRange(wal.EntryKey(lo), wal.EntryKey(hi), 100) {
+		if v, ok := wal.cache.Get(id.U64() & keyMask); ok {
+			es = append(es, v)
+			size += v.Size()
+			xlog.Logger.Debugf("cache hit for %d", id.U64()&keyMask)
+		} else {
+			xlog.Logger.Debugf("cache missing for %d", id.U64()&keyMask)
+			data, err := wal.DB().Get(id)
+			if err != nil {
+				xlog.Logger.Fatalf("failed to get id %+v, err is %+v", id, err)
 			}
-		*/
-		es = append(es, e)
-		size += e.Size()
+			var meta aspirapb.EntryMeta
+			if err = meta.Unmarshal(data); err != nil {
+				xlog.Logger.Fatalf("Unmarshal data failed %+v", err)
+			}
+			e := wal.fromMetaToRaftEntry(meta)
+			size += e.Size()
+			//wal.entryCache.Add(e.Index, e)
+			es = append(es, e)
+		}
 		//if maxSize is 0, we still want to return at lease one entry
 		if uint64(size) > maxSize {
 			n := len(es)
@@ -511,14 +510,6 @@ func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 	return wal.AllEntries(lo, hi, maxSize)
 }
 
-/*
-func (wal *WAL) reset(es []raftpb.Entry) error {
-	wal.DeleteFrom(0)
-	wal.addEntries(es, false)
-	return nil
-}
-*/
-
 func (wal *WAL) deleteUntil(until uint64) error {
 	//TODO delete LRU??
 	if err := wal.DB().DeleteRange(wal.EntryKey(0), wal.EntryKey(until), true); err != nil {
@@ -531,18 +522,36 @@ func (wal *WAL) deleteUntil(until uint64) error {
 
 }
 
-// Term implements the Storage interface.
 func (wal *WAL) Term(i uint64) (uint64, error) {
 	wal.Lock()
 	defer wal.Unlock()
-	offset := wal.ents[0].Index
-	if i < offset {
+	return wal.term(i)
+}
+
+// Term implements the Storage interface.
+func (wal *WAL) term(i uint64) (uint64, error) {
+	if i < wal.firstIndex {
 		return 0, raft.ErrCompacted
 	}
-	if int(i-offset) >= len(wal.ents) {
+
+	if i > wal.lastIndex {
 		return 0, raft.ErrUnavailable
 	}
-	return wal.ents[i-offset].Term, nil
+
+	e, ok := wal.cache.Get(i)
+	if ok {
+		return e.Term, nil
+	}
+	xlog.Logger.Infof("log missing %d", i)
+	var meta aspirapb.EntryMeta
+	data, err := wal.DB().Get(wal.EntryKey(i))
+	if err != nil {
+		return 0, raft.ErrUnavailable
+	}
+	if err = meta.Unmarshal(data); err != nil {
+		return 0, err
+	}
+	return meta.Term, nil
 }
 
 func (wal *WAL) ApplySnapshot(snap raftpb.Snapshot) {
@@ -552,14 +561,47 @@ func (wal *WAL) ApplySnapshot(snap raftpb.Snapshot) {
 		return
 	}
 	wal.snapshot = snap
-	wal.ents = []aspirapb.EntryMeta{{Term: snap.Metadata.Term, Index: snap.Metadata.Index}}
-	//save to disk.
+	wal.firstIndex = snap.Metadata.Index + 1
+	wal.lastIndex = snap.Metadata.Index
+	wal.cache.PurgeFrom(0)
+
+	//wal.ents = []aspirapb.EntryMeta{{Term: snap.Metadata.Term, Index: snap.Metadata.Index}}	//save to disk.
 
 	//wal.DB().JournalGC()
 	wal.deleteFrom(snap.Metadata.Index)
+	//set log value which represent snapshot.Term, snapshot.Index
+	e := raftpb.Entry{Term: snap.Metadata.Term, Index: snap.Metadata.Index}
+	data, err := e.Marshal()
+	if _, err = wal.DB().PutEmbed(wal.EntryKey(e.Index), data); err != nil {
+		return
+	}
 	//set snapshot key
-	data, _ := wal.snapshot.Marshal()
+	data, _ = wal.snapshot.Marshal()
 	wal.DB().PutEmbed(wal.snapshotKey(), data)
+}
+
+func (wal *WAL) compact(snapi uint64) {
+	if wal.InflightSnapshot() {
+		return
+	}
+
+	compactIndex := uint64(1)
+	if snapi > snapshotCatchUpEntries {
+		compactIndex = snapi - snapshotCatchUpEntries
+	}
+
+	if compactIndex < wal.firstIndex {
+		return
+	}
+
+	xlog.Logger.Infof("snapshot compact log at [%d]", compactIndex)
+	//compact cannyls
+
+	//disk
+	if err := wal.deleteUntil(compactIndex); err != nil {
+		xlog.Logger.Error(err.Error())
+	}
+	wal.firstIndex = compactIndex + 1
 }
 
 //CreateSnapshot, if createSnapshot
@@ -572,13 +614,17 @@ func (wal *WAL) CreateSnapshot(snapi uint64, cs *raftpb.ConfState, udata []byte)
 		return false, raft.ErrSnapOutOfDate
 	}
 
-	offset := wal.ents[0].Index
-	if snapi > wal.lastIndex() {
-		return false, errors.Errorf("snapshot %d is out of bound lastindex(%d)", snapi, wal.lastIndex())
+	if snapi > wal.lastIndex {
+		return false, errors.Errorf("snapshot %d is out of bound lastindex(%d)", snapi, wal.lastIndex)
+	}
+
+	t, err := wal.term(snapi)
+	if err != nil {
+		return false, err
 	}
 
 	wal.snapshot.Metadata.Index = snapi
-	wal.snapshot.Metadata.Term = wal.ents[snapi-offset].Term
+	wal.snapshot.Metadata.Term = t
 	if cs != nil {
 		wal.snapshot.Metadata.ConfState = *cs
 	}
@@ -595,39 +641,16 @@ func (wal *WAL) CreateSnapshot(snapi uint64, cs *raftpb.ConfState, udata []byte)
 		return false, err
 	}
 
-	if wal.InflightSnapshot() {
-		return true, nil
-	}
-
-	compactIndex := uint64(1)
-	if snapi > snapshotCatchUpEntries {
-		compactIndex = snapi - snapshotCatchUpEntries
-	}
-
-	if compactIndex <= offset {
-		return
-	}
-
-	xlog.Logger.Infof("snapshot compact log at [%d]", compactIndex)
-	//compact ents and cannyls
-	i := compactIndex - offset
-	ents := make([]aspirapb.EntryMeta, 1, 1+uint64(len(wal.ents))-i)
-	ents[0].Index = wal.ents[i].Index
-	ents[0].Term = wal.ents[i].Term
-	ents = append(ents, wal.ents[i+1:]...)
-	wal.ents = ents
-
-	//disk
-	if err = wal.deleteUntil(compactIndex + 1); err != nil {
-		return
-	}
+	wal.compact(snapi)
 	return true, nil
 }
 
 func (wal *WAL) ApplyPut(e raftpb.Entry) error {
+
 	if len(e.Data) <= 0 {
 		return errors.Errorf("data len is 0")
 	}
+
 	if len(e.Data) > throttle {
 		dataPortion, err := wal.DB().GetRecord(wal.ExtKey(e.Index))
 		if err != nil {
@@ -710,7 +733,6 @@ func (wal *WAL) SetDB(db *cannyls.Storage) {
 
 func (wal *WAL) CloseDB() {
 	wal.DB().Close()
-	wal.entryCache.Purge()
-	//wal.ents = make([]aspirapb.EntryMeta, 1, 2000)
+	wal.cache.PurgeFrom(0)
 	wal.snapshot = raftpb.Snapshot{}
 }

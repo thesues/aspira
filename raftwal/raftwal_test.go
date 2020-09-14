@@ -266,7 +266,7 @@ func TestStorageAppend(t *testing.T) {
 		}
 
 		//get all entries, including the dummy index.
-		entries, err := wal.AllEntries(wal.firstIndex(), wal.lastIndex()+1, math.MaxUint64)
+		entries, err := wal.AllEntries(wal.firstIndex, wal.lastIndex, math.MaxUint64)
 		assert.Nil(t, err)
 		//fmt.Printf("i %d\n", wal.firstIndex()-1)
 		if !reflect.DeepEqual(entries, tt.wentries[1:]) {
@@ -297,7 +297,7 @@ func TestConfChange(t *testing.T) {
 	}
 
 	wal.reset(entries)
-	es, err := wal.AllEntries(wal.firstIndex(), wal.lastIndex()+1, math.MaxUint64)
+	es, err := wal.AllEntries(wal.firstIndex, wal.lastIndex+1, math.MaxUint64)
 	assert.Nil(t, err)
 
 	for i := 0; i < 2; i++ {
@@ -325,8 +325,8 @@ func TestWALSnapshot(t *testing.T) {
 	restart, err = wal.PastLife()
 	assert.Nil(t, err)
 	assert.True(t, restart)
-	assert.Equal(t, uint64(4), wal.firstIndex())
-	assert.Equal(t, uint64(3), wal.lastIndex())
+	assert.Equal(t, uint64(4), wal.firstIndex)
+	assert.Equal(t, uint64(3), wal.lastIndex)
 
 }
 func TestWALRestart(t *testing.T) {
@@ -336,8 +336,8 @@ func TestWALRestart(t *testing.T) {
 	wal := Init(db)
 	entries := []raftpb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 3}}
 	wal.addEntries(entries)
-	assert.Equal(t, uint64(1), wal.firstIndex())
-	assert.Equal(t, uint64(3), wal.lastIndex())
+	assert.Equal(t, uint64(1), wal.firstIndex)
+	assert.Equal(t, uint64(3), wal.lastIndex)
 	wal.Sync()
 	wal.CloseDB()
 
@@ -347,9 +347,9 @@ func TestWALRestart(t *testing.T) {
 	restart, err := wal.PastLife()
 	assert.Nil(t, err)
 	assert.True(t, restart)
-	assert.Equal(t, uint64(1), wal.firstIndex())
-	assert.Equal(t, uint64(3), wal.lastIndex())
-	es, err := wal.Entries(wal.firstIndex(), wal.lastIndex()+1, math.MaxUint64)
+	assert.Equal(t, uint64(1), wal.firstIndex)
+	assert.Equal(t, uint64(3), wal.lastIndex)
+	es, err := wal.Entries(wal.firstIndex, wal.lastIndex+1, math.MaxUint64)
 	assert.Nil(t, err)
 	assert.Equal(t, entries, es)
 	db.Close()
