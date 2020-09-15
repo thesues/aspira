@@ -5,6 +5,11 @@ import (
 	"sync"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/thesues/aspira/xlog"
+)
+
+var (
+	maxPaylod = (300 << 10) //300k
 )
 
 type FifoCache struct {
@@ -23,6 +28,9 @@ func NewFifoCache(n int) *FifoCache {
 }
 
 func (fifo *FifoCache) Add(entry raftpb.Entry) {
+	if entry.Size() > maxPaylod {
+		return
+	}
 	fifo.Lock()
 	defer fifo.Unlock()
 	if fifo.q.Len() == fifo.capacity {
@@ -40,8 +48,10 @@ func (fifo *FifoCache) Get(index uint64) (raftpb.Entry, bool) {
 	defer fifo.RUnlock()
 	e, ok := fifo.m[index]
 	if !ok {
+		xlog.Logger.Debugf("cache missing for %d", index)
 		return raftpb.Entry{}, false
 	}
+	xlog.Logger.Debugf("cache hit for %d", index)
 	return e.Value.(raftpb.Entry), true
 }
 

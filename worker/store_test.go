@@ -172,8 +172,10 @@ func (suite *StoreTestSuite) TestPutGet() {
 	assert.Nil(suite.T(), err)
 	oid := response.Oid
 
-	//Read from c2
-	r := suite.readData(200, oid, suite.conns[1])
+	time.Sleep(10 * time.Millisecond)
+	//Read from c1
+	r := suite.readData(200, oid, suite.conns[0])
+	suite.NotNil(r)
 	assert.Equal(suite.T(), data, r)
 
 }

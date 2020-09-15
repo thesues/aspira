@@ -334,6 +334,7 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 
 	go func() {
 		for i := 0; i < threadNum; i++ {
+			loop := 0 //sample to record lantency
 			stopper.RunWorker(func() {
 				for {
 					select {
@@ -347,7 +348,7 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 							return
 						}
 						end := time.Now()
-						if recordLantency {
+						if recordLantency && loop%10 == 0 {
 							lock.Lock()
 							results = append(results, Result{
 								Gid:       gid,
@@ -359,6 +360,7 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 						}
 
 						atomic.AddUint64(&count, 1)
+						loop++
 					}
 				}
 
@@ -386,6 +388,7 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 		sort.Slice(results, func(i, j int) bool {
 			return results[i].StartTime < results[i].StartTime
 		})
+
 		f, err := os.OpenFile("result.json", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
 		defer f.Close()
 		if err == nil {

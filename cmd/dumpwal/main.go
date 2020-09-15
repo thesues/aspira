@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/coreos/etcd/raft/raftpb"
@@ -119,7 +120,7 @@ func main() {
 	last, err := wal.LastIndex()
 	fmt.Printf("LastIndex  : %d\n", last)
 	for {
-		es, err := wal.AllEntries(first, last+1, 10<<20)
+		es, err := wal.AllEntries(first, last+1, math.MaxUint64)
 		if err != nil {
 			panic(err.Error())
 		}

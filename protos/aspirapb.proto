@@ -55,17 +55,19 @@ message RaftBatch {
 	Payload payload = 2;
 }
 
+
 message EntryMeta {
         uint64     Term  = 1;
         uint64     Index = 2;
-		enum Type {
-			NormalPutBig = 0;
-			NormalOther = 1;
-			ConfChange = 3;
-		}
-		Type EntryType = 3;
-		bytes      Data = 4;
-		string     associateKey=5;
+                enum Type {
+                        Put = 0;
+                        LeaderCommit = 1;
+                        ConfChange = 2;
+                        PutWithOffset = 3;
+                }
+                Type EntryType = 3;
+                bytes      Data = 4;
+                string     associateKey=5;
 }
 
 //Type == Put ==> set associateKey, save ext

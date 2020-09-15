@@ -42,17 +42,19 @@ func (as *AspiraStore) Put(ctx context.Context, req *aspirapb.PutRequest) (*aspi
 
 	//rate limit
 
-	loop := 0
-	timeout := 10 * time.Millisecond
-	for !as.limiter.Allow() && loop < 4 {
-		time.Sleep(timeout)
-		loop++
-		timeout = 2 * timeout
-	}
+	/*
+		loop := 0
+		timeout := 10 * time.Millisecond
+		for !as.limiter.Allow() && loop < 4 {
+			time.Sleep(timeout)
+			loop++
+			timeout = 2 * timeout
+		}
 
-	if loop == 4 {
-		return nil, errInternalRetry
-	}
+		if loop == 4 {
+			return nil, errInternalRetry
+		}
+	*/
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
@@ -75,14 +77,16 @@ func (as *AspiraStore) Put(ctx context.Context, req *aspirapb.PutRequest) (*aspi
 // PutStream
 func (as *AspiraStore) PutStream(stream aspirapb.Store_PutStreamServer) error {
 
-	loop := 0
-	timeout := 10 * time.Millisecond
-	for !as.limiter.Allow() && loop < 4 {
-		time.Sleep(timeout)
-		loop++
-		timeout = 2 * timeout
-	}
+	/*
+		loop := 0
+		timeout := 10 * time.Millisecond
+		for !as.limiter.Allow() && loop < 4 {
+			time.Sleep(timeout)
+			loop++
+			timeout = 2 * timeout
+		}
 
+	*/
 	req, err := stream.Recv()
 	if err != nil {
 		return err

@@ -121,10 +121,7 @@ func splitAndTrim(s string, sep string) []string {
 //if initialCluster != "",  start worker in the initialCluster, the format of initialCluster is "100;127.0.0.1:3301,  101;127.0.0.1:3302, 104;127.0.0.1:3304" => ID;addr, ID;addr, ID;addr
 //if joinClusterAddr != "", join the remote addr(must be leader)
 func (aw *AspiraWorker) InitAndStart(joinClusterAddr, initialCluster string) error {
-	restart, err := aw.store.PastLife()
-	if err != nil {
-		return err
-	}
+	restart := aw.store.PastLife()
 	if restart {
 		snap, err := aw.store.Snapshot()
 		utils.Check(err)
@@ -208,10 +205,8 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr, initialCluster string) err
 			}
 		}
 
-		restart, err := aw.store.PastLife()
-		if !restart || err != nil {
-			return errors.Errorf("can not initial and replay backup snapshot")
-		}
+		restart = aw.store.PastLife()
+
 		c := aspirapb.NewRaftClient(p.Get())
 		retry = 1
 		for {
@@ -287,7 +282,7 @@ func (aw *AspiraWorker) applyProposal(e raftpb.Entry) {
 	var err error
 	switch p.ProposalType {
 	case aspirapb.AspiraProposal_Put:
-		err = aw.store.ApplyPut(e)
+		err = aw.store.ApplyPut(e.Index)
 	case aspirapb.AspiraProposal_Delete:
 		err = aw.store.Delete(p.Key)
 	case aspirapb.AspiraProposal_PutWithOffset:
