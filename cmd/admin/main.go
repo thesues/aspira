@@ -314,6 +314,8 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 	livePrint := func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
+		fmt.Print("\033[s") // save the cursor position
+
 		for {
 			select {
 			case <-done:
@@ -321,7 +323,7 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 			case <-ticker.C:
 				//https://stackoverflow.com/questions/56103775/how-to-print-formatted-string-to-the-same-line-in-stdout-with-go
 				//how to print in one line
-				fmt.Print("\033[u\033[K") // restore the cursor position and clear the line
+				fmt.Print("\033[u\033[K")
 				ops := atomic.LoadUint64(&count) / uint64(time.Now().Sub(start).Seconds())
 				fmt.Printf("ops:%d/s  throughput:%s", ops, humanReadableTroughput(float64(size)*float64(ops)))
 			}
