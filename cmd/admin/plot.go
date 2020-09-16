@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
 
@@ -50,13 +51,18 @@ func browsers() []string {
 }
 
 func plot(c *cli.Context) (err error) {
-	_, err = os.Stat("result.json")
+	jsonFile := c.Args().First()
+	if jsonFile == "" {
+		return errors.Errorf("usage: plot <file>")
+	}
+	_, err = os.Stat(jsonFile)
 	if err != nil {
 		return err
 	}
 
-	url := "http://localhost:8000"
+	url := "http://localhost:8000/index.html?file=" + jsonFile
 
 	go openBrowser(url)
+
 	return http.ListenAndServe(":8000", http.FileServer(http.Dir(".")))
 }

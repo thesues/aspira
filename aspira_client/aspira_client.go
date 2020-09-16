@@ -142,7 +142,8 @@ func (ac *AspiraClient) GetConn(addr string) (*grpc.ClientConn, error) {
 }
 
 func (ac *AspiraClient) PullStream(writer io.Writer, gid, oid uint64) error {
-	var group *aspirapb.GroupStatus
+
+	//var group *aspirapb.GroupStatus
 	ag := ac.Groups() //groups is sorted by FreeBytes.
 
 	var i int
@@ -161,14 +162,14 @@ func (ac *AspiraClient) PullStream(writer io.Writer, gid, oid uint64) error {
 	for loop := 0; loop < 3; loop++ {
 		conn, err := ac.GetConn(targetStores[n].Address)
 		if err != nil {
-			n = (n + 1) % len(group.Stores)
+			n = (n + 1) % len(targetStores)
 			continue
 		}
 		err = ac.pull(writer, conn, gid, oid)
 		if err == nil {
 			return nil
 		}
-		n = (n + 1) % len(group.Stores)
+		n = (n + 1) % len(targetStores)
 	}
 	return err
 }

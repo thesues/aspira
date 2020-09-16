@@ -277,11 +277,30 @@ func wbench(c *cli.Context) error {
 	threadNum := c.Int("thread")
 	cluster := c.String("cluster")
 	duration := c.Int("duration")
-	return bench("wbench", size, threadNum, cluster, duration, true)
+	return bench("write", size, threadNum, cluster, duration, true, nil)
 }
 
 func rbench(c *cli.Context) error {
-	return nil
+	size := c.Int("size")
+	threadNum := c.Int("thread")
+	cluster := c.String("cluster")
+	fileName := c.Args().First()
+	if fileName == "" {
+		return errors.Errorf("rbench needs a result.json")
+	}
+
+	var objects []Result
+
+	data, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		return errors.Errorf("can not read file %s, %v", fileName, err)
+	}
+	if err = json.Unmarshal(data, &objects); err != nil {
+		return errors.Errorf("can not parse file %s, %v", fileName, err)
+	}
+	fmt.Printf("read %d objects...\n", len(objects))
+
+	return bench("read", size, threadNum, cluster, math.MaxInt32, true, objects)
 }
 
 func wrbench(c *cli.Context) error {
@@ -295,7 +314,7 @@ type Result struct {
 	Elapsed   float64
 }
 
-func bench(benchType string, size int, threadNum int, clusterAddr string, duration int, recordLantency bool) error {
+func bench(benchType string, size int, threadNum int, clusterAddr string, duration int, recordLantency bool, objects []Result) error {
 	stopper := utils.NewStopper()
 
 	zeroAddrs := strings.Split(clusterAddr, ",")
@@ -309,6 +328,8 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 	start := time.Now()
 
 	var count uint64
+	var totalSize uint64
+
 	done := make(chan struct{})
 
 	livePrint := func() {
@@ -325,7 +346,8 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 				//how to print in one line
 				fmt.Print("\033[u\033[K")
 				ops := atomic.LoadUint64(&count) / uint64(time.Now().Sub(start).Seconds())
-				fmt.Printf("ops:%d/s  throughput:%s", ops, humanReadableTroughput(float64(size)*float64(ops)))
+				throughput := float64(atomic.LoadUint64(&totalSize)) / time.Now().Sub(start).Seconds()
+				fmt.Printf("ops:%d/s  throughput:%s", ops, humanReadableThroughput(throughput))
 			}
 		}
 	}
@@ -334,34 +356,85 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 	var results []Result
 	benchStartTime := time.Now()
 
+	var inputs [][]Result
+	if len(objects) != 0 && benchType == "read" {
+		n := (len(objects) + threadNum - 1) / threadNum
+		pos := 0
+		for i := 0; i < threadNum-1; i++ {
+			inputs = append(inputs, objects[pos:pos+n])
+			pos = pos + n
+		}
+		if pos < len(objects) {
+			inputs = append(inputs, objects[pos:])
+		}
+		fmt.Printf("%d tasks,  each has at most %d oid\n", threadNum, n)
+	}
+
 	go func() {
 		for i := 0; i < threadNum; i++ {
 			loop := 0 //sample to record lantency
+			t := i
 			stopper.RunWorker(func() {
 				for {
 					select {
 					case <-stopper.ShouldStop():
 						return
 					default:
-						start := time.Now()
-						gid, oid, err := client.PushData(data)
-						if err != nil {
-							fmt.Println(err)
-							return
-						}
-						end := time.Now()
-						if recordLantency && loop%10 == 0 {
-							lock.Lock()
-							results = append(results, Result{
-								Gid:       gid,
-								Oid:       oid,
-								StartTime: start.Sub(benchStartTime).Seconds(),
-								Elapsed:   end.Sub(start).Seconds(),
-							})
-							lock.Unlock()
+						write := func() {
+							start := time.Now()
+							gid, oid, err := client.PushData(data)
+							if err != nil {
+								fmt.Println(err)
+								return
+							}
+							end := time.Now()
+							if recordLantency && loop%3 == 0 {
+								lock.Lock()
+								results = append(results, Result{
+									Gid:       gid,
+									Oid:       oid,
+									StartTime: start.Sub(benchStartTime).Seconds(),
+									Elapsed:   end.Sub(start).Seconds(),
+								})
+								lock.Unlock()
+							}
+							atomic.AddUint64(&totalSize, uint64(len(data)))
+							atomic.AddUint64(&count, 1)
 						}
 
-						atomic.AddUint64(&count, 1)
+						read := func(num int) {
+							for _, task := range inputs[num] {
+								start := time.Now()
+								hole := &blackHole{}
+								err := client.PullStream(hole, task.Gid, task.Oid)
+								if err != nil {
+									fmt.Println(err)
+									return
+								}
+								end := time.Now()
+								atomic.AddUint64(&count, 1)
+								atomic.AddUint64(&totalSize, hole.Size)
+								if recordLantency {
+									lock.Lock()
+									results = append(results, Result{
+										Gid:       task.Gid,
+										Oid:       task.Oid,
+										StartTime: start.Sub(benchStartTime).Seconds(),
+										Elapsed:   end.Sub(start).Seconds(),
+									})
+									lock.Unlock()
+								}
+							}
+						}
+						if benchType == "read" {
+							read(t) //read all the task in inputs[t]
+							return
+						} else if benchType == "write" {
+							write()
+						} else {
+							fmt.Println("bench type is wrong")
+							return
+						}
 						loop++
 					}
 				}
@@ -391,7 +464,16 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 			return results[i].StartTime < results[i].StartTime
 		})
 
-		f, err := os.OpenFile("result.json", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
+		var fileName string
+		switch benchType {
+		case "read":
+			fileName = "rresult.json"
+		case "write":
+			fileName = "result.json"
+		default:
+			return errors.Errorf("benchtype error")
+		}
+		f, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
 		defer f.Close()
 		if err == nil {
 			out, err := json.Marshal(results)
@@ -403,21 +485,25 @@ func bench(benchType string, size int, threadNum int, clusterAddr string, durati
 		}
 	}
 
-	printSummary(time.Now().Sub(start), atomic.LoadUint64(&count), size, threadNum)
+	printSummary(time.Now().Sub(start), atomic.LoadUint64(&count), atomic.LoadUint64(&totalSize), threadNum, size)
 	return nil
 }
 
-func humanReadableTroughput(t float64) string {
-	units := []string{"B", "KB", "MB", "GB", "TB", "PB", "EB"}
-	power := int(math.Log10(t) / 3)
-	if power >= len(units) || power == 0 {
+func humanReadableThroughput(t float64) string {
+	if t < 0 || t < 1e-9 { //if t <=0 , return ""
 		return ""
 	}
+	units := []string{"B", "KB", "MB", "GB", "TB", "PB", "EB"}
+	power := int(math.Log10(t) / 3)
+	if power >= len(units) {
+		return ""
+	}
+
 	return fmt.Sprintf("%.2f%s/sec", t/math.Pow(1000, float64(power)), units[power])
 }
 
-func printSummary(elapsed time.Duration, totalCount uint64, size int, threadNum int) {
-	if int(elapsed.Seconds()) == 0 {
+func printSummary(elapsed time.Duration, totalCount uint64, totalSize uint64, threadNum int, size int) {
+	if elapsed.Seconds() < 1e-9 {
 		return
 	}
 	fmt.Printf("\nSummary\n")
@@ -425,10 +511,10 @@ func printSummary(elapsed time.Duration, totalCount uint64, size int, threadNum 
 	fmt.Printf("Size    :%d\n", size)
 	fmt.Printf("Time taken for tests :%v seconds\n", elapsed.Seconds())
 	fmt.Printf("Complete requests :%d\n", totalCount)
-	fmt.Printf("Total transferred :%d bytes\n", totalCount*uint64(size))
-	fmt.Printf("Requests per second :%d [#/sec]\n", totalCount/uint64(elapsed.Seconds()))
-	t := float64(totalCount*uint64(size)) / elapsed.Seconds()
-	fmt.Printf("Thoughput per sencond :%s\n", humanReadableTroughput(t))
+	fmt.Printf("Total transferred :%d bytes\n", totalSize)
+	fmt.Printf("Requests per second :%.2f [#/sec]\n", float64(totalCount)/elapsed.Seconds())
+	t := float64(totalSize) / elapsed.Seconds()
+	fmt.Printf("Thoughput per sencond :%s\n", humanReadableThroughput(t))
 }
 
 func main() {
@@ -512,6 +598,7 @@ func main() {
 			Name: "rbench",
 			Flags: []cli.Flag{
 				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
+				&cli.IntFlag{Name: "thread", Value: 8, Aliases: []string{"t"}},
 			},
 			Action: rbench,
 		},
@@ -529,4 +616,14 @@ func main() {
 		fmt.Println(err)
 	}
 
+}
+
+//blackHole implement emtpy Write, only record the download size
+type blackHole struct {
+	Size uint64
+}
+
+func (bh *blackHole) Write(p []byte) (int, error) {
+	bh.Size += uint64(len(p))
+	return len(p), nil
 }

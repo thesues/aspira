@@ -3,6 +3,22 @@ var margin = {top: 10, right: 40, bottom: 30, left: 30},
     height = 400 - margin.top - margin.bottom;
 
 
+
+    var getParams = function (url) {
+      var params = {};
+      var parser = document.createElement('a');
+      parser.href = url;
+      var query = parser.search.substring(1);
+      var vars = query.split('&');
+      for (var i = 0; i < vars.length; i++) {
+        var pair = vars[i].split('=');
+        params[pair[0]] = decodeURIComponent(pair[1]);
+      }
+      return params;
+    };
+    
+jsonFileName = getParams(window.location.href).file
+
 // append the svg object to the body of the page
 var svg = d3.select("#plot")
   .append("svg")
@@ -21,7 +37,9 @@ function maxElapsed(array) {
   return n
 }
 
-d3.json("result.json", function(data){
+console.log(jsonFileName)
+
+d3.json(jsonFileName, function(data){
   var xScale = d3.scaleLinear()
     .domain([data[0].StartTime, data[data.length-1].StartTime])       
     .range([0, width]);  
