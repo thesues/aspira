@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"time"
 
@@ -30,7 +31,13 @@ func (w *RaftServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb.Ra
 	if err != nil {
 		return err
 	}
-	defer worker.store.FreeStreamReader()
+	defer func() {
+		go func() {
+			time.Sleep(10 * time.Second)
+			fmt.Println("freestreamREAder")
+			worker.store.FreeStreamReader()
+		}()
+	}()
 	buf := make([]byte, 512<<10)
 	for {
 		n, err := reader.Read(buf)

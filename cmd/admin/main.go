@@ -571,7 +571,7 @@ func main() {
 			Name:  "sget",
 			Usage: "sget --cluster <path> --gid <gid> --oid <oid> --code <base64> <file>",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401", Aliases: []string{"c"}},
 				&cli.Uint64Flag{Name: "gid"},
 				&cli.Uint64Flag{Name: "oid"},
 				&cli.StringFlag{Name: "code"},
@@ -580,9 +580,10 @@ func main() {
 		},
 
 		{
-			Name: "wbench",
+			Name:  "wbench",
+			Usage: "rbench -t <thread> -d <duration> -s <size> ",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401", Aliases: []string{"c"}},
 				&cli.IntFlag{Name: "size", Value: 4096, Aliases: []string{"s"}},
 				&cli.IntFlag{Name: "thread", Value: 8, Aliases: []string{"t"}},
 				&cli.IntFlag{Name: "duration", Value: 10, Aliases: []string{"d"}},
@@ -591,13 +592,15 @@ func main() {
 		},
 		{
 			Name:   "plot",
+			Usage:  "plot <file.json>",
 			Action: plot,
 		},
 
 		{
-			Name: "rbench",
+			Name:  "rbench",
+			Usage: "rbench -t <thread>",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401", Aliases: []string{"c"}},
 				&cli.IntFlag{Name: "thread", Value: 8, Aliases: []string{"t"}},
 			},
 			Action: rbench,
@@ -605,7 +608,7 @@ func main() {
 		{
 			Name: "wrbench",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401", Aliases: []string{"c"}},
 			},
 			Action: wrbench,
 		},

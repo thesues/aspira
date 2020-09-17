@@ -49,7 +49,6 @@ type AspiraWorker struct {
 	stopper   *utils.Stopper
 	storePath string
 	info      unsafe.Pointer // *aspirapb.WorkerInfo
-	applyCh   chan []raftpb.Entry
 }
 
 var (
@@ -83,7 +82,6 @@ func NewAspiraWorker(id uint64, gid uint64, addr, path string) (as *AspiraWorker
 		store:     store,
 		storePath: path,
 		//state:      &aspirapb.MembershipState{Nodes: make(map[uint64]string)},
-		applyCh: make(chan []raftpb.Entry, 600),
 	}
 	return as, nil
 }
@@ -245,7 +243,6 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr, initialCluster string) err
 	aw.stopper.RunWorker(func() {
 		aw.Node.BatchAndSendMessages(aw.stopper)
 	})
-	aw.stopper.RunWorker(aw.processApplyCh)
 	aw.stopper.RunWorker(aw.Run)
 
 	return nil
@@ -253,32 +250,17 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr, initialCluster string) err
 
 var errInvalidProposal = errors.New("Invalid group proposal")
 
-func (aw *AspiraWorker) processApplyCh() {
-	for {
-		select {
-		case <-aw.stopper.ShouldStop():
-			return
-		case entries, ok := <-aw.applyCh:
-			if !ok {
-				return
-			}
-			for i := range entries {
-				aw.applyProposal(entries[i])
-			}
-		}
-	}
-}
-
-func (aw *AspiraWorker) applyProposal(e raftpb.Entry) {
+func (aw *AspiraWorker) applyProposal(e raftpb.Entry) (string, error) {
 	var p aspirapb.AspiraProposal
-	xlog.Logger.Debugf("apply commit %d: data is %d", e.Index, e.Size())
-
+	xlog.Logger.Infof("apply commit %d: data is %d", e.Index, e.Size())
+	//leader's first commit
+	if len(e.Data) == 0 {
+		return p.AssociateKey, nil
+	}
 	utils.Check(p.Unmarshal(e.Data))
 	if len(p.AssociateKey) == 0 {
-		xlog.Logger.Warn("not find AssociateKey")
-		return
+		return p.AssociateKey, errInvalidProposal
 	}
-
 	var err error
 	switch p.ProposalType {
 	case aspirapb.AspiraProposal_Put:
@@ -290,8 +272,7 @@ func (aw *AspiraWorker) applyProposal(e raftpb.Entry) {
 	default:
 		xlog.Logger.Fatalf("unkonw type %+v", p.ProposalType)
 	}
-	aw.Node.Applied.Done(e.Index)
-	aw.Node.Proposals.Done(p.AssociateKey, e.Index, err)
+	return p.AssociateKey, err
 }
 
 func (aw *AspiraWorker) Run() {
@@ -333,6 +314,7 @@ func (aw *AspiraWorker) Run() {
 						p[id] = aspirapb.WorkerStatus_Replicate
 					case raft.ProgressStateSnapshot:
 						p[id] = aspirapb.WorkerStatus_Snapshot
+						createSnapshot = false
 					default:
 						xlog.Logger.Fatal("unkown status type")
 					}
@@ -340,10 +322,10 @@ func (aw *AspiraWorker) Run() {
 				aw.SetWorkerStatus(p)
 			}
 
+			n.SaveToStorage(rd.HardState, rd.Entries)
 			if !raft.IsEmptySnap(rd.Snapshot) {
 
 				//drain the applied messages
-				aw.drainApplyChan()
 				xlog.Logger.Infof("I Got snapshot %+v", rd.Snapshot.Metadata)
 				err := aw.receiveSnapshot(rd.Snapshot)
 				if err != nil {
@@ -366,8 +348,6 @@ func (aw *AspiraWorker) Run() {
 				aw.Node.SetConfState(&rd.Snapshot.Metadata.ConfState)
 			}
 
-			n.SaveToStorage(rd.HardState, rd.Entries)
-
 			span.Annotatef(nil, "Saved to storage")
 
 			synced := false
@@ -386,27 +366,25 @@ func (aw *AspiraWorker) Run() {
 
 			span.Annotatef(nil, "Sync files done")
 
-			var entries []raftpb.Entry
 			for _, entry := range rd.CommittedEntries {
 				n.Applied.Begin(entry.Index)
 				switch {
 				case entry.Type == raftpb.EntryConfChange:
 					aw.applyConfChange(entry)
-					n.Applied.Done(entry.Index)
-				case len(entry.Data) == 0:
-					n.Applied.Done(entry.Index)
-				case entry.Type == raftpb.EntryNormal && len(entry.Data) != 0:
-					entries = append(entries, entry)
+				case entry.Type == raftpb.EntryNormal:
+					uniqKey, err := aw.applyProposal(entry)
+					if err != nil {
+						xlog.Logger.Errorf("While applying proposal: %v\n", err)
+					}
+					n.Proposals.Done(uniqKey, entry.Index, err)
 				default:
 					xlog.Logger.Warnf("Unhandled entry: %+v\n", entry)
 				}
-				xlog.Logger.Debugf("commit index:%d, size:%d\n", entry.Index, entry.Size())
+				xlog.Logger.Infof("commit index:%d, size:%d\n", entry.Index, entry.Size())
+				n.Applied.Done(entry.Index)
 			}
-			span.Annotatef(nil, "Applied %d CommittedEntries", len(rd.CommittedEntries))
 
-			if len(entries) > 0 {
-				aw.applyCh <- entries
-			}
+			span.Annotatef(nil, "Applied %d CommittedEntries", len(rd.CommittedEntries))
 
 			if !leader {
 				for i := range rd.Messages {
@@ -424,8 +402,11 @@ func (aw *AspiraWorker) Run() {
 }
 
 func (aw *AspiraWorker) trySnapshot(skip uint64) (created bool) {
-	existing, err := aw.Node.Store.Snapshot()
-	utils.Check(err)
+	if aw.store.InflightSnapshot() {
+		return false
+	}
+	existing, _ := aw.store.Snapshot()
+
 	si := existing.Metadata.Index
 	doneUntil := aw.Node.Applied.DoneUntil()
 
@@ -452,16 +433,6 @@ func (aw *AspiraWorker) trySnapshot(skip uint64) (created bool) {
 
 func (aw *AspiraWorker) AmLeader() bool {
 	return aw.Node.AmLeader()
-}
-
-func (aw *AspiraWorker) drainApplyChan() {
-	for {
-		select {
-		case <-aw.applyCh:
-		default:
-			return
-		}
-	}
 }
 
 var errInternalRetry = errors.New("Retry Raft proposal internally")
@@ -706,7 +677,6 @@ func (aw *AspiraWorker) populateSnapshot(snap raftpb.Snapshot, pl *conn.Pool) (e
 			return errors.Errorf("can not initial and replay backup snapshot")
 		}
 	*/
-	sa, _ := aw.store.Snapshot()
-	xlog.Logger.Infof("get snapshot %d", sa.Metadata.Index)
+	xlog.Logger.Infof("get snapshot %d", snap.Metadata.Index)
 	return nil
 }

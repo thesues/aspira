@@ -40,6 +40,7 @@ type WAL struct {
 	dbLock     *sync.Mutex //protect readCounts
 	readCounts int
 	entryCache *FifoCache
+	sync.Mutex
 }
 
 var (
@@ -51,7 +52,7 @@ var (
 	maxKey                 = keyMask
 	endOfList              = errors.Errorf("end of list of keys")
 	errNotFound            = errors.New("Unable to find raft entry")
-	snapshotCatchUpEntries = uint64(10000)
+	snapshotCatchUpEntries = uint64(10_000)
 )
 
 func Init(db *cannyls.Storage) *WAL {
@@ -236,6 +237,10 @@ func (wal *WAL) LastIndex() (uint64, error) {
 }
 
 func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
+
+	wal.Lock()
+	defer wal.Unlock()
+
 	if len(entries) == 0 {
 		return nil
 	}
@@ -365,6 +370,8 @@ func (wal *WAL) PastLife() bool {
 func (wal *WAL) AllEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 
 	xlog.Logger.Debugf("AllEntries from %d => %d, maxSize is %d", lo, hi, maxSize)
+	wal.Lock()
+	defer wal.Unlock()
 	size := 0
 	for _, id := range wal.DB().ListRange(wal.EntryKey(lo), wal.EntryKey(hi), 100) {
 		if v, ok := wal.entryCache.Get(id.U64() & keyMask); ok {
@@ -515,6 +522,9 @@ func (wal *WAL) Term(idx uint64) (uint64, error) {
 //if CreateSnapshot is done, it means we have synced the database, so the raft worker do not have to sync again
 func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (created bool, err error) {
 
+	wal.Lock()
+	defer wal.Unlock()
+
 	var snap raftpb.Snapshot
 	first, err := wal.FirstIndex()
 	if err != nil {
@@ -569,9 +579,6 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (cr
 }
 
 func (wal *WAL) compact(snapi uint64) {
-	if wal.InflightSnapshot() {
-		return
-	}
 
 	compactIndex := uint64(1)
 	if snapi > snapshotCatchUpEntries {
@@ -598,6 +605,8 @@ func (wal *WAL) ApplySnapshot(snap raftpb.Snapshot) {
 	if raft.IsEmptySnap(snap) {
 		return
 	}
+	wal.Lock()
+	defer wal.Unlock()
 	//wal.ents = []aspirapb.EntryMeta{{Term: snap.Metadata.Term, Index: snap.Metadata.Index}}	//save to disk.
 
 	//wal.DB().JournalGC()
