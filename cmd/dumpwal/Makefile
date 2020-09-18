@@ -1,2 +1,2 @@
-all:
+dumpwal: *.go 
 	go build

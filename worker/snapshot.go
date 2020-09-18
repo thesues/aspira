@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"time"
 
@@ -33,8 +32,8 @@ func (w *RaftServer) StreamSnapshot(in *aspirapb.RaftContext, stream aspirapb.Ra
 	}
 	defer func() {
 		go func() {
-			time.Sleep(10 * time.Second)
-			fmt.Println("freestreamREAder")
+			time.Sleep(20 * time.Second)
+			xlog.Logger.Infof("FreeStreamReader")
 			worker.store.FreeStreamReader()
 		}()
 	}()

@@ -152,7 +152,7 @@ func (as *AspiraStore) Get(req *aspirapb.GetRequest, stream aspirapb.Store_GetSe
 	defer cancel()
 	data, err := w.getAndWait(ctx, req.Oid)
 	if err != nil {
-		xlog.Logger.Errorf(err.Error())
+		xlog.Logger.Info(err.Error())
 		return err
 	}
 

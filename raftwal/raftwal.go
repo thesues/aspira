@@ -151,7 +151,8 @@ func (wal *WAL) Flush() {
 }
 
 func (wal *WAL) HardState() (raftpb.HardState, error) {
-
+	wal.Lock()
+	defer wal.Unlock()
 	return wal.hardState()
 }
 
@@ -175,6 +176,8 @@ func (wal *WAL) setHardState(st raftpb.HardState) (err error) {
 }
 
 func (wal *WAL) Snapshot() (snap raftpb.Snapshot, err error) {
+	wal.Lock()
+	defer wal.Unlock()
 	//cache
 	if val, ok := wal.cache.Load(_snapshotKey); ok {
 		snap, ok := val.(raftpb.Snapshot)
@@ -211,6 +214,11 @@ func (wal *WAL) EntryKey(idx uint64) lump.LumpId {
 }
 
 func (wal *WAL) FirstIndex() (uint64, error) {
+	wal.Lock()
+	wal.Unlock()
+	return wal.firstIndex()
+}
+func (wal *WAL) firstIndex() (uint64, error) {
 	if val, ok := wal.cache.Load(_firstKey); ok {
 		if first, ok := val.(uint64); ok {
 			return first, nil
@@ -228,6 +236,12 @@ func (wal *WAL) FirstIndex() (uint64, error) {
 }
 
 func (wal *WAL) LastIndex() (uint64, error) {
+	wal.Lock()
+	defer wal.Unlock()
+	return wal.lastIndex()
+}
+
+func (wal *WAL) lastIndex() (uint64, error) {
 	id, ok := wal.DB().MaxId()
 	if !ok || id.U64() < minimalKey {
 		return 0, errNotFound
@@ -246,7 +260,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 	}
 	var last uint64 = 0
 	if check {
-		firstIndex, err := wal.FirstIndex() //atomic get
+		firstIndex, err := wal.firstIndex() //atomic get
 		if err != nil {
 			return err
 		}
@@ -260,7 +274,7 @@ func (wal *WAL) addEntries(entries []raftpb.Entry, check bool) error {
 			entries = entries[firstIndex-entries[0].Index:]
 		}
 
-		last, err = wal.LastIndex() //atomic get
+		last, err = wal.lastIndex() //atomic get
 		if err != nil {
 			return err
 		}
@@ -360,8 +374,8 @@ func (wal *WAL) PastLife() bool {
 	if err != nil {
 		return false
 	}
-	first, _ := wal.FirstIndex()
-	last, _ := wal.LastIndex()
+	first, _ := wal.firstIndex()
+	last, _ := wal.lastIndex()
 
 	return last >= first
 
@@ -445,7 +459,7 @@ func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 		maxSize = (128 << 20)
 	}
 	xlog.Logger.Debugf("search entries %d=>%d\n", lo, hi)
-	first, err := wal.FirstIndex()
+	first, err := wal.firstIndex()
 	if err != nil {
 		return es, err
 	}
@@ -453,7 +467,7 @@ func (wal *WAL) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, err error) {
 		return nil, raft.ErrCompacted
 	}
 
-	last, err := wal.LastIndex()
+	last, err := wal.lastIndex()
 	if err != nil {
 		return es, err
 
@@ -489,7 +503,10 @@ func (wal *WAL) deleteUntil(until uint64) error {
 */
 func (wal *WAL) Term(idx uint64) (uint64, error) {
 
-	first, err := wal.FirstIndex()
+	wal.Lock()
+	defer wal.Unlock()
+
+	first, err := wal.firstIndex()
 	if err != nil {
 		return 0, err
 	}
@@ -526,7 +543,7 @@ func (wal *WAL) CreateSnapshot(i uint64, cs *raftpb.ConfState, udata []byte) (cr
 	defer wal.Unlock()
 
 	var snap raftpb.Snapshot
-	first, err := wal.FirstIndex()
+	first, err := wal.firstIndex()
 	if err != nil {
 		return
 	}
@@ -585,7 +602,7 @@ func (wal *WAL) compact(snapi uint64) {
 		compactIndex = snapi - snapshotCatchUpEntries
 	}
 
-	first, _ := wal.FirstIndex()
+	first, _ := wal.firstIndex()
 	if compactIndex < first {
 		return
 	}
@@ -713,6 +730,9 @@ func (wal *WAL) SetDB(db *cannyls.Storage) {
 }
 
 func (wal *WAL) CloseDB() {
+	wal.Lock()
+	defer wal.Unlock()
+
 	wal.DB().Close()
 	wal.entryCache.PurgeFrom(0)
 	wal.cache = new(sync.Map)

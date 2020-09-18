@@ -2,7 +2,6 @@ package raftwal
 
 import (
 	"container/list"
-	"sync"
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/thesues/aspira/xlog"
@@ -16,7 +15,7 @@ type FifoCache struct {
 	capacity int
 	q        *list.List
 	m        map[uint64]*list.Element
-	sync.RWMutex
+	//sync.RWMutex
 }
 
 func NewFifoCache(n int) *FifoCache {
@@ -31,8 +30,8 @@ func (fifo *FifoCache) Add(entry raftpb.Entry) {
 	if entry.Size() > maxPaylod {
 		return
 	}
-	fifo.Lock()
-	defer fifo.Unlock()
+	//fifo.Lock()
+	//defer fifo.Unlock()
 	if fifo.q.Len() == fifo.capacity {
 		e := fifo.q.Front()
 		fifo.q.Remove(e)
@@ -44,8 +43,8 @@ func (fifo *FifoCache) Add(entry raftpb.Entry) {
 }
 
 func (fifo *FifoCache) Get(index uint64) (raftpb.Entry, bool) {
-	fifo.RLock()
-	defer fifo.RUnlock()
+	//fifo.RLock()
+	//defer fifo.RUnlock()
 	e, ok := fifo.m[index]
 	if !ok {
 		xlog.Logger.Debugf("cache missing for %d", index)
@@ -56,8 +55,8 @@ func (fifo *FifoCache) Get(index uint64) (raftpb.Entry, bool) {
 }
 
 func (fifo *FifoCache) PurgeFrom(index uint64) {
-	fifo.Lock()
-	defer fifo.Unlock()
+	//fifo.Lock()
+	//defer fifo.Unlock()
 	for i, e := range fifo.m {
 		if i >= index {
 			e, _ = fifo.m[i]

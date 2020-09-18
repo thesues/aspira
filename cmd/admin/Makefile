@@ -1,2 +1,2 @@
-all:*.go
+admin:*.go
 	go build
