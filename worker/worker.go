@@ -105,14 +105,6 @@ func (aw *AspiraWorker) SetWorkerStatus(p map[uint64]aspirapb.WorkerStatus_Progr
 
 }
 
-func splitAndTrim(s string, sep string) []string {
-	parts := strings.Split(s, sep)
-	for i := 0; i < len(parts); i++ {
-		parts[i] = strings.TrimSpace(parts[i])
-	}
-	return parts
-}
-
 // InitAndStart
 //if has localstore, restart
 //if joinClusterAddr == "", initialCluster == "", start worker as leader
@@ -153,7 +145,7 @@ func (aw *AspiraWorker) InitAndStart(joinClusterAddr, initialCluster string) err
 		var valid bool
 		for i, part := range parts {
 
-			segs := splitAndTrim(part, ";")
+			segs := utils.SplitAndTrim(part, ";")
 			if len(segs) != 2 {
 				return errors.Errorf("failed to parse initialcluster, segs len is not 2")
 			}

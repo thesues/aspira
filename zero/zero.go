@@ -62,7 +62,7 @@ type storeProgress struct {
 type Zero struct {
 	Client    *clientv3.Client
 	Id        uint64
-	EmbedEted *embed.Etcd
+	EmbedEtcd *embed.Etcd
 
 	Cfg         *ZeroConfig
 	allocIdLock sync.Mutex //used in AllocID
@@ -110,7 +110,7 @@ func (z *Zero) getValue(key string) ([]byte, error) {
 */
 
 func (z *Zero) getCurrentLeader() uint64 {
-	return uint64(z.EmbedEted.Server.Leader())
+	return uint64(z.EmbedEtcd.Server.Leader())
 }
 
 //_amLeader is call in func leadLoop
@@ -478,6 +478,10 @@ func (z *Zero) AllocID(ctx context.Context, req *aspirapb.ZeroAllocIDRequest) (*
 }
 
 func (z *Zero) QueryWorker(ctx context.Context, req *aspirapb.ZeroQueryWorkerRequest) (*aspirapb.ZeroQueryWorkerResponse, error) {
+	if !z.amLeader() {
+		return nil, ErrNotLeader
+	}
+
 	z.RLock()
 	defer z.RLocker()
 	p, ok := z.workers[req.Id]
@@ -490,8 +494,20 @@ func (z *Zero) QueryWorker(ctx context.Context, req *aspirapb.ZeroQueryWorkerReq
 	return &aspirapb.ZeroQueryWorkerResponse{Type: aspirapb.TnxType_abort}, nil
 }
 
-//func (z *Zero)
+func (z *Zero) Display(ctx context.Context, request *aspirapb.ZeroDisplayRequest) (*aspirapb.ZeroDisplayResponse, error) {
+	if !z.amLeader() {
+		return nil, ErrNotLeader
+	}
+
+	return &aspirapb.ZeroDisplayResponse{
+		Data: z.Cfg.Name + "\n" + z.DisplayStore() + "\n\n" + z.DisplayWorker(),
+	}, nil
+}
+
 func (z *Zero) ClusterStatus(ctx context.Context, request *aspirapb.ClusterStatusRequest) (*aspirapb.ClusterStatusResponse, error) {
+	if !z.amLeader() {
+		return nil, ErrNotLeader
+	}
 	z.RLock()
 	defer z.RUnlock()
 	var groups []*aspirapb.GroupStatus

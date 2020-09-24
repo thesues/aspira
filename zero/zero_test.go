@@ -52,7 +52,7 @@ func (suite *ZeroTestSuite) SetupSuite() {
 }
 
 func (suite *ZeroTestSuite) TearDownSuite() {
-	suite.zero.EmbedEted.Close()
+	suite.zero.EmbedEtcd.Close()
 	os.RemoveAll("zero.db")
 }
 

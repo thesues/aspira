@@ -22,6 +22,7 @@ import (
 	aspiraclient "github.com/thesues/aspira/aspira_client"
 	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/utils"
+	zeroclient "github.com/thesues/aspira/zero_client"
 	"github.com/urfave/cli/v2"
 	"google.golang.org/grpc"
 )
@@ -147,20 +148,20 @@ func sputAspiraWorker(c *cli.Context) error {
 }
 
 func addGroup(c *cli.Context) error {
-	cluster := c.String("cluster")
-	conn, err := grpc.Dial(cluster, grpc.WithBackoffMaxDelay(time.Second), grpc.WithInsecure())
-	if err != nil {
-		return err
+	zeroAddrs := utils.SplitAndTrim(c.String("cluster"), ",")
+	if len(zeroAddrs) == 0 {
+		return errors.Errorf("len(zeroAddrs) == 0")
 	}
-	defer conn.Close()
-
-	client := aspirapb.NewZeroClient(conn)
-
-	res, err := client.AddWorkerGroup(context.Background(), &aspirapb.ZeroAddWorkerGroupRequest{})
+	client := zeroclient.NewZeroClient()
+	err := client.Connect(zeroAddrs)
 	if err != nil {
 		return err
 	}
 
+	res, err := client.AddGroup()
+	if err != nil {
+		return err
+	}
 	fmt.Printf("Gid %d created\n", res.Gid)
 	return nil
 }
@@ -193,7 +194,8 @@ func sgetFile(c *cli.Context) (err error) {
 	oid := c.Uint64("oid")
 	code := c.String("code")
 	fileName := c.Args().First()
-	zeroAddrs := strings.Split(c.String("cluster"), ",")
+	zeroAddrs := utils.SplitAndTrim(c.String("cluster"), ",")
+
 	//valid the input
 	if code != "" {
 		gid, oid, err = decodeGidOid(code)
@@ -223,7 +225,8 @@ func sgetFile(c *cli.Context) (err error) {
 }
 
 func sputFile(c *cli.Context) error {
-	zeroAddrs := strings.Split(c.String("cluster"), ",")
+	zeroAddrs := utils.SplitAndTrim(c.String("cluster"), ",")
+
 	fileName := c.Args().First()
 
 	f, err := os.Open(fileName)
@@ -280,6 +283,20 @@ func wbench(c *cli.Context) error {
 	return bench("write", size, threadNum, cluster, duration, true, nil)
 }
 
+func status(c *cli.Context) error {
+	zeroAddrs := utils.SplitAndTrim(c.String("cluster"), ",")
+	zeroClient := zeroclient.NewZeroClient(zeroAddrs)
+	if err := zeroClient.Connect(); err != nil {
+		return err
+	}
+	output, err := zeroClient.Display()
+	if err != nil {
+		return err
+	}
+	fmt.Println(output)
+	return nil
+}
+
 func rbench(c *cli.Context) error {
 	size := c.Int("size")
 	threadNum := c.Int("thread")
@@ -317,7 +334,7 @@ type Result struct {
 func bench(benchType string, size int, threadNum int, clusterAddr string, duration int, recordLantency bool, objects []Result) error {
 	stopper := utils.NewStopper()
 
-	zeroAddrs := strings.Split(clusterAddr, ",")
+	zeroAddrs := utils.SplitAndTrim(clusterAddr, ",")
 
 	data := make([]byte, size)
 	setRandStringBytes(data)
@@ -555,7 +572,7 @@ func main() {
 			Name:  "add_group",
 			Usage: "add_group --cluster <path>",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401, 127.0.0.1:3402, 127.0.0.1:3403"},
 			},
 			Action: addGroup,
 		},
@@ -563,7 +580,7 @@ func main() {
 			Name:  "sput",
 			Usage: "sput --cluster <path> <file>",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401"},
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401, 127.0.0.1:3402, 127.0.0.1:3403"},
 			},
 			Action: sputFile,
 		},
@@ -571,7 +588,7 @@ func main() {
 			Name:  "sget",
 			Usage: "sget --cluster <path> --gid <gid> --oid <oid> --code <base64> <file>",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401", Aliases: []string{"c"}},
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401, 127.0.0.1:3402, 127.0.0.1:3403", Aliases: []string{"c"}},
 				&cli.Uint64Flag{Name: "gid"},
 				&cli.Uint64Flag{Name: "oid"},
 				&cli.StringFlag{Name: "code"},
@@ -583,7 +600,7 @@ func main() {
 			Name:  "wbench",
 			Usage: "rbench -t <thread> -d <duration> -s <size> ",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401", Aliases: []string{"c"}},
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401, 127.0.0.1:3402, 127.0.0.1:3403", Aliases: []string{"c"}},
 				&cli.IntFlag{Name: "size", Value: 4096, Aliases: []string{"s"}},
 				&cli.IntFlag{Name: "thread", Value: 8, Aliases: []string{"t"}},
 				&cli.IntFlag{Name: "duration", Value: 10, Aliases: []string{"d"}},
@@ -600,7 +617,7 @@ func main() {
 			Name:  "rbench",
 			Usage: "rbench -t <thread>",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401", Aliases: []string{"c"}},
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401, 127.0.0.1:3402, 127.0.0.1:3403", Aliases: []string{"c"}},
 				&cli.IntFlag{Name: "thread", Value: 8, Aliases: []string{"t"}},
 			},
 			Action: rbench,
@@ -608,9 +625,16 @@ func main() {
 		{
 			Name: "wrbench",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401", Aliases: []string{"c"}},
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401, 127.0.0.1:3402, 127.0.0.1:3403", Aliases: []string{"c"}},
 			},
 			Action: wrbench,
+		},
+		{
+			Name: "status",
+			Flags: []cli.Flag{
+				&cli.StringFlag{Name: "cluster", Value: "127.0.0.1:3401, 127.0.0.1:3402, 127.0.0.1:3403", Aliases: []string{"c"}},
+			},
+			Action: status,
 		},
 	}
 

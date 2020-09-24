@@ -20,7 +20,7 @@ func (z *Zero) Serve(config *ZeroConfig) {
 	}
 	e, err := embed.StartEtcd(cfg)
 
-	xlog.InitLog([]string{filepath.Join(cfg.Dir, cfg.Name+".log")}, zapcore.ErrorLevel)
+	xlog.InitLog([]string{filepath.Join(cfg.Dir, cfg.Name+".log")}, zapcore.DebugLevel)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func (z *Zero) Serve(config *ZeroConfig) {
 
 	z.Client = client
 	z.Id = uint64(e.Server.ID())
-	z.EmbedEted = e
+	z.EmbedEtcd = e
 	z.Cfg = config
 	z.policy = RandomReplication{}
 

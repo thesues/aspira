@@ -211,8 +211,14 @@ message ZeroHeartbeatRequest {
 	map<uint64, WorkerStatus> workers = 2;
 }
 
+
+enum Code {
+	OK = 0;
+	NOT_LEADER = 1;
+}
+
 message ZeroHeartbeatResponse {
-	string errorMsg = 1;
+	Code code = 1;
 }
 
 
@@ -272,6 +278,20 @@ message ClusterStatusResponse {
 	repeated GroupStatus groups = 1;
 }
 
+
+message ZeroDisplayRequest{
+}
+message ZeroDisplayResponse{
+	string data = 1;
+}
+
+message ZeroIsLeaderRequest{
+
+}
+message ZeroIsLeaderResponse{
+	bool isLeader = 1;
+}
+
 //zero service
 service Zero {
 	rpc AllocID(ZeroAllocIDRequest) returns (ZeroAllocIDResponse){} //admin
@@ -280,4 +300,6 @@ service Zero {
 	rpc AddWorkerGroup(ZeroAddWorkerGroupRequest) returns (ZeroAddWorkerGroupResponse) {} //admin
 	rpc QueryWorker(ZeroQueryWorkerRequest) returns (ZeroQueryWorkerResponse) {}  //store call
 	rpc ClusterStatus(ClusterStatusRequest) returns (ClusterStatusResponse) {} //aspira client call
+	rpc Display(ZeroDisplayRequest) returns (ZeroDisplayResponse) {} //http server or end user call
+	rpc IsLeader(ZeroIsLeaderRequest) returns (ZeroIsLeaderResponse){}
 }

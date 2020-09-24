@@ -1,8 +1,7 @@
 .PHONY: clean, profile
-worker: *.go docs/docs.go
-	go build
-docs/docs.go: http_server.go
+all:
 	swag init -g http_server.go
+	go build
 profile:
 	go tool pprof http://127.0.0.1:8081/debug/pprof/profile
 	go tool pprof http://127.0.0.1:8081/debug/pprof/heap

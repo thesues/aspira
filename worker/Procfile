@@ -1,3 +1,3 @@
-worker1: ./worker -name store1 -addr 127.0.0.1:3301 -http_addr 127.0.0.1:8081
-worker2: ./worker -name store2 -addr 127.0.0.1:3302 -http_addr 127.0.0.1:8082
-worker3: ./worker -name store3 -addr 127.0.0.1:3303 -http_addr 127.0.0.1:8083
+worker1: ./worker -name store1 -addr 127.0.0.1:3301 -http_addr 127.0.0.1:8081 -cluster 127.0.0.1:3401,127.0.0.1:3402,127.0.0.1:3403
+worker2: ./worker -name store2 -addr 127.0.0.1:3302 -http_addr 127.0.0.1:8082 -cluster 127.0.0.1:3401,127.0.0.1:3402,127.0.0.1:3403
+worker3: ./worker -name store3 -addr 127.0.0.1:3303 -http_addr 127.0.0.1:8083 -cluster 127.0.0.1:3401,127.0.0.1:3402,127.0.0.1:3403

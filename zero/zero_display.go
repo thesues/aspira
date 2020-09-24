@@ -44,6 +44,9 @@ func cmpString(a, b string) bool {
 }
 
 func (z *Zero) DisplayStore() string {
+	if !z.amLeader() {
+		return ""
+	}
 	z.RLock()
 	defer z.RUnlock()
 	var data [][]string
@@ -78,6 +81,9 @@ func (z *Zero) getFreeBytes(gid uint64) uint64 {
 }
 
 func (z *Zero) DisplayWorker() string {
+	if !z.amLeader() {
+		return ""
+	}
 	output := new(bytes.Buffer)
 	var data [][]string
 	table := tablewriter.NewWriter(output)

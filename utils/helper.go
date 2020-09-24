@@ -2,6 +2,7 @@ package utils
 
 import (
 	"log"
+	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -38,4 +39,24 @@ func AssertTruef(b bool, format string, args ...interface{}) {
 	if !b {
 		log.Fatalf("%+v", errors.Errorf(format, args...))
 	}
+}
+
+func SplitAndTrim(s string, sep string) []string {
+	parts := strings.Split(s, sep)
+	for i := 0; i < len(parts); i++ {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
+func UniqStringArray(array []string) []string {
+	sort.Strings(array)
+	tail := 0
+	for i := 1; i < len(array); i++ {
+		if array[i] != array[tail] {
+			tail++
+			array[tail] = array[i]
+		}
+	}
+	return array[:tail+1]
 }

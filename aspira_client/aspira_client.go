@@ -68,7 +68,7 @@ func (r *lockedSource) Seed(seed int64) {
 
 func NewAspiraClient(addrs []string) *AspiraClient {
 	ac := AspiraClient{
-		zeroClient: zeroclient.NewZeroClient(),
+		zeroClient: zeroclient.NewZeroClient(addrs),
 		conns:      make(map[string]*grpc.ClientConn),
 		zeroAddrs:  addrs,
 		rand:       rand.New(&lockedSource{src: rand.NewSource(time.Now().UnixNano())}),
@@ -108,10 +108,21 @@ func (ac *AspiraClient) Connect() error {
 	if len(ac.zeroAddrs) == 0 {
 		return errors.Errorf("zero address are not set")
 	}
-	err := ac.zeroClient.Connect(ac.zeroAddrs)
+	err := ac.zeroClient.Connect()
 	if err != nil {
 		return err
 	}
+	go func() {
+		ticker := time.NewTicker(20 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				ac.UpdateClusterStatus()
+			}
+		}
+	}()
+
 	return ac.UpdateClusterStatus()
 }
 

@@ -36,7 +36,7 @@ func (suite *EtcdUtilTestSuite) SetupSuite() {
 }
 
 func (suite *EtcdUtilTestSuite) TearDownSuite() {
-	suite.zero.EmbedEted.Close()
+	suite.zero.EmbedEtcd.Close()
 	os.RemoveAll("etcd.db")
 }
 

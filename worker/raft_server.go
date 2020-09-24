@@ -140,7 +140,7 @@ func (w *RaftServer) RaftMessage(server pb.Raft_RaftMessageServer) error {
 	step := func(data []byte, node *conn.Node) error {
 
 		if node == nil {
-			panic("FUCK")
+			panic("node is nil")
 		}
 		ctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()

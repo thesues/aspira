@@ -73,13 +73,12 @@ func NewAspiraStore(name, addr, httpAddr string, zeroAddrs []string) (*AspiraSto
 		return nil, errors.Errorf("must give full address, your addr is %s", addr)
 	}
 	as := &AspiraStore{
-		addr:      addr,
-		httpAddr:  httpAddr,
-		name:      name,
-		workers:   make(map[Gid]*AspiraWorker),
-		zClient:   zeroclient.NewZeroClient(),
-		zeroAddrs: zeroAddrs,
-		limiter:   rate.NewLimiter(600, 600),
+		addr:     addr,
+		httpAddr: httpAddr,
+		name:     name,
+		workers:  make(map[Gid]*AspiraWorker),
+		zClient:  zeroclient.NewZeroClient(zeroAddrs),
+		limiter:  rate.NewLimiter(600, 600),
 	}
 
 	createDirectoryIfNotExist(fmt.Sprintf("%s/prepare", as.name))
@@ -107,6 +106,9 @@ func (as *AspiraStore) RegisterStore() error {
 			break
 		}
 		time.Sleep(time.Second)
+	}
+	if err != nil {
+		return err
 	}
 
 	req := aspirapb.ZeroRegistStoreRequest{
@@ -306,17 +308,18 @@ func (as *AspiraStore) StartHeartbeat() {
 	var stream aspirapb.Zero_StreamHeartbeatClient
 	var cancel context.CancelFunc
 	var err error
-
-	stream, cancel, err = as.zClient.CreateHeartbeatStream()
-
 	for {
 		select {
 		case <-ticker.C:
 			if stream == nil {
-				xlog.Logger.Errorf("can not send hb to zero")
-				stream, cancel, _ = as.zClient.CreateHeartbeatStream()
+				xlog.Logger.Errorf("heartbeat stream is nil...CreateHeartbeatStream")
+				stream, cancel, err = as.zClient.CreateHeartbeatStream()
+				if err != nil {
+					xlog.Logger.Infof("CreateHeartbeatStream failed, try again...")
+				}
 				continue
 			}
+
 			//TODO: use a sync.Pool to new ZeroHeartbeatRequest each time.
 			req := aspirapb.ZeroHeartbeatRequest{
 				StoreId: as.storeId,
@@ -331,11 +334,11 @@ func (as *AspiraStore) StartHeartbeat() {
 
 			err = stream.Send(&req)
 			if err != nil {
+				xlog.Logger.Infof("stream error is %s\n", err.Error())
 				cancel()
-				stream, cancel, _ = as.zClient.CreateHeartbeatStream()
-				continue
+				stream = nil
 			} else {
-				xlog.Logger.Debugf("Reported to zero %v", req)
+				xlog.Logger.Debugf("Reported to zero %v to %s", req, as.zClient.CurrentLeader())
 			}
 		}
 	}
@@ -443,6 +446,7 @@ var (
 	httpAddr    = flag.String("http_addr", "", "")
 	name        = flag.String("name", "default", "")
 	logToStdout = flag.Bool("stdout", false, "if log to stdout")
+	cluster     = flag.String("cluster", "", "zero address")
 )
 
 func main() {
@@ -464,11 +468,16 @@ func main() {
 
 	xlog.InitLog(logOutputs, zapcore.DebugLevel)
 
-	as, err := NewAspiraStore(*name, *addr, *httpAddr, []string{"127.0.0.1:3401", "127.0.0.1:3402", "127.0.0.1:3403"})
-	if err != nil {
-		panic(err.Error())
+	zeroAddrs := utils.SplitAndTrim(*cluster, ",")
+	if len(zeroAddrs) == 0 {
+		xlog.Logger.Fatal("len of zeroAddrs is 0")
 	}
-	if as.zClient.Connect(as.zeroAddrs) != nil {
+	//TODO: valid zeroAddrs
+	as, err := NewAspiraStore(*name, *addr, *httpAddr, zeroAddrs)
+	if err != nil {
+		xlog.Logger.Fatal(err.Error())
+	}
+	if as.zClient.Connect() != nil {
 		xlog.Logger.Warnf("can not connected to zeros")
 	}
 	as.ServGRPC()

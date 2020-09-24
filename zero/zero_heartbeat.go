@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"time"
 
@@ -24,16 +25,23 @@ import (
 	"github.com/thesues/aspira/xlog"
 )
 
+func (z *Zero) IsLeader(ctx context.Context, req *aspirapb.ZeroIsLeaderRequest) (res *aspirapb.ZeroIsLeaderResponse, err error) {
+	if z.amLeader() {
+		return &aspirapb.ZeroIsLeaderResponse{IsLeader: true}, nil
+	}
+	return &aspirapb.ZeroIsLeaderResponse{IsLeader: false}, nil
+}
+
 func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error {
 
-	if !z.amLeader() {
-		return errors.Errorf("not a leader")
-	}
+	//check if current zero is leader.
 	for {
 		req, err := stream.Recv()
+
 		if !z.amLeader() {
 			return errors.Errorf("not a leader")
 		}
+
 		if err == io.EOF || req == nil {
 			xlog.Logger.Infof("remote heartbeat is closed")
 			return err
@@ -43,6 +51,7 @@ func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error
 			return errors.WithStack(err)
 		}
 
+		xlog.Logger.Info("zero leader get hearbeat")
 		z.RLock() //maybe thread-safe,
 		store, ok := z.stores[req.StoreId]
 		z.RUnlock()
