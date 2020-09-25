@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -64,5 +65,6 @@ func plot(c *cli.Context) (err error) {
 
 	go openBrowser(url)
 
+	fmt.Printf("open %s", url)
 	return http.ListenAndServe(":8000", http.FileServer(http.Dir(".")))
 }
