@@ -303,3 +303,11 @@ service Zero {
 	rpc Display(ZeroDisplayRequest) returns (ZeroDisplayResponse) {} //http server or end user call
 	rpc IsLeader(ZeroIsLeaderRequest) returns (ZeroIsLeaderResponse){}
 }
+
+//used in Etcd Campaign
+message ZeroMemberValue {
+	uint64 ID = 1;
+	string Name = 2;
+	string GrpcURL =3;
+	string HttpUrl = 4;
+}

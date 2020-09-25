@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/coreos/etcd/embed"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -33,12 +34,14 @@ import (
 	_ "github.com/thesues/aspira/utils"
 	"github.com/thesues/aspira/xlog"
 	"github.com/thesues/cannyls-go/util"
+
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
 var (
-	idKey = "AspiraIDKey"
+	idKey             = "AspiraIDKey"
+	electionKeyPrefix = "AspiraLeader"
 )
 
 func storeKey(id uint64) string {
@@ -61,9 +64,10 @@ type storeProgress struct {
 
 type Zero struct {
 	Client    *clientv3.Client
-	Id        uint64
+	ID        uint64
 	EmbedEtcd *embed.Etcd
 
+	memberValue string
 	Cfg         *ZeroConfig
 	allocIdLock sync.Mutex //used in AllocID
 
@@ -78,6 +82,8 @@ type Zero struct {
 	stores  map[uint64]*storeProgress  //storeID=> storeInfo{name, address}, "last echo" where storeInfo is saved in etcd.
 
 	policy RebalancePolicy
+
+	leaderKey string
 }
 
 // NewZero, initial in-memory struct of Zero
@@ -94,28 +100,8 @@ func (z *Zero) listEtcdMembers() (*clientv3.MemberListResponse, error) {
 	return z.Client.MemberList(ctx)
 }
 
-/*
-func (z *Zero) getValue(key string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	resp, err := clientv3.NewKV(z.Client).Get(ctx, key)
-	if err != nil {
-		return nil, err
-	}
-	if resp == nil || len(resp.Kvs) == 0 {
-		return nil, nil
-	}
-	return resp.Kvs[0].Value, nil
-}
-*/
-
-func (z *Zero) getCurrentLeader() uint64 {
+func (z *Zero) getCurrentEtcdLeader() uint64 {
 	return uint64(z.EmbedEtcd.Server.Leader())
-}
-
-//_amLeader is call in func leadLoop
-func (z *Zero) _amLeader() bool {
-	return z.Id == z.getCurrentLeader()
 }
 
 func (z *Zero) amLeader() bool {
@@ -147,45 +133,55 @@ func (z *Zero) buildGidToWorker() {
 	z.gidToWorkerID = gidToWorkerId
 }
 
+func (z *Zero) runAsLeader() {
+	var err error
+	z.Lock()
+	defer z.Unlock()
+	z.stores, err = loadStores(z.Client)
+	if err != nil {
+		xlog.Logger.Warnf("can not load store", err.Error())
+	}
+	z.workers, err = loadWorkers(z.Client)
+	if err != nil {
+		xlog.Logger.Warnf("can not load workers", err.Error())
+	}
+	z.buildGidToWorker()
+
+	z.gidFreeBytes = new(sync.Map)
+	atomic.StoreInt32(&z.isLeader, 1)
+	z.auditStopper.RunWorker(z.audit)
+}
+
 func (z *Zero) LeaderLoop() {
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
 	for {
-		select {
-		case <-ticker.C:
-			//became leader
-			if z._amLeader() && atomic.LoadInt32(&z.isLeader) == 0 {
-				//load from etcd
-				xlog.Logger.Infof("new leader, read from etcd")
-				var err error
-				z.Lock()
-				z.stores, err = loadStores(z.Client)
-				if err != nil {
-					xlog.Logger.Warnf("can not load store", err.Error())
-					z.Unlock()
-					continue
-				}
-				z.workers, err = loadWorkers(z.Client)
-				if err != nil {
-					xlog.Logger.Warnf("can not load workers", err.Error())
-					z.Unlock()
-					continue
-				}
-				z.buildGidToWorker()
-				z.Unlock()
-
-				z.gidFreeBytes = new(sync.Map)
-				atomic.StoreInt32(&z.isLeader, 1)
-				z.auditStopper.RunWorker(z.audit)
-
-			} else if !z._amLeader() && atomic.LoadInt32(&z.isLeader) == 1 {
-				//lost leader
-				//stop audit
-				z.auditStopper.Stop()
-				atomic.StoreInt32(&z.isLeader, 0)
-			}
+		if z.ID != z.getCurrentEtcdLeader() {
+			time.Sleep(10 * time.Millisecond)
+			continue
 		}
+		s, err := concurrency.NewSession(z.Client, concurrency.WithTTL(15))
+		if err != nil {
+			xlog.Logger.Warnf(err.Error())
+			continue
+		}
+		//returns a new election on a given key prefix
+		e := concurrency.NewElection(s, electionKeyPrefix)
+		ctx := context.TODO()
 
+		if err = e.Campaign(ctx, z.memberValue); err != nil {
+			xlog.Logger.Warnf(err.Error())
+			continue
+		}
+		z.leaderKey = e.Key()
+		xlog.Logger.Infof("elected %d as leader", z.ID)
+		z.runAsLeader()
+
+		select {
+		case <-s.Done():
+			s.Close()
+			z.auditStopper.Stop()
+			atomic.StoreInt32(&z.isLeader, 0)
+			xlog.Logger.Info("%d's leadershipt expire", z.ID)
+		}
 	}
 }
 
@@ -336,6 +332,7 @@ func (z *Zero) AddWorkerGroup(ctx context.Context, req *aspirapb.ZeroAddWorkerGr
 		}
 	}
 
+	//ETCD transaction, if z.memberValue == electionKey, set workerInfo for each worker
 	var ops []clientv3.Op
 	for i := 0; i < len(targetStores); i++ {
 		myTarget := targetStores[i]
@@ -349,7 +346,12 @@ func (z *Zero) AddWorkerGroup(ctx context.Context, req *aspirapb.ZeroAddWorkerGr
 		utils.Check(err)
 		ops = append(ops, clientv3.OpPut(workerKey(id), string(data)))
 	}
-	err = EtctSetKVS(z.Client, ops)
+
+	err = EtctSetKVS(z.Client,
+		[]clientv3.Cmp{
+			clientv3.Compare(clientv3.Value(z.leaderKey), "=", z.memberValue),
+		},
+		ops)
 	if err != nil {
 		return &aspirapb.ZeroAddWorkerGroupResponse{}, err
 	}
@@ -430,7 +432,12 @@ func (z *Zero) RegistStore(ctx context.Context, req *aspirapb.ZeroRegistStoreReq
 		xlog.Logger.Warnf(err.Error())
 		return nil, err
 	}
-	if err = EtcdSetKV(z.Client, key, val); err != nil {
+
+	if err = EtctSetKVS(z.Client,
+		[]clientv3.Cmp{
+			clientv3.Compare(clientv3.Value(z.leaderKey), "=", z.memberValue)},
+		[]clientv3.Op{clientv3.OpPut(key, string(val))},
+	); err != nil {
 		return nil, err
 	}
 
@@ -500,7 +507,7 @@ func (z *Zero) Display(ctx context.Context, request *aspirapb.ZeroDisplayRequest
 	}
 
 	return &aspirapb.ZeroDisplayResponse{
-		Data: z.Cfg.Name + "\n" + z.DisplayStore() + "\n\n" + z.DisplayWorker(),
+		Data: z.DisplayZeroMemberList() + "\n\n" + z.DisplayStore() + "\n\n" + z.DisplayWorker(),
 	}, nil
 }
 

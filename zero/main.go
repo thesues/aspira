@@ -7,6 +7,7 @@ import (
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
+	"github.com/thesues/aspira/protos/aspirapb"
 	"github.com/thesues/aspira/utils"
 	"github.com/thesues/aspira/xlog"
 	"go.uber.org/zap/zapcore"
@@ -40,9 +41,21 @@ func (z *Zero) Serve(config *ZeroConfig) {
 	utils.Check(err)
 
 	z.Client = client
-	z.Id = uint64(e.Server.ID())
+	z.ID = uint64(e.Server.ID())
 	z.EmbedEtcd = e
 	z.Cfg = config
+
+	v := aspirapb.ZeroMemberValue{
+		ID:      z.ID,
+		Name:    z.Cfg.Name,
+		GrpcURL: z.Cfg.GrpcUrl,
+		HttpUrl: z.Cfg.HttpUrl,
+	}
+
+	data, err := v.Marshal()
+	utils.Check(err)
+	z.memberValue = string(data)
+
 	z.policy = RandomReplication{}
 
 	z.ServHTTP()
@@ -52,7 +65,6 @@ func (z *Zero) Serve(config *ZeroConfig) {
 
 	//register zero as GRPC service
 	xlog.Logger.Fatal(<-e.Err())
-
 }
 
 func main() {

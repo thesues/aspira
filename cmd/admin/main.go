@@ -152,8 +152,8 @@ func addGroup(c *cli.Context) error {
 	if len(zeroAddrs) == 0 {
 		return errors.Errorf("len(zeroAddrs) == 0")
 	}
-	client := zeroclient.NewZeroClient()
-	err := client.Connect(zeroAddrs)
+	client := zeroclient.NewZeroClient(zeroAddrs)
+	err := client.Connect()
 	if err != nil {
 		return err
 	}

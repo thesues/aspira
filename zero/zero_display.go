@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/olekukonko/tablewriter"
@@ -80,6 +81,30 @@ func (z *Zero) getFreeBytes(gid uint64) uint64 {
 	return freeBytes
 }
 
+func (z *Zero) DisplayZeroMemberList() string {
+	res, err := z.listEtcdMembers()
+	if err != nil {
+		return ""
+	}
+	output := new(bytes.Buffer)
+	var data [][]string
+	table := tablewriter.NewWriter(output)
+	table.SetHeader([]string{"ID", "Name", "EtcdClientURL"})
+
+	for _, m := range res.Members {
+		var row []string
+		row = append(row,
+			fmt.Sprintf("%d", m.ID),
+			m.Name,
+			strings.Join(m.ClientURLs, ","),
+		)
+		data = append(data, row)
+	}
+	table.AppendBulk(data)
+	table.Render()
+	return string(output.Bytes())
+}
+
 func (z *Zero) DisplayWorker() string {
 	if !z.amLeader() {
 		return ""
@@ -99,14 +124,14 @@ func (z *Zero) DisplayWorker() string {
 	for _, w := range z.workers {
 		var row []string
 
-		row = append(row, []string{
+		row = append(row,
 			fmt.Sprintf("%d", w.workerInfo.Gid),
 			fmt.Sprintf("%d", w.workerInfo.WorkId),
 			fmt.Sprintf("%d", w.workerInfo.StoreId),
 			z.stores[w.workerInfo.StoreId].storeInfo.Address,
 			w.progress.String(),
 			fmt.Sprintf("%d", z.getFreeBytes(w.workerInfo.Gid)),
-		}...)
+		)
 		data = append(data, row)
 	}
 

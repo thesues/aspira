@@ -51,7 +51,7 @@ func (z *Zero) StreamHeartbeat(stream aspirapb.Zero_StreamHeartbeatServer) error
 			return errors.WithStack(err)
 		}
 
-		xlog.Logger.Info("zero leader get hearbeat")
+		xlog.Logger.Debugf("zero leader get hearbeat")
 		z.RLock() //maybe thread-safe,
 		store, ok := z.stores[req.StoreId]
 		z.RUnlock()
