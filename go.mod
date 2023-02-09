@@ -12,7 +12,7 @@ require (
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/gin-contrib/pprof v1.3.0
-	github.com/gin-gonic/gin v1.7.0
+	github.com/gin-gonic/gin v1.7.7
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.3.3
 	github.com/golang/snappy v0.0.1
