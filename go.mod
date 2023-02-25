@@ -37,7 +37,7 @@ require (
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.opencensus.io v0.22.4
 	go.uber.org/zap v1.14.1
-	golang.org/x/net v0.0.0-20201021035429-f5854403a974
+	golang.org/x/net v0.7.0
 	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
 	google.golang.org/grpc v1.26.0
 	gopkg.in/go-playground/assert.v1 v1.2.1
