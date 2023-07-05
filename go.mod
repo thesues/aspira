@@ -14,16 +14,14 @@ require (
 	github.com/gin-contrib/pprof v1.3.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/gogo/protobuf v1.3.2
-	github.com/golang/protobuf v1.5.0
-	github.com/golang/snappy v0.0.1
-	github.com/google/uuid v1.0.0 // indirect
+	github.com/golang/protobuf v1.5.3
+	github.com/golang/snappy v0.0.4
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.1-0.20190118093823-f849b5445de4 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
-	github.com/grpc-ecosystem/grpc-gateway v1.9.5 // indirect
 	github.com/jonboulle/clockwork v0.1.0 // indirect
 	github.com/olekukonko/tablewriter v0.0.4
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.4.2 // indirect
 	github.com/soheilhy/cmux v0.1.4 // indirect
 	github.com/stretchr/testify v1.8.3
@@ -35,11 +33,12 @@ require (
 	github.com/urfave/cli/v2 v2.2.0
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.etcd.io/bbolt v1.3.5 // indirect
-	go.opencensus.io v0.22.4
+	go.opencensus.io v0.24.0
 	go.uber.org/zap v1.14.1
 	golang.org/x/net v0.10.0
-	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
-	google.golang.org/grpc v1.26.0
+	golang.org/x/time v0.3.0
+	google.golang.org/grpc v1.54.0
+	google.golang.org/grpc/examples v0.0.0-20230705174746-11feb0a9afd8 // indirect
 	gopkg.in/go-playground/assert.v1 v1.2.1
 	sigs.k8s.io/yaml v1.1.0 // indirect
 )
